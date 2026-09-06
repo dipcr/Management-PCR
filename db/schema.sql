@@ -39,6 +39,7 @@ CREATE TABLE `tbl_cascaded_quotas` (
   `indicator_id` int NOT NULL,
   `total_target_value` int NOT NULL,
   `assigned_to_role` varchar(50) NOT NULL,
+  `allow_chair_allocation` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`quota_id`),
   KEY `fk_quota_term` (`term_id`),
   KEY `fk_quota_ind` (`indicator_id`),

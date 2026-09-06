@@ -24,6 +24,7 @@ def dean_dashboard():
                                    special_roles=SPECIAL_CASCADE_ROLES,
                                    master_indicators=[],
                                    existing_quotas={},
+                                   existing_cw_allow_allocation={},
                                    completion_rate=0,
                                    pending_count=0,
                                    top_dept="N/A",
@@ -42,11 +43,14 @@ def dean_dashboard():
         existing_quotas_raw = get_existing_cascaded_quotas(cursor, term_id)
 
         existing_quotas = {}
+        existing_cw_allow_allocation = {}
         for quota in existing_quotas_raw:
             ind_id = quota['indicator_id']
             if ind_id not in existing_quotas:
                 existing_quotas[ind_id] = {}
             existing_quotas[ind_id][quota['assigned_to_role']] = quota['total_target_value']
+            if quota['assigned_to_role'] == 'College-Wide':
+                existing_cw_allow_allocation[ind_id] = quota['allow_chair_allocation']
 
         # Consolidated KPI query — 1 round-trip instead of 3
         completion_rate, pending_count, top_dept = get_dean_dashboard_kpis(cursor, term_id)
@@ -111,6 +115,7 @@ def dean_dashboard():
                                special_roles=SPECIAL_CASCADE_ROLES,
                                master_indicators=indicators,
                                existing_quotas=existing_quotas,
+                               existing_cw_allow_allocation=existing_cw_allow_allocation,
                                completion_rate=completion_rate,
                                pending_count=pending_count,
                                top_dept=top_dept,
@@ -171,12 +176,18 @@ def cascade_quotas():
 
             values = [(role, _qty(role, i)) for role in cascade_roles]
 
+            # College-Wide targets default to Silent (Dean Only) unless the Dean
+            # explicitly ticks "Cascade to Chairs" for this indicator; department
+            # and RET rows aren't gated by this flag, so it's a no-op default for them.
+            cw_cascade_to_chairs = bool(request.form.get(f'cw_allow_allocation_{ind_id}'))
+
             for role, value in values:
                 if value > 0:
                     quotas_data.append({
                         'indicator_id': int(ind_id),
                         'total_target': value,
-                        'assigned_role': role
+                        'assigned_role': role,
+                        'allow_chair_allocation': 1 if role != 'College-Wide' else int(cw_cascade_to_chairs)
                     })
 
         success, message = save_cascaded_quotas(cursor, conn, term_id, quotas_data)

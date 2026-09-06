@@ -23,6 +23,13 @@ def get_chair_indicators(cursor, term_id, specialization):
     metrics (e.g. "80% of undergraduate programs with valid accreditation") that no individual
     faculty member personally commits to — they must never be offered to a Program Chair for
     per-faculty distribution.
+
+    Within Support, the Dean additionally gates each College-Wide quota with
+    `allow_chair_allocation` (set via the Cascade to Chairs / Silent toggle on the Quota
+    Cascading table). Only rows explicitly marked "Cascade to Chairs" show up here — a Silent
+    (Dean Only) quota is an institutional/administrative duty the Dean intends to keep off
+    every regular faculty member's IPCR, so it's excluded from this query entirely rather than
+    relying on the Chair to leave it at 0.
     """
     from app.models.connection import timed_query
     query = """
@@ -37,6 +44,7 @@ def get_chair_indicators(cursor, term_id, specialization):
         LEFT JOIN tbl_cascaded_quotas cw_cq
             ON cw_cq.indicator_id = mi.indicator_id AND cw_cq.term_id = mi.term_id
            AND cw_cq.assigned_to_role = 'College-Wide'
+           AND cw_cq.allow_chair_allocation = 1
            AND tc.slug = %s
         WHERE mi.term_id = %s
           AND tc.review_lane = 'CHAIR' AND tc.is_core = 1

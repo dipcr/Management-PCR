@@ -73,9 +73,9 @@ def save_cascaded_quotas(cursor, connection, term_id, quotas_data):
 
         for quota in quotas_data:
             cursor.execute("""
-                INSERT INTO tbl_cascaded_quotas (term_id, indicator_id, total_target_value, assigned_to_role)
-                VALUES (%s, %s, %s, %s)
-            """, (term_id, quota['indicator_id'], quota['total_target'], quota['assigned_role']))
+                INSERT INTO tbl_cascaded_quotas (term_id, indicator_id, total_target_value, assigned_to_role, allow_chair_allocation)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (term_id, quota['indicator_id'], quota['total_target'], quota['assigned_role'], quota['allow_chair_allocation']))
 
         connection.commit()
         return True, "Quotas cascaded successfully!"

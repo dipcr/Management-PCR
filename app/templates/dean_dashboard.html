@@ -188,6 +188,28 @@
                                         data-indicator="{{ indicator.indicator_id }}" onchange="updateTotals()"
                                         aria-label="Quota for {{ indicator.indicator_description | ipcr_preview }} - {{ role }}"
                                         {% if has_cascaded_quotas %}disabled{% endif %}>
+                                    {% if role == 'College-Wide' %}
+                                    {% set cw_checked = existing_cw_allow_allocation.get(indicator.indicator_id, 0) %}
+                                    {% if has_cascaded_quotas %}
+                                    <span class="badge {% if cw_checked %}bg-success-subtle text-success border border-success-subtle{% else %}bg-secondary-subtle text-secondary border border-secondary-subtle{% endif %} mt-1 d-block text-center">
+                                        {% if cw_checked %}To Chairs{% else %}Silent{% endif %}
+                                    </span>
+                                    {% else %}
+                                    <input type="hidden" id="cwAllow_{{ indicator.indicator_id }}"
+                                        name="cw_allow_allocation_{{ indicator.indicator_id }}"
+                                        value="{{ 1 if cw_checked else 0 }}">
+                                    <div class="btn-group btn-group-sm mt-1 w-100" role="group" aria-label="Cascade control for {{ indicator.indicator_description | ipcr_preview }}">
+                                        <button type="button"
+                                            class="btn cw-toggle-btn {% if not cw_checked %}btn-secondary{% else %}btn-outline-secondary{% endif %}"
+                                            data-value="0" data-target="cwAllow_{{ indicator.indicator_id }}"
+                                            onclick="setCwAllocation(this)">Silent</button>
+                                        <button type="button"
+                                            class="btn cw-toggle-btn {% if cw_checked %}btn-success{% else %}btn-outline-success{% endif %}"
+                                            data-value="1" data-target="cwAllow_{{ indicator.indicator_id }}"
+                                            onclick="setCwAllocation(this)">To Chairs</button>
+                                    </div>
+                                    {% endif %}
+                                    {% endif %}
                                 </td>
                                 {% endfor %}
                             </tr>
@@ -1949,6 +1971,19 @@
 
     function updateTotals() {
         console.log('Quota values updated');
+    }
+
+    function setCwAllocation(btn) {
+        const group = btn.parentElement;
+        const hidden = document.getElementById(btn.dataset.target);
+        hidden.value = btn.dataset.value;
+
+        group.querySelectorAll('.cw-toggle-btn').forEach(b => {
+            const isSelected = b === btn;
+            const isSilent = b.dataset.value === '0';
+            b.classList.toggle(isSilent ? 'btn-secondary' : 'btn-success', isSelected);
+            b.classList.toggle(isSilent ? 'btn-outline-secondary' : 'btn-outline-success', !isSelected);
+        });
     }
 
     function validateQuotas() {
