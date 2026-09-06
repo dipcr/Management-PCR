@@ -1,0 +1,30 @@
+-- MIGRATION_group18.sql
+-- Drop tbl_academic_terms.deadline_date: the term-level submission deadline field
+-- is removed from the Admin Dashboard per user-interview feedback.
+--
+-- Decided by the group -- the field added a KPI ("N Days Remaining" / "Deadline
+-- Passed") and a form input that interviewees found confusing without a
+-- corresponding enforcement mechanism (nothing in the app actually blocked
+-- submission once the deadline passed), so it was cut rather than wired up.
+--
+-- Removed alongside this migration (see the same commit):
+--   app/routes/admin.py    - deadline_date extraction/validation in
+--                             admin_open_term(); audit log message no longer
+--                             mentions Deadline
+--   app/models/admin.py    - the DATEDIFF(deadline_date, ...) subquery,
+--                             days_remaining/term_status calc in get_admin_kpis()
+--   app/models/term.py     - deadline_date param and column in open_new_term();
+--                             deadline_date column in get_all_terms()
+--   app/templates/admin_dashboard.html - "TERM DEADLINE" KPI card (replaced by
+--                             "ACTIVE ACADEMIC TERM"), the Submission Deadline
+--                             date input, and the Deadline column in Term History
+--   app/templates/dean_dashboard.html  - deadline_date read out of the Active
+--                             Term Target banner
+--   db/schema.sql           - deadline_date column definition
+--
+-- tbl_academic_terms.deadline_date has no foreign keys pointing at it and no
+-- other table reads it, so nothing blocks the drop.
+--
+-- Run AFTER MIGRATION_group17.sql.
+
+ALTER TABLE `tbl_academic_terms` DROP COLUMN `deadline_date`;

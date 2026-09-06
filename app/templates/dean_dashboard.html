@@ -134,8 +134,6 @@
             <div class="alert alert-info shadow-sm border-0 mb-3 small py-2 rounded">
                 <strong><i class="ti ti-calendar-check me-1"></i>Active Term Target:</strong>
                 {{ active_term.academic_year }} ({{ active_term.semester }})
-                | Deadline: {{ active_term.deadline_date.strftime('%B %d, %Y') if active_term.deadline_date else 'N/A'
-                }}
             </div>
 
             {% if has_cascaded_quotas %}

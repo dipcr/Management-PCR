@@ -41,7 +41,7 @@ graph TD
 #### 1.2 Academic Term Opening & Master Indicator Definition
 * **Routes**: `/admin/open_term`, `/admin/indicators/add`, `/admin/indicators/import` ([admin.py](file:///c:/Users/ACER/Documents/Management-PCR/Management-PCR/app/routes/admin.py#L90-L110), [indicator.py](file:///c:/Users/ACER/Documents/Management-PCR/Management-PCR/app/models/indicator.py#L14-L70))
 * **Actions**:
-  * Admin opens a new term specifying `academic_year`, `semester`, and `deadline_date`.
+  * Admin opens a new term specifying `academic_year` (validated as consecutive `YYYY - YYYY`) and `semester`.
   * Admin defines global target indicators linked to target categories (`tbl_target_categories`) stored in `tbl_master_indicators`.
 * **Verifications & Error Trapping**:
   * **Transaction Integrity**: `open_new_term` deactivates all previous active terms (`UPDATE tbl_academic_terms SET is_active = FALSE`) before inserting and activating the new term (`is_active = TRUE`). Database exceptions trigger `conn.rollback()`.

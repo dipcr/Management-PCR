@@ -8,7 +8,6 @@ CREATE TABLE `tbl_academic_terms` (
   `semester` varchar(20) NOT NULL,
   `period_start` date DEFAULT NULL,
   `period_end` date DEFAULT NULL,
-  `deadline_date` date DEFAULT NULL,
   `is_active` tinyint(1) DEFAULT '0',
   PRIMARY KEY (`term_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=56 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
