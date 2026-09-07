@@ -249,6 +249,45 @@
     </div>
     {% else %}
 
+    {# ── Draft Submission Prerequisites Checklist ───────────────
+       Shown only for an initial submission (gating_status is None on a resubmission,
+       since the gate is bypassed once a Program Chair review already exists). #}
+    {% if not has_submitted and gating_status and not gating_status.can_submit %}
+    <div class="alert border-0 shadow-sm mb-4" role="alert"
+        style="background: var(--c-warning-glow); border-left: 4px solid var(--c-warning) !important; border-radius: 10px;">
+        <div class="d-flex align-items-start gap-3">
+            <i class="ti ti-list-check text-warning fs-4 mt-1" style="color: var(--c-warning) !important;" aria-hidden="true"></i>
+            <div class="flex-grow-1">
+                <h6 class="fw-bold mb-1" style="color: var(--c-warning) !important;">Draft IPCR Submission Unavailable</h6>
+                <p class="mb-2 text-muted small">Your draft IPCR cannot be submitted until your Program Chair and RET
+                    Chair complete baseline target allocations for your department and rank.</p>
+                <ul class="list-unstyled mb-0 small">
+                    <li class="mb-1">
+                        {% if gating_status.has_chair_instruction %}<i class="ti ti-circle-check text-success me-1" aria-hidden="true"></i>{% else %}<i class="ti ti-circle-x text-danger me-1" aria-hidden="true"></i>{% endif %}
+                        Strategic Priorities (Instruction): Program Chair allocation
+                        <span class="badge {% if gating_status.has_chair_instruction %}bg-success{% else %}bg-secondary{% endif %} ms-1">{{ 'Ready' if gating_status.has_chair_instruction else 'Pending' }}</span>
+                    </li>
+                    <li class="mb-1">
+                        {% if gating_status.has_chair_support %}<i class="ti ti-circle-check text-success me-1" aria-hidden="true"></i>{% else %}<i class="ti ti-circle-x text-danger me-1" aria-hidden="true"></i>{% endif %}
+                        Support Functions: Program Chair allocation
+                        <span class="badge {% if gating_status.has_chair_support %}bg-success{% else %}bg-secondary{% endif %} ms-1">{{ 'Ready' if gating_status.has_chair_support else 'Pending' }}</span>
+                    </li>
+                    <li class="mb-1">
+                        {% if gating_status.has_ret_extension %}<i class="ti ti-circle-check text-success me-1" aria-hidden="true"></i>{% else %}<i class="ti ti-circle-x text-danger me-1" aria-hidden="true"></i>{% endif %}
+                        Extension Targets: RET Chair configuration for {{ academic_rank or 'your rank' }}
+                        <span class="badge {% if gating_status.has_ret_extension %}bg-success{% else %}bg-secondary{% endif %} ms-1">{{ 'Ready' if gating_status.has_ret_extension else 'Pending' }}</span>
+                    </li>
+                    <li>
+                        {% if gating_status.has_ret_research %}<i class="ti ti-circle-check text-success me-1" aria-hidden="true"></i>{% else %}<i class="ti ti-circle-x text-danger me-1" aria-hidden="true"></i>{% endif %}
+                        Research Target Pool: RET Chair configuration for {{ academic_rank or 'your rank' }}
+                        <span class="badge {% if gating_status.has_ret_research %}bg-success{% else %}bg-secondary{% endif %} ms-1">{{ 'Ready' if gating_status.has_ret_research else 'Pending' }}</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <form action="{{ url_for('faculty.faculty_submit_ipcr') }}" method="POST" id="ipcrForm">
         <input type="hidden" name="term_id" value="{{ active_term.term_id }}">
 
@@ -475,7 +514,9 @@
 
         <div class="mt-4 text-end">
             {% if not has_submitted %}
-            <button type="button" class="btn btn-primary btn-lg px-5 shadow fw-bold" id="submitBtn">
+            {% set gating_blocked = gating_status and not gating_status.can_submit %}
+            <button type="button" class="btn btn-primary btn-lg px-5 shadow fw-bold" id="submitBtn"
+                {% if gating_blocked %}disabled title="Submission unavailable until your Program Chair and RET Chair complete baseline target allocations."{% endif %}>
                 {% if (chair_review and chair_review.overall_status == 'Rejected') or (ret_review and
                 ret_review.overall_status == 'Rejected') %}
                 <i class="ti ti-send me-2" aria-hidden="true"></i>Submit IPCR for Approval
@@ -607,11 +648,7 @@
                                     </td>
                                     <td class="py-4">
                                         <p class="mb-1 small text-secondary fst-italic">{{ target.actual_accomplishment }}</p>
-                                        {% if target.completion_status == 'PARTIAL_AT_DEADLINE' %}
-                                        <span class="badge bg-warning bg-opacity-10 text-warning border border-warning" style="font-size:0.7rem;">Partially completed at deadline</span>
-                                        {% elif target.completion_status == 'NOT_BEGUN' %}
-                                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger" style="font-size:0.7rem;">Not yet begun</span>
-                                        {% elif not target.actual_duration_value %}
+                                        {% if not target.actual_duration_value %}
                                         <span class="badge bg-light text-muted border" style="font-size:0.7rem;"><i class="ti ti-clock me-1" aria-hidden="true"></i>Time to complete not reported</span>
                                         {% endif %}
                                     </td>
@@ -722,7 +759,7 @@
                 <form id="submitEvidenceForm" action="{{ url_for('faculty.faculty_submit_evidence') }}" method="POST" class="d-inline">
                     <button type="button" id="submitEvidenceBtn"
                         class="btn {% if evidence_readiness.all_evidence_ready %}btn-success shadow-lg{% else %}btn-secondary opacity-75{% endif %} btn-lg px-5 fw-bold transition-all"
-                        {% if not evidence_readiness.all_evidence_ready %}disabled title="Resolve any returned evidence before resubmitting"{% endif %}>
+                        {% if not evidence_readiness.all_evidence_ready %}disabled title="{% if evidence_readiness.has_missing_timeliness %}Provide a completion duration for evidence you've uploaded before submitting{% else %}Resolve any returned evidence before resubmitting{% endif %}"{% endif %}>
                         {% if evidence_readiness.has_returned_evidence %}
                         <i class="ti ti-send me-2" aria-hidden="true"></i>Resubmit Evidences for Verification
                         {% else %}
@@ -917,8 +954,17 @@
         const eRequiredCount = {{ ret_menu.extension_required if is_ret_eligible else 0 }};
         const hasSubmitted = {{ 'true' if has_submitted else 'false' }};
         const isRetRejected = {{ 'true' if (ret_review and ret_review.overall_status == 'Rejected') else 'false' }};
+        const canSubmitGating = {{ 'true' if (gating_status is none or gating_status.can_submit) else 'false' }};
 
         function updateSelectionCount() {
+            if (!canSubmitGating) {
+                // Prerequisites (Program Chair allocation / RET Chair rank config) aren't met
+                // yet for this initial submission — keep the button disabled regardless of
+                // Research/Extension selection state.
+                if (submitBtn) submitBtn.disabled = true;
+                if (helpText) helpText.style.display = 'none';
+                return;
+            }
             if (!isRetEligible) {
                 if (submitBtn) submitBtn.disabled = false;
                 if (helpText) helpText.style.display = 'none';
@@ -1104,19 +1150,9 @@
     }
 
 
-    // "Completed in" only applies to a target that was actually completed.
-    window.toggleCompletedInState = function () {
-        const checked = document.querySelector('input[name="completionStatus"]:checked');
-        const isCompleted = !checked || checked.value === 'COMPLETED';
-        const input = document.getElementById('evidenceCompletedIn');
-        if (!input) return;
-        input.disabled = !isCompleted;
-        if (!isCompleted) input.value = '';
-    };
-
     window.saveAccomplishmentDetails = function (closeModalOnSuccess = false) {
         const targetId = document.getElementById('evidenceTargetId').value;
-        const status = (document.querySelector('input[name="completionStatus"]:checked') || {}).value || 'COMPLETED';
+        const status = 'COMPLETED';
         const durationRaw = document.getElementById('evidenceCompletedIn').value;
         const effRaw = document.getElementById('evidenceEfficiency').value;
         const effRow = document.getElementById('efficiencyRow');
@@ -1186,10 +1222,6 @@
         });
     };
 
-    document.addEventListener('change', function (e) {
-        if (e.target && e.target.name === 'completionStatus') toggleCompletedInState();
-    });
-
     // Once evidences are submitted for verification the faculty can still view their
     // uploads, but cannot add more until a verifier returns one.
     const EVIDENCE_SUBMITTED = {{ 'true' if (evidence_readiness and evidence_readiness.evidence_submitted) else 'false' }};
@@ -1213,7 +1245,6 @@
 
         const completedIn = document.getElementById('evidenceCompletedIn');
         if (completedIn) completedIn.disabled = isLocked;
-        document.querySelectorAll('input[name="completionStatus"]').forEach(el => { el.disabled = isLocked; });
         const effSelect = document.getElementById('evidenceEfficiency');
         if (effSelect) effSelect.disabled = isLocked;
         const remarks = document.getElementById('evidenceRemarks');
@@ -1337,8 +1368,6 @@
                         meta.efficiencyRating = null;
                         const durationInput = document.getElementById('evidenceCompletedIn');
                         if (durationInput) durationInput.value = '';
-                        document.querySelectorAll('input[name="completionStatus"]').forEach(r => { r.checked = (r.value === 'COMPLETED'); });
-                        if (typeof toggleCompletedInState === 'function') toggleCompletedInState();
                         const effSelect = document.getElementById('evidenceEfficiency');
                         if (effSelect) effSelect.value = '';
                     }
@@ -1411,9 +1440,6 @@
         document.getElementById('evidenceTargetDuration').textContent =
             meta.targetDurationValue != null ? `${meta.targetDurationValue} ${meta.durationUnit || ''}`.trim() : 'not set';
 
-        const status = meta.completionStatus || 'COMPLETED';
-        document.querySelectorAll('input[name="completionStatus"]').forEach(r => { r.checked = (r.value === status); });
-
         // Efficiency is only entered directly for client-satisfaction rated indicators.
         const effRow = document.getElementById('efficiencyRow');
         const effSelect = document.getElementById('evidenceEfficiency');
@@ -1436,7 +1462,6 @@
 
         document.getElementById('evidenceRemarks').value = meta.printRemarks || '';
         document.getElementById('accomplishmentSaveMsg').textContent = '';
-        toggleCompletedInState();
         applyEvidenceLock();
 
         // Fetch current submissions for the target
@@ -1593,32 +1618,13 @@
                     </div>
 
                     <div class="row g-3 align-items-end">
-                        <div class="col-md-5">
+                        <div class="col-md-6">
                             <label for="evidenceCompletedIn" class="form-label fw-semibold text-secondary small">Completed in</label>
                             <div class="d-flex gap-2 align-items-center">
                                 <input type="number" class="form-control" id="evidenceCompletedIn" min="0" style="max-width: 110px;">
                                 <span id="evidenceDurationUnit" class="text-muted small"></span>
                             </div>
                             <small class="text-muted" style="font-size: 0.72rem;">Target: <span id="evidenceTargetDuration">—</span></small>
-                        </div>
-                        <div class="col-md-7">
-                            <fieldset class="border-0 p-0 m-0">
-                                <legend class="form-label fw-semibold text-secondary small d-block"
-                                    style="float: none; width: auto; font-size: 0.875rem; line-height: inherit; padding: 0; border: 0; margin-bottom: 0.5rem;">
-                                    Completion Status</legend>
-                                <div class="form-check form-check-inline">
-                                    <input class="form-check-input" type="radio" name="completionStatus" id="statusCompleted" value="COMPLETED" checked>
-                                    <label class="form-check-label small" for="statusCompleted">Completed</label>
-                                </div>
-                                <div class="form-check form-check-inline">
-                                    <input class="form-check-input" type="radio" name="completionStatus" id="statusPartial" value="PARTIAL_AT_DEADLINE">
-                                    <label class="form-check-label small" for="statusPartial">Partially completed at deadline</label>
-                                </div>
-                                <div class="form-check form-check-inline">
-                                    <input class="form-check-input" type="radio" name="completionStatus" id="statusNotBegun" value="NOT_BEGUN">
-                                    <label class="form-check-label small" for="statusNotBegun">Not yet begun</label>
-                                </div>
-                            </fieldset>
                         </div>
                     </div>
 

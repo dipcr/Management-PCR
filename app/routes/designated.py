@@ -31,6 +31,12 @@ def designated_dashboard():
     last_name = emp_result[0]['last_name'] if emp_result else ''
     assigned_program = emp_result[0]['assigned_program'] if emp_result else ''
 
+    # A Program Chair, RET Chair, or Dean's own IPCR is fully Dean-formulated (see
+    # save_and_issue_designated_draft_ipcr in app/models/dean.py and CLAUDE.md's
+    # designation/system_role note) -- issued and auto-approved by the Dean rather than
+    # self-submitted. A Plain Designated Faculty still authors and submits their own (Decision 4).
+    is_dean_formulated = (designation or '').strip() in ('Program Chair', 'RET Chair', 'Dean')
+
     terms = get_all_terms(cursor)
     active_term = next((t for t in terms if t['is_active'] == 1), None)
 
@@ -39,6 +45,10 @@ def designated_dashboard():
     can_edit = True
     dean_review = None
     is_returned = False
+    # Only meaningful for a Dean-formulated draft that's approved but not yet committed --
+    # see the gap this closes in lock_and_commit_designated_ipcr / get_core_instruction_allocation.
+    instruction_ready = True
+    awaiting_dean_formulation = False
 
     if active_term:
         term_id = active_term['term_id']
@@ -78,7 +88,19 @@ def designated_dashboard():
         # full submit path, which rebuilds tbl_draft_targets and resets the Dean review.
         # Still view-only while awaiting review, once approved, and once committed.
         is_returned = bool(dean_review and dean_review.get('overall_status') == 'Rejected')
-        can_edit = (not has_submitted) or is_returned
+        # A Dean-formulated draft (Program Chair/RET Chair/Dean, see save_and_issue_designated_
+        # draft_ipcr in app/models/dean.py) is never self-submitted or self-edited -- it's
+        # issued pre-approved by the Dean, so this person never gets the classic pick-your-own-
+        # targets form, before or after issuance.
+        can_edit = ((not has_submitted) or is_returned) and not is_dean_formulated
+        # A Dean-formulated draft is never resubmitted by the person it belongs to -- there is
+        # no self-edit path for them to correct anything, so "Returned by Dean" + a Re-submit
+        # button (the classic Rejected-status UI) would be a dead end here. This treats a
+        # rejection exactly like never having been issued: wait for the Dean to reissue via the
+        # Draft IPCR Studio. In the normal auto-approve flow a chair's review never sits
+        # Rejected -- this mainly guards a partial failure inside save_and_issue_designated_
+        # draft_ipcr (issued but the final approve step errored) from stranding them.
+        awaiting_dean_formulation = is_dean_formulated and (not has_submitted or is_returned)
 
         evidence_readiness = None
         ipcr_score = None
@@ -321,17 +343,9 @@ def designated_dashboard():
                 dpcr_targets.insert(0, mandatory_target)
         else:
             # Fetch cascaded instruction allocations from Program Chair (departmental CHAIR instruction, not Dean College-Wide) to flag as core
-            cursor.execute("""
-                SELECT da.indicator_id FROM tbl_draft_allocation da
-                JOIN tbl_master_indicators mi ON da.indicator_id = mi.indicator_id
-                JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
-                JOIN tbl_cascaded_quotas cq ON mi.indicator_id = cq.indicator_id AND cq.term_id = mi.term_id
-                WHERE da.emp_id = %s AND mi.term_id = %s 
-                  AND tc.slug = 'instruction'
-                  AND tc.review_lane = 'CHAIR'
-                  AND cq.assigned_to_role != 'College-Wide'
-            """, (emp_id, term_id))
-            alloc_ids = {r[0] for r in cursor.fetchall()}
+            from app.models.designated import get_core_instruction_allocation
+            core_instruction_rows = get_core_instruction_allocation(cursor, emp_id, term_id)
+            alloc_ids = {r['indicator_id'] for r in core_instruction_rows}
 
             # See the is_committed branch above for why this is narrower than is_admin_function.
             from app.models.designated import get_oversight_targets
@@ -374,6 +388,49 @@ def designated_dashboard():
                         t['indicator_description'], t['total_target_value'],
                         t.get('target_duration_value'), t.get('target_duration_unit'))
 
+            if is_dean_formulated and dean_review and dean_review.get('overall_status') == 'Approved':
+                # This person's own Instruction share (tbl_draft_allocation) isn't inserted into
+                # tbl_draft_targets until Lock & Commit (see lock_and_commit_designated_ipcr) --
+                # a Dean-formulated draft can be issued before the Program Chair distributes it.
+                # Show it here as a preview anyway, so a Chair can see their Core Functions are
+                # complete before locking, not just after.
+                existing_core_ids = {t['indicator_id'] for t in dpcr_targets}
+                for r in core_instruction_rows:
+                    if r['indicator_id'] in existing_core_ids:
+                        continue
+                    dpcr_targets.append({
+                        'target_id': f"pending_core_{r['indicator_id']}",
+                        'indicator_id': r['indicator_id'],
+                        'indicator_description': r['indicator_description'],
+                        'target_description': r.get('custom_description') or r['indicator_description'],
+                        'category_name': r.get('category_name') or 'Instruction',
+                        'total_target_value': r['assigned_quantity'],
+                        'target_deadline': r.get('target_deadline') or '',
+                        'target_duration_value': r.get('target_duration_value'),
+                        'target_duration_unit': r.get('target_duration_unit'),
+                        'is_selected': True,
+                        'is_core': True,
+                        'is_cascaded': True,
+                        'is_locked': True,
+                        'is_admin_function': False,
+                        'is_oversight_cascade': False,
+                    })
+
+                # Gate Lock & Commit on this person's own Instruction share actually existing
+                # (or not being required at all) -- otherwise a Chair could lock an incomplete
+                # IPCR before the Program Chair has distributed it to them.
+                if not alloc_ids:
+                    cursor.execute("""
+                        SELECT COUNT(*) FROM tbl_cascaded_quotas cq
+                        JOIN tbl_master_indicators mi ON cq.indicator_id = mi.indicator_id
+                        JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
+                        WHERE cq.term_id = %s AND mi.term_id = %s AND tc.slug = 'instruction'
+                          AND tc.review_lane = 'CHAIR' AND cq.assigned_to_role = %s
+                          AND cq.total_target_value > 0
+                    """, (term_id, term_id, specialization or ''))
+                    requires_instruction = cursor.fetchone()[0] > 0
+                    instruction_ready = not requires_instruction
+
     cursor.close()
     conn.close()
 
@@ -381,6 +438,9 @@ def designated_dashboard():
                            emp_name=f"{first_name} {last_name}",
                            academic_rank=academic_rank,
                            designation=designation,
+                           is_dean_formulated=is_dean_formulated,
+                           instruction_ready=instruction_ready,
+                           awaiting_dean_formulation=awaiting_dean_formulation,
                            assigned_program=assigned_program,
                            active_term=active_term,
                            dpcr_targets=dpcr_targets,

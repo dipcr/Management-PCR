@@ -225,8 +225,7 @@ def prog_chair_faculty_evidence_details(emp_id):
 
         for t in targets:
             cat_name = t.get('category_name', '')
-            is_ret = ('Research' in cat_name) or ('Extension' in cat_name)
-            t['is_ret'] = is_ret
+            t['is_ret'] = ('Research' in cat_name) or ('Extension' in cat_name)
             # A designated faculty/chair's Core Functions vs Strategic Priorities & Support
             # Functions split is driven by is_admin_function, not category — the same
             # indicator (e.g. Instruction) can be either depending on whether this is their
@@ -235,12 +234,9 @@ def prog_chair_faculty_evidence_details(emp_id):
             if designated:
                 t['is_core'] = not bool(t.get('is_admin_function'))
 
-            # Program Chair can ONLY view evidence files for Instructions & Support, NOT Research & Extension
-            if not is_ret:
-                ev_list = get_evidence_by_target(cursor, t['target_id'])
-                t['evidence_list'] = ev_list
-            else:
-                t['evidence_list'] = []
+            # Program Chair now approves all evidence for regular faculty, Research &
+            # Extension included.
+            t['evidence_list'] = get_evidence_by_target(cursor, t['target_id'])
 
         return jsonify({
             'success': True,

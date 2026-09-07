@@ -109,6 +109,12 @@ def dean_dashboard():
 
         departments = get_departments(cursor)
 
+        # Draft IPCR Status column (#assignDesignatedTable) — keyed off the same
+        # tbl_ipcr_dean_review status draft_submissions already carries, whether that status
+        # was reached by a manual Dean review (Plain Designated Faculty) or by the Dean's
+        # own auto-approving Draft IPCR Studio issue action (Program Chair/RET Chair/Dean).
+        draft_status_map = {d['emp_id']: d.get('review_status') for d in draft_submissions}
+
         return render_template('dean_dashboard.html',
                                active_term=active_term,
                                departments=departments,
@@ -124,6 +130,7 @@ def dean_dashboard():
                                college_wide_quotas=college_wide_quotas,
                                designated_faculty_list=designated_faculty_list,
                                designated_assignments=designated_assignments,
+                               draft_status_map=draft_status_map,
                                college_wide_allocations=college_wide_allocations,
                                pending_dean_evidence_list=pending_dean_evidence_list,
                                pending_designated_dean_evidence_list=pending_designated_dean_evidence_list,
@@ -405,7 +412,8 @@ def submit_review_decision():
 @dean_bp.route('/designated_assignment_editor/<int:emp_id>')
 @role_required('DEAN')
 def designated_assignment_editor(emp_id):
-    """AJAX — returns the College-Wide target list + current assignments for a designated faculty member / chair."""
+    """AJAX — returns the Draft IPCR Studio preview (Core Functions + Strategic Priorities &
+    Support Functions) for one designated faculty member / chair."""
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
@@ -415,76 +423,12 @@ def designated_assignment_editor(emp_id):
             return jsonify({'success': False, 'message': 'No active term found.'}), 400
         term_id = active_term['term_id']
 
-        cursor.execute("""
-            SELECT CONCAT(first_name, ' ', last_name), academic_rank, designation, assigned_program, specialization
-            FROM tbl_employee_profiles
-            WHERE emp_id = %s
-        """, (emp_id,))
-        fac_row = cursor.fetchone()
-        if not fac_row:
+        from app.models.dean import get_designated_faculty_draft_preview
+        preview = get_designated_faculty_draft_preview(cursor, term_id, emp_id)
+        if not preview:
             return jsonify({'success': False, 'message': 'Faculty member not found.'}), 404
-        faculty_name = fac_row[0]
-        academic_rank = fac_row[1] or ''
-        designation = fac_row[2] or 'Designated Faculty'
-        department = fac_row[3] or fac_row[4] or 'General'
 
-        # College-Wide quotas cascaded for the active term
-        cw_quotas = get_college_wide_cascaded_quotas(cursor, term_id)
-
-        # Existing allocations for this designated faculty member from tbl_draft_allocation
-        from app.models.dean import get_designated_faculty_assignments
-        assigned_list = get_designated_faculty_assignments(cursor, term_id, emp_id)
-        assigned_map = {a['indicator_id']: a for a in assigned_list}
-
-        # Track total allocations across all faculty to compute remaining quota
-        allocations_list = get_college_wide_allocations_tracker(cursor, term_id)
-        allocated_totals = {}
-        for alloc in allocations_list:
-            ind_id = alloc['indicator_id']
-            allocated_totals[ind_id] = allocated_totals.get(ind_id, 0) + (alloc.get('proposed_quantity') or 0)
-
-        targets = []
-        for q in cw_quotas:
-            ind_id = q['indicator_id']
-            asg = assigned_map.get(ind_id)
-            total_quota = q['total_target_value']
-            current_total_allocated = allocated_totals.get(ind_id, 0)
-
-            is_assigned = ind_id in assigned_map
-            qty = asg['assigned_quantity'] if (asg and asg.get('assigned_quantity') is not None) else 1
-            dur_val = asg['target_duration_value'] if (asg and asg.get('target_duration_value') is not None) else 6
-            dur_unit = asg['target_duration_unit'] if (asg and asg.get('target_duration_unit')) else 'months'
-            is_auto_desc = asg.get('is_auto_description') if asg else None
-            is_auto = is_auto_desc is None or is_auto_desc == 1
-            if asg and asg.get('custom_description') and not is_auto:
-                desc = asg['custom_description']
-            else:
-                desc = format_ipcr_target_description(q['indicator_description'], qty, dur_val, dur_unit)
-
-            targets.append({
-                'indicator_id': ind_id,
-                'indicator_description': q['indicator_description'],
-                'category_name': q['category_name'],
-                'total_quota': total_quota,
-                'allocated_total': current_total_allocated,
-                'is_assigned': is_assigned,
-                'assigned_quantity': qty,
-                'custom_description': desc,
-                'target_duration_value': dur_val,
-                'target_duration_unit': dur_unit,
-                'target_deadline': asg.get('target_deadline') if asg else None,
-                'is_auto_description': is_auto,
-            })
-
-        return jsonify({
-            'success': True,
-            'emp_id': emp_id,
-            'faculty_name': faculty_name,
-            'academic_rank': academic_rank,
-            'designation': designation,
-            'department': department,
-            'targets': targets
-        })
+        return jsonify({'success': True, **preview})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
     finally:
@@ -535,6 +479,22 @@ def save_designated_assignments():
 
         assignments.append((int(ind_id), qty, desc_val, dur_val, dur_unit_val, is_auto_flag))
 
+    # Departmental/RET Oversight deadlines — only meaningful for a Dean-formulated draft
+    # (Program Chair/RET Chair/Dean); the oversight quantity itself is never editable here,
+    # it's the department's/RET's whole cascaded quota (see get_oversight_targets).
+    oversight_durations = {}
+    for ind_id in request.form.getlist('oversight_indicator_ids[]'):
+        dur_val_raw = request.form.get(f'oversight_dur_value_{ind_id}', '').strip()
+        dur_unit_val = request.form.get(f'oversight_dur_unit_{ind_id}', 'months').strip() or 'months'
+        try:
+            dur_val = int(dur_val_raw) if dur_val_raw else 6
+        except (ValueError, TypeError):
+            dur_val = 6
+        oversight_durations[int(ind_id)] = {
+            'target_duration_value': dur_val,
+            'target_duration_unit': dur_unit_val,
+        }
+
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
@@ -544,11 +504,41 @@ def save_designated_assignments():
             flash("No active academic term found.", "danger")
             return redirect(url_for('dean.dean_dashboard'))
 
-        from app.models.dean import save_designated_faculty_assignments
-        success, msg = save_designated_faculty_assignments(
-            conn, cursor, active_term['term_id'], int(emp_id), assignments, session.get('user_id')
+        # Captured before the save — distinguishes a first-time issue from the Dean editing an
+        # already-issued draft, so re-saving (e.g. tweaking a College-Wide quantity) doesn't
+        # re-send an "approved" email the chair already got the first time.
+        cursor.execute(
+            "SELECT overall_status FROM tbl_ipcr_dean_review WHERE emp_id = %s AND term_id = %s",
+            (int(emp_id), active_term['term_id'])
+        )
+        prior_review_row = cursor.fetchone()
+        was_already_approved = bool(prior_review_row and prior_review_row[0] == 'Approved')
+
+        from app.models.dean import save_and_issue_designated_draft_ipcr
+        success, msg = save_and_issue_designated_draft_ipcr(
+            conn, cursor, active_term['term_id'], int(emp_id), assignments, session.get('user_id'),
+            oversight_durations
         )
         flash(msg, "success" if success else "danger")
+
+        if success and not was_already_approved:
+            # Only a Program Chair/RET Chair/Dean actually gets auto-approved here (Decision 4
+            # leaves Plain Designated Faculty to submit and be reviewed themselves) — mirrors
+            # the notification submit_review_decision already sends for a manual approval, so
+            # a Dean-formulated draft doesn't leave the chair with no signal it's ready to lock.
+            cursor.execute("SELECT designation FROM tbl_employee_profiles WHERE emp_id = %s", (int(emp_id),))
+            desig_row = cursor.fetchone()
+            designation = (desig_row[0] if desig_row else '') or ''
+            if designation in ('Program Chair', 'RET Chair', 'Dean'):
+                try:
+                    from app.services.notification_service import send_designated_target_decision_notification
+                    send_designated_target_decision_notification(
+                        conn, cursor, int(emp_id), active_term['term_id'], 'Approved',
+                        'Your Draft IPCR was formulated and pre-approved by the Dean.'
+                    )
+                except Exception as notif_err:
+                    import logging
+                    logging.getLogger(__name__).error(f"Error triggering Draft IPCR Studio notification: {notif_err}")
     except Exception as e:
         flash(f"Error saving assignments: {str(e)}", "danger")
     finally:

@@ -1671,8 +1671,6 @@
                                 <td class="text-center">
                                     {% if fac.verification_status_code == 'WAITING_CHAIR' %}
                                         <span class="badge bg-warning text-dark px-3 py-2"><i class="ti ti-hourglass me-1"></i>Waiting for Program Chair Approval</span>
-                                    {% elif fac.verification_status_code == 'WAITING_RET' %}
-                                        <span class="badge bg-info text-dark px-3 py-2"><i class="ti ti-hourglass me-1"></i>Waiting for RET Chair Approval</span>
                                     {% else %}
                                         <span class="badge bg-secondary px-3 py-2"><i class="ti ti-hourglass me-1"></i>Evidences Submitted</span>
                                     {% endif %}
@@ -1733,11 +1731,7 @@
                                 <td class="text-center fw-bold text-primary fs-6">{{ fac.total_targets }}</td>
                                 <td class="text-center fw-bold text-success fs-6">{{ fac.met_targets }} / {{ fac.total_targets }}</td>
                                 <td class="text-center">
-                                    {% if fac.is_both_approved %}
-                                    <span class="badge bg-success px-3 py-2"><i class="ti ti-checks me-1"></i>Approved by Both</span>
-                                    {% else %}
-                                    <span class="badge bg-info text-dark px-3 py-2"><i class="ti ti-circle-check me-1"></i>Approved by Chair (Waiting for RET)</span>
-                                    {% endif %}
+                                    <span class="badge bg-success px-3 py-2"><i class="ti ti-checks me-1"></i>Approved</span>
                                 </td>
                                 <td class="text-center pe-4">
                                     <div class="d-inline-flex gap-2 align-items-center justify-content-center">
@@ -1907,9 +1901,7 @@ function openFacultyEvidenceVerificationModal(empId, facultyName) {
                     EVIDENCE_BY_TARGET[t.target_id] = t.evidence_list || [];
 
                     let evHtml = '';
-                    if (t.is_ret) {
-                        evHtml = '<span class="badge bg-light text-secondary border px-3 py-2"><i class="ti ti-shield-lock me-1"></i>Managed by RET Sector</span>';
-                    } else if (t.evidence_list && t.evidence_list.length > 0) {
+                    if (t.evidence_list && t.evidence_list.length > 0) {
                         evHtml = `<button type="button" class="btn btn-outline-primary btn-sm px-3 fw-semibold shadow-xs"
                             onclick="openEvidenceViewerFor(${t.target_id})">
                             <i class="ti ti-folder-open me-1"></i>View Uploaded Evidence (${t.evidence_list.length})
@@ -1958,9 +1950,7 @@ function openFacultyEvidenceVerificationModal(empId, facultyName) {
                     // Aggregate verification status across this target's evidence files.
                     let verifyHtml;
                     const evs = t.evidence_list || [];
-                    if (t.is_ret) {
-                        verifyHtml = '<span class="badge bg-light text-secondary border small">RET Sector</span>';
-                    } else if (evs.length === 0) {
+                    if (evs.length === 0) {
                         verifyHtml = '<span class="badge bg-light text-muted border small">No evidence</span>';
                     } else {
                         const returned = evs.filter(e => e.verification_status === 'Returned').length;

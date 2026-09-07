@@ -33,10 +33,13 @@ def faculty_dashboard():
         evidence_readiness = None
         ipcr_score = None
         has_final_ipcr = False
+        gating_status = None
 
         if active_term:
             term_id = active_term['term_id']
             is_ret_eligible = is_faculty_ret_eligible(cursor, emp_id, term_id)
+            if not is_faculty_resubmission(cursor, emp_id, term_id):
+                gating_status = check_faculty_draft_gating(cursor, emp_id, term_id)
             assigned_targets = get_faculty_assigned_targets(cursor, emp_id, term_id)
             # Extension targets are locked/mandatory for the faculty's rank band, read-only,
             # and independent of Research eligibility — so the menu is fetched whenever the
@@ -112,7 +115,8 @@ def faculty_dashboard():
                                ipcr_status=ipcr_status,
                                evidence_readiness=evidence_readiness,
                                ipcr_score=ipcr_score,
-                               has_final_ipcr=has_final_ipcr)
+                               has_final_ipcr=has_final_ipcr,
+                               gating_status=gating_status)
     finally:
         cursor.close()
         conn.close()
@@ -222,6 +226,12 @@ def faculty_submit_ipcr():
         if is_locked or is_approved:
             flash("Your IPCR has already been approved/locked and cannot be re-submitted.", "danger")
             return redirect(url_for('faculty.faculty_dashboard'))
+
+        if not is_faculty_resubmission(cursor, emp_id, int(term_id)):
+            gating_status = check_faculty_draft_gating(cursor, emp_id, int(term_id))
+            if not gating_status['can_submit']:
+                flash("Submission blocked: " + "; ".join(gating_status['missing_reasons']), "warning")
+                return redirect(url_for('faculty.faculty_dashboard'))
 
         # Construct research targets payload (proposed_quantity=1 per selection)
         selected_ret_targets = [{'indicator_id': int(x), 'proposed_quantity': 1} for x in selected_indicators]

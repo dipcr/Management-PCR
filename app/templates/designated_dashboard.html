@@ -121,9 +121,13 @@
         <span class="badge bg-dark px-3 py-2 fs-6 shadow-sm">
             <i class="ti ti-lock me-2"></i>Approved &amp; Locked
         </span>
+        {% elif awaiting_dean_formulation %}
+        <span class="badge bg-secondary px-3 py-2 fs-6 shadow-sm">
+            <i class="ti ti-hourglass-empty me-2"></i>Awaiting Dean Formulation
+        </span>
         {% elif dean_review and dean_review.overall_status == 'Approved' %}
         <span class="badge bg-success px-3 py-2 fs-6 shadow-sm">
-            <i class="ti ti-circle-check me-2"></i>Dean Approved
+            <i class="ti ti-circle-check me-2"></i>{% if is_dean_formulated %}Dean Formulated (Pre-Approved){% else %}Dean Approved{% endif %}
         </span>
         {% elif dean_review and dean_review.overall_status == 'Rejected' %}
         <span class="badge bg-danger px-3 py-2 fs-6 shadow-sm">
@@ -167,14 +171,42 @@
             </div>
         </div>
     </div>
+    {% elif awaiting_dean_formulation %}
+    <div class="alert border-0 shadow-sm mb-4" role="alert"
+        style="background: var(--c-surface-alt); border-left: 4px solid var(--c-border) !important; border-radius: 10px;">
+        <div class="d-flex align-items-start gap-3">
+            <i class="ti ti-hourglass-empty text-secondary fs-4 mt-1"></i>
+            <div>
+                {% if dean_review and dean_review.overall_status == 'Rejected' %}
+                <h6 class="fw-bold text-dark mb-1">Your Draft IPCR was returned by the Dean</h6>
+                {% if dean_review.overall_remarks %}
+                <p class="mb-1 text-dark"><strong>Remarks:</strong> {{ dean_review.overall_remarks }}</p>
+                {% endif %}
+                <p class="mb-0 text-muted small">There's nothing for you to change here — the Dean will re-formulate and re-issue your Draft IPCR from the Draft IPCR Studio.</p>
+                {% else %}
+                <h6 class="fw-bold text-dark mb-1">Waiting for the Dean to formulate your Draft IPCR</h6>
+                <p class="mb-0 text-muted small">Your Core Functions and Strategic Priorities &amp; Support Functions are formulated by the Dean, then issued here pre-approved.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
     {% elif dean_review and dean_review.overall_status == 'Approved' %}
     <div class="alert border-0 shadow-sm mb-4" role="alert"
         style="background: var(--c-success-glow); border-left: 4px solid var(--c-success) !important; border-radius: 10px;">
         <div class="d-flex align-items-start gap-3">
             <i class="ti ti-circle-check text-success fs-4 mt-1"></i>
             <div>
+                {% if is_dean_formulated %}
+                <h6 class="fw-bold text-success mb-1">Your IPCR was formulated and pre-approved by the Dean!</h6>
+                {% if instruction_ready %}
+                <p class="mb-0 text-dark small">Review your finalized commitment targets below and click <strong>"Lock My IPCR"</strong> to commit your targets and proceed to evidence gathering.</p>
+                {% else %}
+                <p class="mb-0 text-dark small">Your Core Functions aren't complete yet — distribute your own Instruction share to yourself in Phase 1 Target Allocation before you can lock this IPCR.</p>
+                {% endif %}
+                {% else %}
                 <h6 class="fw-bold text-success mb-1">Your IPCR has been Approved by the Dean!</h6>
                 <p class="mb-0 text-dark small">Review your finalized commitment targets below and click <strong>"Lock My IPCR"</strong> to commit your targets and proceed to evidence gathering.</p>
+                {% endif %}
                 {% if dean_review.overall_remarks %}
                 <p class="mb-0 text-dark mt-1 small"><strong>Dean's Remarks:</strong> {{ dean_review.overall_remarks }}
                 </p>
@@ -206,6 +238,20 @@
     </div>
     {% endif %}
 
+    {% if awaiting_dean_formulation %}
+    <div class="card border-0 shadow-sm card-rounded-clip">
+        <div class="card-body text-center py-5">
+            <i class="ti ti-hourglass-empty fs-1 text-muted mb-2 d-block"></i>
+            <h5 class="fw-bold text-dark mb-2">Waiting for the Dean to formulate your Draft IPCR</h5>
+            <p class="text-muted mb-0">
+                Your Core Functions and Strategic Priorities &amp; Support Functions are formulated by the Dean
+                in the Draft IPCR Studio, then issued here pre-approved — there's nothing for you to submit.
+                In the meantime, you can still distribute your own Instruction share to yourself in Phase 1
+                Target Allocation.
+            </p>
+        </div>
+    </div>
+    {% else %}
     <form id="dpcrForm" action="{{ url_for('designated.submit_designated_ipcr_route') }}" method="POST">
         <input type="hidden" name="term_id" value="{{ active_term.term_id }}">
 
@@ -524,9 +570,16 @@
                 <div class="alert alert-success border-0 shadow-sm px-4 py-2 m-0">
                     <i class="ti ti-circle-check me-2"></i> Your IPCR has been approved by the Dean!
                 </div>
+                {% if instruction_ready %}
                 <button type="button" id="lockBtn" class="btn btn-warning btn-lg px-5 shadow fw-bold text-dark">
                     <i class="ti ti-lock me-2"></i>Lock My IPCR
                 </button>
+                {% else %}
+                <button type="button" class="btn btn-warning btn-lg px-5 shadow fw-bold text-dark" disabled title="Distribute your own Instruction share in Phase 1 Target Allocation first">
+                    <i class="ti ti-lock me-2"></i>Lock My IPCR
+                </button>
+                <small class="text-muted">Distribute your own Instruction share in Phase 1 Target Allocation first.</small>
+                {% endif %}
             </div>
             {% elif dean_review and dean_review.overall_status == 'Rejected' %}
             <div class="d-inline-flex flex-column align-items-end gap-2">
@@ -542,6 +595,7 @@
         </div>
         {% endif %}
     </form>
+    {% endif %}
 
     {% if dean_review and dean_review.overall_status == 'Rejected' and not is_committed %}
     <form id="resubmitDraftForm" action="{{ url_for('designated.designated_resubmit_ipcr') }}" method="POST" style="display:none;">
@@ -816,7 +870,7 @@
                 <form id="submitEvidenceForm" action="{{ url_for('designated.designated_submit_evidence') }}" method="POST" class="d-inline">
                     <button type="button" id="submitEvidenceBtn"
                         class="btn {% if evidence_readiness.all_evidence_ready %}btn-success shadow-lg{% else %}btn-secondary opacity-75{% endif %} btn-lg px-5 fw-bold transition-all"
-                        {% if not evidence_readiness.all_evidence_ready %}disabled title="No committed targets to submit"{% endif %}>
+                        {% if not evidence_readiness.all_evidence_ready %}disabled title="{% if evidence_readiness.has_missing_timeliness %}Provide a completion duration for evidence you've uploaded before submitting{% else %}No committed targets to submit{% endif %}"{% endif %}>
                         <i class="ti ti-send me-2"></i>Submit Evidences
                     </button>
                 </form>
@@ -1505,18 +1559,9 @@
         },{% endif %}{% endfor %}
     };
 
-    window.toggleCompletedInState = function () {
-        const checked = document.querySelector('input[name="completionStatus"]:checked');
-        const isCompleted = !checked || checked.value === 'COMPLETED';
-        const input = document.getElementById('evidenceCompletedIn');
-        if (!input) return;
-        input.disabled = !isCompleted;
-        if (!isCompleted) input.value = '';
-    };
-
     window.saveAccomplishmentDetails = function (closeModalOnSuccess = false) {
         const targetId = document.getElementById('evidenceTargetId').value;
-        const status = (document.querySelector('input[name="completionStatus"]:checked') || {}).value || 'COMPLETED';
+        const status = 'COMPLETED';
         const durationRaw = document.getElementById('evidenceCompletedIn').value;
         const effRaw = document.getElementById('evidenceEfficiency').value;
         const effRow = document.getElementById('efficiencyRow');
@@ -1586,10 +1631,6 @@
         });
     };
 
-    document.addEventListener('change', function (e) {
-        if (e.target && e.target.name === 'completionStatus') toggleCompletedInState();
-    });
-
     const EVIDENCE_SUBMITTED = {{ 'true' if (evidence_readiness and evidence_readiness.evidence_submitted) else 'false' }};
     const HAS_FINAL_IPCR = {{ 'true' if has_final_ipcr else 'false' }};
     window.evidenceModalHasChanges = false;
@@ -1609,7 +1650,6 @@
 
         const completedIn = document.getElementById('evidenceCompletedIn');
         if (completedIn) completedIn.disabled = isLocked;
-        document.querySelectorAll('input[name="completionStatus"]').forEach(el => { el.disabled = isLocked; });
         const effSelect = document.getElementById('evidenceEfficiency');
         if (effSelect) effSelect.disabled = isLocked;
         const remarks = document.getElementById('evidenceRemarks');
@@ -1650,9 +1690,6 @@
         document.getElementById('evidenceTargetDuration').textContent =
             meta.targetDurationValue != null ? `${meta.targetDurationValue} ${meta.durationUnit || ''}`.trim() : 'not set';
 
-        const status = meta.completionStatus || 'COMPLETED';
-        document.querySelectorAll('input[name="completionStatus"]').forEach(r => { r.checked = (r.value === status); });
-
         const effRow = document.getElementById('efficiencyRow');
         const effSelect = document.getElementById('evidenceEfficiency');
         if (effSelect) effSelect.classList.remove('is-invalid');
@@ -1674,7 +1711,6 @@
 
         document.getElementById('evidenceRemarks').value = meta.printRemarks || '';
         document.getElementById('accomplishmentSaveMsg').textContent = '';
-        toggleCompletedInState();
         applyEvidenceLock();
 
         // Reload submissions
@@ -1765,8 +1801,6 @@
                         meta.efficiencyRating = null;
                         const durationInput = document.getElementById('evidenceCompletedIn');
                         if (durationInput) durationInput.value = '';
-                        document.querySelectorAll('input[name="completionStatus"]').forEach(r => { r.checked = (r.value === 'COMPLETED'); });
-                        if (typeof toggleCompletedInState === 'function') toggleCompletedInState();
                         const effSelect = document.getElementById('evidenceEfficiency');
                         if (effSelect) effSelect.value = '';
                     }
@@ -1957,28 +1991,13 @@
                     </div>
 
                     <div class="row g-3 align-items-end">
-                        <div class="col-md-5">
+                        <div class="col-md-6">
                             <label for="evidenceCompletedIn" class="form-label fw-semibold text-secondary small">Completed in</label>
                             <div class="d-flex gap-2 align-items-center">
                                 <input type="number" class="form-control" id="evidenceCompletedIn" min="0" style="max-width: 110px;">
                                 <span id="evidenceDurationUnit" class="text-muted small"></span>
                             </div>
                             <small class="text-muted" style="font-size: 0.72rem;">Target: <span id="evidenceTargetDuration">—</span></small>
-                        </div>
-                        <div class="col-md-7">
-                            <label class="form-label fw-semibold text-secondary small d-block">Completion Status</label>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input" type="radio" name="completionStatus" id="statusCompleted" value="COMPLETED" checked>
-                                <label class="form-check-label small" for="statusCompleted">Completed</label>
-                            </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input" type="radio" name="completionStatus" id="statusPartial" value="PARTIAL_AT_DEADLINE">
-                                <label class="form-check-label small" for="statusPartial">Partially completed at deadline</label>
-                            </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input" type="radio" name="completionStatus" id="statusNotBegun" value="NOT_BEGUN">
-                                <label class="form-check-label small" for="statusNotBegun">Not yet begun</label>
-                            </div>
                         </div>
                     </div>
 

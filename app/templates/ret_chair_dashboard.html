@@ -34,10 +34,7 @@
 <div class="nav-label">Verification</div>
 <button class="nav-item" data-section="nav-evidence-verification" onclick="showSection('nav-evidence-verification')">
     <i class="ti ti-file-check"></i>
-    <span class="nav-text">Evidence Verification</span>
-    {% if pending_evidence_faculty_list|length > 0 %}
-    <span class="badge bg-danger ms-auto">{{ pending_evidence_faculty_list|length }}</span>
-    {% endif %}
+    <span class="nav-text">Evidence Monitor</span>
 </button>
 {% if has_own_ipcr %}
 <div class="nav-label">My Performance</div>
@@ -2185,92 +2182,18 @@ document.addEventListener('DOMContentLoaded', function() {
 <div id="nav-evidence-verification" class="dashboard-section">
     <div class="page-header d-flex justify-content-between align-items-center">
         <div>
-            <h2>Evidence Verification</h2>
-            <p>Review and verify Research &amp; Extension accomplishment evidence submitted by faculty members across departments.</p>
+            <h2>Evidence Monitor</h2>
+            <p>Regular faculty with Research &amp; Extension targets, once Program Chair has approved their evidence. Read-only — Program Chair now approves all regular faculty evidence.</p>
         </div>
         <span class="badge bg-primary px-3 py-2 fs-6 shadow-sm">
             <i class="ti ti-users me-2"></i>{{ evidence_faculty_list|length }} Faculty Listed
         </span>
     </div>
 
-    <div class="card border-0 shadow-sm mb-4 card-rounded-clip">
-        <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
-            <h5 role="heading" aria-level="3" class="mb-0 fw-bold text-dark"><i class="ti ti-clipboard-check me-2 text-primary"></i>Faculty RET Evidence Submissions</h5>
-            <div class="d-flex align-items-center gap-2">
-                <i class="ti ti-search text-muted"></i>
-                <input type="text" id="retEvidencePendingSearch" class="form-control form-control-sm"
-                       placeholder="Search faculty..." style="width: 240px;" onkeyup="filterRetEvidencePendingTable()">
-            </div>
-        </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table align-middle mb-0" id="retEvidencePendingTable">
-                    <thead class="table-light">
-                        <tr>
-                            <th class="ps-4">Faculty Member</th>
-                            <th class="text-center">Academic Rank</th>
-                            <th class="text-center">Department / Specialization</th>
-                            <th class="text-center">RET Targets Committed</th>
-                            <th class="text-center">RET Targets Met</th>
-                            <th class="text-center">Status</th>
-                            <th class="text-center pe-4">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% if pending_evidence_faculty_list %}
-                            {% for fac in pending_evidence_faculty_list %}
-                            <tr>
-                                <td class="ps-4 py-3">
-                                    <div class="fw-bold text-dark">{{ fac.first_name }} {{ fac.last_name }}</div>
-                                </td>
-                                <td class="text-center">{{ fac.academic_rank or 'Instructor I' }}</td>
-                                <td class="text-center">{{ fac.specialization or 'Department Faculty' }}</td>
-                                <td class="text-center fw-bold text-primary fs-6">{{ fac.total_targets }}</td>
-                                <td class="text-center fw-bold text-success fs-6">{{ fac.met_targets }} / {{ fac.total_targets }}</td>
-                                <td class="text-center">
-                                    {% if fac.verification_status_code == 'WAITING_CHAIR' %}
-                                        <span class="badge bg-warning text-dark px-3 py-2"><i class="ti ti-hourglass me-1"></i>Waiting for Program Chair Approval</span>
-                                    {% elif fac.verification_status_code == 'WAITING_RET' %}
-                                        <span class="badge bg-info text-dark px-3 py-2"><i class="ti ti-hourglass me-1"></i>Waiting for RET Chair Approval</span>
-                                    {% else %}
-                                        <span class="badge bg-secondary px-3 py-2"><i class="ti ti-hourglass me-1"></i>Evidences Submitted</span>
-                                    {% endif %}
-                                </td>
-                                <td class="text-center pe-4">
-                                    <button type="button" class="btn btn-primary btn-sm px-3 py-2 fw-bold shadow-sm"
-                                        onclick="openRetFacultyEvidenceVerificationModal({{ fac.emp_id }}, '{{ fac.first_name|replace('\'', '\\\'') }} {{ fac.last_name|replace('\'', '\\\'') }}')">
-                                        <i class="ti ti-eye me-1"></i>View Evidences
-                                    </button>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        {% else %}
-                            <tr>
-                                <td colspan="7" class="text-center py-4 text-muted">
-                                    No pending faculty Research &amp; Extension evidence submissions found for this academic term.
-                                </td>
-                            </tr>
-                        {% endif %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <script>
-    function filterRetEvidencePendingTable() {
-        const input = document.getElementById('retEvidencePendingSearch').value.toLowerCase();
-        document.querySelectorAll('#retEvidencePendingTable tbody tr').forEach(row => {
-            if (row.cells.length === 1) { return; }
-            row.style.display = row.innerText.toLowerCase().includes(input) ? '' : 'none';
-        });
-    }
-    </script>
-
-    <!-- Approved RET Evidence Submissions Table -->
+    <!-- Faculty with Research & Extension Targets — Evidence Monitor -->
     <div class="card border-0 shadow-sm card-rounded-clip">
         <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
-            <h5 role="heading" aria-level="3" class="mb-0 fw-bold text-dark"><i class="ti ti-circle-check me-2 text-success"></i>Approved RET Evidence Submissions</h5>
+            <h5 role="heading" aria-level="3" class="mb-0 fw-bold text-dark"><i class="ti ti-circle-check me-2 text-success"></i>Faculty with Research &amp; Extension Targets</h5>
             <div class="d-flex align-items-center gap-2">
                 <i class="ti ti-search text-muted"></i>
                 <input type="text" id="retEvidenceApprovedSearch" class="form-control form-control-sm"
@@ -2292,8 +2215,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         </tr>
                     </thead>
                     <tbody>
-                        {% if approved_evidence_faculty_list %}
-                            {% for fac in approved_evidence_faculty_list %}
+                        {% if evidence_faculty_list %}
+                            {% for fac in evidence_faculty_list %}
                             <tr>
                                 <td class="ps-4 py-3">
                                     <div class="fw-bold text-dark">{{ fac.first_name }} {{ fac.last_name }}</div>
@@ -2303,7 +2226,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <td class="text-center fw-bold text-primary fs-6">{{ fac.total_targets }}</td>
                                 <td class="text-center fw-bold text-success fs-6">{{ fac.met_targets }} / {{ fac.total_targets }}</td>
                                 <td class="text-center">
-                                    <span class="badge bg-success px-3 py-2"><i class="ti ti-checks me-1"></i>Approved</span>
+                                    <span class="badge bg-success px-3 py-2"><i class="ti ti-checks me-1"></i>Approved by Program Chair</span>
                                 </td>
                                 <td class="text-center pe-4">
                                     <button type="button" class="btn btn-primary btn-sm px-3 py-2 fw-bold shadow-sm"
@@ -2316,7 +2239,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         {% else %}
                             <tr>
                                 <td colspan="7" class="text-center py-4 text-muted">
-                                    No fully approved Research &amp; Extension evidence submissions yet.
+                                    No faculty with fully approved Research &amp; Extension evidence yet.
                                 </td>
                             </tr>
                         {% endif %}
@@ -2342,7 +2265,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
             <div class="modal-header text-white border-0 py-3" style="border-top-left-radius: 16px; border-top-right-radius: 16px; background: var(--c-accent);">
-                <h5 class="modal-title fw-bold" id="retEvidenceModalTitle"><i class="ti ti-file-check me-2"></i>Research &amp; Extension Evidence Verification</h5>
+                <h5 class="modal-title fw-bold" id="retEvidenceModalTitle"><i class="ti ti-file-check me-2"></i>Research &amp; Extension Evidence — Read-Only</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-4">
@@ -2352,7 +2275,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         <small class="text-muted" id="modalRetFacultyRank">-</small>
                     </div>
                     <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle px-3 py-2 fw-bold">
-                        RET Chair Verification View
+                        Approved by Program Chair
                     </span>
                 </div>
 
@@ -2542,7 +2465,6 @@ function openEvidenceViewer(evidenceList) {
                 ? '<span class="badge bg-danger">Returned</span>'
                 : '<span class="badge bg-warning text-dark">Pending</span>';
 
-            const isDecided = ev.verification_status === 'Approved' || ev.verification_status === 'Returned';
             const commentHtml = ev.supervisor_comment
                 ? `<div class="alert alert-warning py-2 px-3 small mb-2"><i class="ti ti-message me-1"></i><strong>Reason:</strong> ${escapeHtml(ev.supervisor_comment)}</div>`
                 : '';
@@ -2559,16 +2481,6 @@ function openEvidenceViewer(evidenceList) {
                         </div>
                     </div>
                     ${commentHtml}
-                    <div class="${isDecided ? 'd-none' : 'd-flex'} justify-content-end gap-2 mb-2" id="evidence-actions-${ev.evidence_id}" ${isDecided ? 'style="display:none !important;"' : ''}>
-                        <button type="button" class="btn btn-sm btn-outline-danger px-3"
-                                onclick="returnEvidence(${ev.evidence_id})">
-                            <i class="ti ti-arrow-back-up me-1"></i>Return
-                        </button>
-                        <button type="button" class="btn btn-sm btn-success px-3"
-                                onclick="verifyEvidence(${ev.evidence_id}, 'Approved')">
-                            <i class="ti ti-circle-check me-1"></i>Approve
-                        </button>
-                    </div>
                     ${previewHtml}
                 </div>
             `;
@@ -2578,110 +2490,6 @@ function openEvidenceViewer(evidenceList) {
     new bootstrap.Modal(document.getElementById('evidenceViewerModal')).show();
 }
 
-let pendingReturnEvidenceId = null;
-
-function returnEvidence(evidenceId) {
-    for (const tid in EVIDENCE_BY_TARGET) {
-        const list = EVIDENCE_BY_TARGET[tid] || [];
-        const item = list.find(e => String(e.evidence_id) === String(evidenceId));
-        if (item && item.verification_status === 'Approved') {
-            alert('Approved evidence cannot be returned.');
-            return;
-        }
-    }
-    pendingReturnEvidenceId = evidenceId;
-    document.getElementById('returnEvidenceReasonInput').value = '';
-    document.getElementById('returnEvidenceReasonError').style.display = 'none';
-    new bootstrap.Modal(document.getElementById('returnEvidenceReasonModal')).show();
-}
-
-function confirmReturnEvidence() {
-    const reason = document.getElementById('returnEvidenceReasonInput').value.trim();
-    if (!reason) {
-        document.getElementById('returnEvidenceReasonError').style.display = '';
-        return;
-    }
-    const modalEl = document.getElementById('returnEvidenceReasonModal');
-    const modal = bootstrap.Modal.getInstance(modalEl);
-    if (modal) modal.hide();
-    if (pendingReturnEvidenceId) {
-        verifyEvidence(pendingReturnEvidenceId, 'Returned', reason);
-    }
-}
-
-let evidenceVerificationChanged = false;
-
-function updateTargetStatusBadge(targetId) {
-    const evs = EVIDENCE_BY_TARGET[targetId] || [];
-    if (evs.length === 0) return;
-    const returned = evs.filter(e => e.verification_status === 'Returned').length;
-    const approved = evs.filter(e => e.verification_status === 'Approved').length;
-    let verifyHtml = '';
-    if (returned > 0) {
-        verifyHtml = `<span class="badge bg-danger-subtle text-danger border border-danger small">${returned} Returned</span>`;
-    } else if (approved === evs.length) {
-        verifyHtml = '<span class="badge bg-success-subtle text-success border border-success small"><i class="ti ti-circle-check me-1"></i>Approved</span>';
-    } else {
-        verifyHtml = `<span class="badge bg-warning-subtle text-warning border border-warning small">${evs.length - approved} Pending</span>`;
-    }
-    const targetStatusEl = document.getElementById('target-verify-status-' + targetId);
-    if (targetStatusEl) {
-        targetStatusEl.innerHTML = verifyHtml;
-    }
-}
-
-function verifyEvidence(evidenceId, status, comment) {
-    fetch("{{ url_for('ret_chair.ret_chair_verify_evidence') }}", {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ evidence_id: evidenceId, status: status, comment: comment || '' })
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (!data.success) { alert(data.message || 'Failed to update evidence.'); return; }
-        evidenceVerificationChanged = true;
-        const badge = document.getElementById('evidence-status-' + evidenceId);
-        const actions = document.getElementById('evidence-actions-' + evidenceId);
-        if (badge) {
-            badge.innerHTML = status === 'Approved'
-                ? '<span class="badge bg-success">Approved</span>'
-                : '<span class="badge bg-danger">Returned</span>';
-        }
-        if (actions) {
-            actions.classList.remove('d-flex');
-            actions.classList.add('d-none');
-            actions.style.setProperty('display', 'none', 'important');
-        }
-
-        // Real-time update of memory and main modal target row badge
-        let targetIdFound = null;
-        for (const tid in EVIDENCE_BY_TARGET) {
-            const list = EVIDENCE_BY_TARGET[tid];
-            const item = list.find(e => String(e.evidence_id) === String(evidenceId));
-            if (item) {
-                item.verification_status = status;
-                if (comment) item.supervisor_comment = comment;
-                targetIdFound = tid;
-                break;
-            }
-        }
-        if (targetIdFound) {
-            updateTargetStatusBadge(targetIdFound);
-        }
-    })
-    .catch(err => alert('Error: ' + err));
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-    const el = document.getElementById('retFacultyEvidenceVerificationModal');
-    if (el) {
-        el.addEventListener('hidden.bs.modal', function() {
-            if (evidenceVerificationChanged) {
-                window.location.reload();
-            }
-        });
-    }
-});
 </script>
 
 <div class="modal fade" id="evidenceViewerModal" tabindex="-1" aria-hidden="true" aria-labelledby="evidenceViewerModalLabel">
@@ -2695,27 +2503,6 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="modal-body p-3" id="evidenceViewerBody"></div>
             <div class="modal-footer border-0 p-3 bg-light">
                 <button type="button" class="btn btn-secondary fw-semibold px-4" data-bs-dismiss="modal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Return Evidence Reason Modal -->
-<div class="modal fade" id="returnEvidenceReasonModal" tabindex="-1" aria-hidden="true" aria-labelledby="returnEvidenceReasonModalLabel" style="z-index: 1070;">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
-            <div class="modal-header bg-danger text-white border-0 py-3" style="border-top-left-radius: 16px; border-top-right-radius: 16px;">
-                <h5 class="modal-title fw-bold" id="returnEvidenceReasonModalLabel"><i class="ti ti-arrow-back-up me-2"></i>Return Evidence to Faculty</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body p-4 text-start">
-                <label for="returnEvidenceReasonInput" class="form-label fw-bold small">Reason for Returning (Required)</label>
-                <textarea class="form-control" id="returnEvidenceReasonInput" rows="3" placeholder="Explain why this evidence is being returned so the faculty member can fix it..."></textarea>
-                <div id="returnEvidenceReasonError" class="text-danger small mt-2" style="display:none;">A reason is required before returning evidence.</div>
-            </div>
-            <div class="modal-footer border-0 p-3 bg-light" style="border-bottom-left-radius: 16px; border-bottom-right-radius: 16px;">
-                <button type="button" class="btn btn-secondary fw-semibold px-4" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-danger fw-bold px-4" onclick="confirmReturnEvidence()">Submit Return</button>
             </div>
         </div>
     </div>

@@ -668,7 +668,8 @@ def send_evidence_submission_notification(conn, cursor, emp_id: int, term_id: in
     Triggered when faculty submits evidence files:
     - If Department Chair / Dean (self-IPCR): Notifies College Dean directly.
     - If Designated Faculty: Notifies Program Chair for evidence verification.
-    - If Regular Faculty: Notifies Program Chair (Instruction & Core) and RET Chair (Research & Extension).
+    - If Regular Faculty: Notifies Program Chair, who now approves all evidence
+      (Instruction, Support, Research, Extension) — RET Chair no longer verifies it.
     """
     try:
         fac = _get_faculty_profile(cursor, emp_id)
@@ -735,7 +736,7 @@ def send_evidence_submission_notification(conn, cursor, emp_id: int, term_id: in
             return True, f"Evidence submission notification sent to College Dean for {sender_title}."
 
         else:
-            # 2. Regular Faculty: Notify Program Chair & RET Chair
+            # 2. Regular Faculty: Notify Program Chair only — they now approve all evidence.
             chair_info = _get_program_chair_info(cursor, fac['department'])
             if chair_info['email']:
                 chair_url = f"{resolved_base_url}/prog_chair"
@@ -762,32 +763,8 @@ def send_evidence_submission_notification(conn, cursor, emp_id: int, term_id: in
                     text_body=text_chair
                 )
 
-            ret_info = _get_ret_chair_info(cursor)
-            if ret_info['email']:
-                ret_url = f"{resolved_base_url}/ret_chair"
-                html_ret = render_template('emails/evidence_submission_notice.html',
-                    reviewer_name=ret_info['name'],
-                    faculty_name=fac['full_name'],
-                    academic_rank=fac['academic_rank'],
-                    department=fac['department'],
-                    period_display=term['period_display'],
-                    action_url=ret_url
-                )
-                text_ret = (
-                    f"Dear {ret_info['name']},\n\n"
-                    f"Faculty member {fac['full_name']} ({fac['department']}) has submitted accomplishment evidence "
-                    f"for {term['period_display']} for research/extension verification.\n\n"
-                    f"Verify at: {ret_url}\n"
-                )
-                send_async_email(
-                    subject=f"[D-IPCR] Evidence Submitted for Verification - {fac['full_name']} ({term['period_display']})",
-                    recipients=[ret_info['email']],
-                    html_body=html_ret,
-                    text_body=text_ret
-                )
-
-            logger.info(f"[EVIDENCE SUBMISSION NOTIFICATIONS SENT] emp_id={emp_id}, term_id={term_id}")
-            return True, "Evidence submission notifications sent to Program Chair and RET Chair."
+            logger.info(f"[EVIDENCE SUBMISSION NOTIFICATION SENT] emp_id={emp_id}, term_id={term_id}")
+            return True, "Evidence submission notification sent to Program Chair."
 
     except Exception as e:
         logger.error(f"Error in send_evidence_submission_notification: {e}")
