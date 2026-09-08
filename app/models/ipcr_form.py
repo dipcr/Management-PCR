@@ -80,49 +80,20 @@ def _target_type_meta(cursor):
     return {row[0]: (_strip_leading_letter(row[1]), row[2] or 0) for row in cursor.fetchall()}
 
 
-def build_ipcr_form(cursor, emp_id, term_id, force_final=False):
+def build_ipcr_sections(cursor, targets, designation_type, term_id, academic_rank=None):
     """
-    Everything the printed IPCR needs for one employee and term.
+    Group committed targets into the printed IPCR's numbered category -> lettered
+    target-type sections, in the order the paper form numbers them (Strategic
+    Priorities -> Core Functions -> Support Functions). Shared by the printed IPCR
+    (build_ipcr_form, below) and the Evidence Gathering checklist, which mirrors the
+    same layout.
 
-    Returns None when the employee has no committed targets — there is nothing to print
-    before an IPCR is locked.
-
-    force_final: skips the "all targets are Dean Approved" gate on is_final. Used by the
-    Dean's own Final Verification review, where the package has already reached the Dean
-    (status 'Submitted to Dean' or later) and the scores computed below are exactly what the
-    Dean is being asked to approve -- withholding them until after approval would show the
-    reviewer the wrong form. Faculty-facing print views must NOT pass this: for them,
-    "Final Evaluation" genuinely means the Dean has already approved.
+    Targets whose type isn't mapped to any weighted IPCR category (e.g. an ad-hoc
+    Custom item) are dropped, same as the scoring roll-up drops them from the
+    average -- there is nowhere for them to weigh in. Callers that must keep every
+    target visible regardless of scoring (the Evidence Gathering checklist) should use
+    build_evidence_checklist_sections instead.
     """
-    cursor.execute("""
-        SELECT first_name, last_name, academic_rank, designation, specialization, college
-        FROM tbl_employee_profiles WHERE emp_id = %s
-    """, (emp_id,))
-    profile = cursor.fetchone()
-    if not profile:
-        return None
-    first_name, last_name, academic_rank, designation, specialization, college_code = profile
-
-    cursor.execute("""
-        SELECT academic_year, semester, period_start, period_end
-        FROM tbl_academic_terms WHERE term_id = %s
-    """, (term_id,))
-    term = cursor.fetchone()
-    if not term:
-        return None
-    academic_year, semester, period_start, period_end = term
-
-    settings = get_institution_settings(cursor)
-    college = settings.get('college_full_name') or college_code or ''
-    designation_type = resolve_designation_type(designation) or DESIGNATION_REGULAR
-
-    # The scoring roll-up is the single source of the summary numbers, so the printed form
-    # can never disagree with what the dashboard showed.
-    score = compute_ipcr_score(cursor, emp_id, term_id)
-
-    from app.models.faculty import get_faculty_committed_targets
-    targets = get_faculty_committed_targets(cursor, emp_id, term_id)
-
     categories = get_ipcr_categories(cursor, designation_type)
     weights = get_applicable_weights(cursor, term_id, designation_type, academic_rank)
     type_to_category = get_type_to_category(cursor, designation_type)
@@ -176,6 +147,73 @@ def build_ipcr_form(cursor, emp_id, term_id, force_final=False):
             'subsections': subsections,
             'target_count': sum(len(sub['targets']) for sub in subsections),
         })
+    return sections
+
+
+def build_evidence_checklist_sections(cursor, targets, designation_type, term_id, academic_rank=None):
+    """
+    Same category -> target-type grouping as build_ipcr_sections, but for the Evidence
+    Gathering checklist rather than the printed form: every committed target still owes
+    an Add/View Evidence action regardless of whether it scores, so a target dropped by
+    build_ipcr_sections (nothing maps its type to a weighted category) is appended here
+    under a catch-all "Other" section instead of silently losing its evidence button.
+    """
+    sections = build_ipcr_sections(cursor, targets, designation_type, term_id, academic_rank)
+    covered_ids = {t['target_id'] for sec in sections for sub in sec['subsections'] for t in sub['targets']}
+    leftover = [t for t in targets if t.get('target_id') not in covered_ids]
+    if leftover:
+        sections.append({
+            'numeral': '', 'name': 'Other', 'weight_pct': None,
+            'subsections': [{'letter': '', 'label': 'Other', 'targets': leftover}],
+            'target_count': len(leftover),
+        })
+    return sections
+
+
+def build_ipcr_form(cursor, emp_id, term_id, force_final=False):
+    """
+    Everything the printed IPCR needs for one employee and term.
+
+    Returns None when the employee has no committed targets — there is nothing to print
+    before an IPCR is locked.
+
+    force_final: skips the "all targets are Dean Approved" gate on is_final. Used by the
+    Dean's own Final Verification review, where the package has already reached the Dean
+    (status 'Submitted to Dean' or later) and the scores computed below are exactly what the
+    Dean is being asked to approve -- withholding them until after approval would show the
+    reviewer the wrong form. Faculty-facing print views must NOT pass this: for them,
+    "Final Evaluation" genuinely means the Dean has already approved.
+    """
+    cursor.execute("""
+        SELECT first_name, last_name, academic_rank, designation, specialization, college
+        FROM tbl_employee_profiles WHERE emp_id = %s
+    """, (emp_id,))
+    profile = cursor.fetchone()
+    if not profile:
+        return None
+    first_name, last_name, academic_rank, designation, specialization, college_code = profile
+
+    cursor.execute("""
+        SELECT academic_year, semester, period_start, period_end
+        FROM tbl_academic_terms WHERE term_id = %s
+    """, (term_id,))
+    term = cursor.fetchone()
+    if not term:
+        return None
+    academic_year, semester, period_start, period_end = term
+
+    settings = get_institution_settings(cursor)
+    college = settings.get('college_full_name') or college_code or ''
+    designation_type = resolve_designation_type(designation) or DESIGNATION_REGULAR
+
+    # The scoring roll-up is the single source of the summary numbers, so the printed form
+    # can never disagree with what the dashboard showed.
+    score = compute_ipcr_score(cursor, emp_id, term_id)
+
+    from app.models.faculty import get_faculty_committed_targets
+    targets = get_faculty_committed_targets(cursor, emp_id, term_id)
+
+    sections = build_ipcr_sections(cursor, targets, designation_type, term_id, academic_rank)
 
     full_name = f"{first_name} {last_name}".strip().upper()
     period = format_rating_period(period_start, period_end)

@@ -106,6 +106,7 @@ def designated_dashboard():
         ipcr_score = None
         has_final_ipcr = False
         ipcr_form_preview = None
+        evidence_sections = []
         if is_committed:
             can_edit = False
             has_submitted = True
@@ -125,14 +126,6 @@ def designated_dashboard():
             """, (emp_id, term_id))
             alloc_ids = {r[0] for r in cursor.fetchall()}
 
-            # is_admin_function (a committed/draft row's own flag) means "not this person's
-            # personal Core Function work" broadly — it's also 1 for a freely-picked Strategic
-            # Priorities/Support item, not just a chair's departmental oversight quota. The
-            # "Departmental Oversight" badge needs the narrower set: only indicators actually
-            # cascaded to this chair's role.
-            from app.models.designated import get_oversight_targets
-            oversight_ids = {r['indicator_id'] for r in get_oversight_targets(cursor, emp_id, term_id)}
-
             dpcr_targets = get_designated_committed_targets(cursor, emp_id, term_id)
             for t in dpcr_targets:
                 t['is_selected'] = True
@@ -147,8 +140,12 @@ def designated_dashboard():
                         'Teaching Load' in (t.get('indicator_description') or '') or t['indicator_id'] in alloc_ids):
                     t['is_core'] = True
                     t['is_locked'] = True
-                t['is_oversight_cascade'] = bool(t.get('is_admin_function')) and t['indicator_id'] in oversight_ids
-                t['evidence_list'] = get_evidence_by_target(cursor, t['target_id'])
+                # is_oversight_cascade is already set by get_designated_committed_targets
+                # (narrower than is_admin_function, which is also 1 for a freely-picked
+                # Strategic Priorities/Support item, not just a genuine departmental
+                # oversight quota — see get_oversight_indicator_ids).
+                if not t.get('is_oversight_cascade'):
+                    t['evidence_list'] = get_evidence_by_target(cursor, t['target_id'])
             evidence_readiness = check_designated_evidence_readiness(cursor, emp_id, term_id, dpcr_targets)
             has_final_ipcr = any(t.get('status') == 'Dean Approved' for t in dpcr_targets) if dpcr_targets else False
             # Live IPCR summary — uses the Designated Faculty weight table.
@@ -161,6 +158,15 @@ def designated_dashboard():
             # rather than re-deriving the grouping a third time.
             from app.models.ipcr_form import build_ipcr_form
             ipcr_form_preview = build_ipcr_form(cursor, emp_id, term_id)
+            # Same category -> target-type grouping the printed IPCR uses, applied to
+            # dpcr_targets (not get_faculty_committed_targets, the print form's source)
+            # so the checklist keeps its pool-selection/oversight-cascade markers
+            # (is_selected, is_oversight_cascade, is_custom) that the print form doesn't need.
+            from app.models.ipcr_form import build_evidence_checklist_sections
+            from app.models.criteria import resolve_designation_type, DESIGNATION_DESIGNATED
+            checklist_designation_type = resolve_designation_type(designation) or DESIGNATION_DESIGNATED
+            evidence_sections = build_evidence_checklist_sections(
+                cursor, dpcr_targets, checklist_designation_type, term_id, academic_rank)
 
         elif can_edit:
             # Load standard selectable indicators and exclude 21 hours regular teaching load targets
@@ -348,8 +354,8 @@ def designated_dashboard():
             alloc_ids = {r['indicator_id'] for r in core_instruction_rows}
 
             # See the is_committed branch above for why this is narrower than is_admin_function.
-            from app.models.designated import get_oversight_targets
-            oversight_ids = {r['indicator_id'] for r in get_oversight_targets(cursor, emp_id, term_id)}
+            from app.models.designated import get_oversight_indicator_ids
+            oversight_ids = get_oversight_indicator_ids(cursor, emp_id, term_id)
 
             # If they cannot edit, we just load their submitted drafts
             dpcr_targets = timed_query(cursor, """
@@ -394,18 +400,26 @@ def designated_dashboard():
                 # a Dean-formulated draft can be issued before the Program Chair distributes it.
                 # Show it here as a preview anyway, so a Chair can see their Core Functions are
                 # complete before locking, not just after.
-                existing_core_ids = {t['indicator_id'] for t in dpcr_targets}
+                #
+                # Scoped to Core rows only (is_admin_function falsy): the same indicator can
+                # already be present as this person's departmental oversight row
+                # (is_admin_function=1, from get_oversight_targets) without that meaning their
+                # personal Core share exists too -- see lock_and_commit_designated_ipcr for the
+                # matching commit-time guard.
+                existing_core_ids = {t['indicator_id'] for t in dpcr_targets if not t.get('is_admin_function')}
+                from app.models.designated import describe_core_instruction_allocation
                 for r in core_instruction_rows:
                     if r['indicator_id'] in existing_core_ids:
                         continue
+                    desc, deadline, _ = describe_core_instruction_allocation(r)
                     dpcr_targets.append({
                         'target_id': f"pending_core_{r['indicator_id']}",
                         'indicator_id': r['indicator_id'],
                         'indicator_description': r['indicator_description'],
-                        'target_description': r.get('custom_description') or r['indicator_description'],
+                        'target_description': desc,
                         'category_name': r.get('category_name') or 'Instruction',
                         'total_target_value': r['assigned_quantity'],
-                        'target_deadline': r.get('target_deadline') or '',
+                        'target_deadline': deadline,
                         'target_duration_value': r.get('target_duration_value'),
                         'target_duration_unit': r.get('target_duration_unit'),
                         'is_selected': True,
@@ -453,7 +467,8 @@ def designated_dashboard():
                            evidence_readiness=evidence_readiness,
                            ipcr_score=ipcr_score,
                            has_final_ipcr=has_final_ipcr,
-                           ipcr_form_preview=ipcr_form_preview)
+                           ipcr_form_preview=ipcr_form_preview,
+                           evidence_sections=evidence_sections)
 
 
 @designated_bp.route('/lock_ipcr', methods=['POST'])
@@ -553,6 +568,36 @@ def designated_save_accomplishment():
             _int_or_none(data.get('efficiency_rating_E')),
             data.get('print_remarks'),
         )
+        return jsonify({'success': success, 'message': msg})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@designated_bp.route('/save_oversight_deadline', methods=['POST'])
+@designated_ipcr_required
+def designated_save_oversight_deadline():
+    """AJAX -- let a chair correct their own Departmental Oversight row's deadline pre-lock."""
+    emp_id = session.get('user_id')
+    data = request.get_json(silent=True) or request.form
+    draft_id = data.get('draft_id')
+    duration_unit = (data.get('duration_unit') or '').strip()
+    if not draft_id:
+        return jsonify({'success': False, 'message': 'Missing draft_id.'}), 400
+
+    try:
+        draft_id = int(draft_id)
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'message': 'Invalid draft_id.'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        from app.models.designated import update_oversight_draft_deadline
+        success, msg = update_oversight_draft_deadline(
+            conn, cursor, emp_id, draft_id, data.get('duration_value'), duration_unit)
         return jsonify({'success': success, 'message': msg})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
@@ -749,9 +794,38 @@ def designated_target_evidence(target_id, indicator_id):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
+        cursor.execute("""
+            SELECT ct.is_admin_function, mi.term_id
+            FROM tbl_committed_targets ct
+            JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
+            WHERE ct.target_id = %s AND ct.emp_id = %s
+        """, (target_id, emp_id))
+        row = cursor.fetchone()
+        if not row:
+            # Also closes a pre-existing gap: this route never checked ownership of
+            # target_id before returning its evidence_list, so any authenticated
+            # designated-flow user could read another user's evidence by guessing ids.
+            return jsonify({'success': False, 'message': 'Target not found.'}), 404
+
+        is_oversight = False
+        if row[0]:
+            from app.models.designated import get_oversight_indicator_ids
+            is_oversight = indicator_id in get_oversight_indicator_ids(cursor, emp_id, row[1])
+
+        if is_oversight:
+            from app.models.designated import get_oversight_evidence
+            agg = get_oversight_evidence(cursor, emp_id, row[1], indicator_id)
+            return jsonify({
+                'success': True,
+                'is_oversight': True,
+                'total_actual_quantity': agg['total_actual_quantity'],
+                'max_actual_duration_value': agg['max_actual_duration_value'],
+                'breakdown': agg['evidence_breakdown'],
+            })
+
         from app.models.faculty import get_evidence_by_target
         evidence_list = get_evidence_by_target(cursor, target_id)
-        return jsonify({'success': True, 'evidence_list': evidence_list})
+        return jsonify({'success': True, 'is_oversight': False, 'evidence_list': evidence_list})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
     finally:
@@ -773,7 +847,53 @@ def designated_upload_evidence():
             return jsonify({'success': False, 'message': 'Invalid target ID.'}), 400
         flash("Invalid target ID.", "danger")
         return redirect(url_for('designated.designated_dashboard'))
-        
+
+    try:
+        target_id_int = int(target_id)
+    except (TypeError, ValueError):
+        if is_ajax:
+            return jsonify({'success': False, 'message': 'Invalid target ID.'}), 400
+        flash("Invalid target ID.", "danger")
+        return redirect(url_for('designated.designated_dashboard'))
+
+    # This route never verified target_id belonged to the requesting user before saving a
+    # file against it -- closing that here (pre-existing, not introduced by the oversight
+    # check below) rather than leaving a direct POST able to attach evidence to, and inflate
+    # the accomplished quantity of, another employee's committed target.
+    conn_check = get_db_connection()
+    cursor_check = conn_check.cursor()
+    try:
+        cursor_check.execute("""
+            SELECT ct.emp_id, ct.indicator_id, ct.is_admin_function, mi.term_id
+            FROM tbl_committed_targets ct
+            JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
+            WHERE ct.target_id = %s
+        """, (target_id_int,))
+        row = cursor_check.fetchone()
+        if not row or row[0] != emp_id:
+            msg = "Invalid target."
+            if is_ajax:
+                return jsonify({'success': False, 'message': msg}), 404
+            flash(msg, "danger")
+            return redirect(url_for('designated.designated_dashboard'))
+
+        # A Departmental Oversight row has no upload slot of its own -- its evidence is
+        # linked automatically from the scoped faculty who did the real work (see
+        # get_oversight_evidence, app/models/designated.py). The UI already hides this row's
+        # upload form; this is the actual enforcement so a direct POST can't bypass it.
+        if row[2]:
+            from app.models.designated import get_oversight_indicator_ids
+            if row[1] in get_oversight_indicator_ids(cursor_check, emp_id, row[3]):
+                msg = ("This is a Departmental Oversight target -- evidence is linked automatically "
+                       "from your department's/RET's faculty, not uploaded here.")
+                if is_ajax:
+                    return jsonify({'success': False, 'message': msg}), 400
+                flash(msg, "danger")
+                return redirect(url_for('designated.designated_dashboard'))
+    finally:
+        cursor_check.close()
+        conn_check.close()
+
     try:
         qty_val = max(0, int(quantity))
     except ValueError:
@@ -811,7 +931,7 @@ def designated_upload_evidence():
     cursor = conn.cursor()
     try:
         from app.models.faculty import upload_evidence_item
-        upload_evidence_item(cursor, int(target_id), relative_path, qty_val)
+        upload_evidence_item(cursor, target_id_int, relative_path, qty_val)
         conn.commit()
         if is_ajax:
             return jsonify({'success': True, 'message': 'Evidence uploaded successfully!'})

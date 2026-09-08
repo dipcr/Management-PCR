@@ -732,6 +732,84 @@ def get_program_chair_evidence_faculty(cursor, specialization, term_id):
     return rows
 
 
+def get_department_accomplishment_summary(cursor, specialization, term_id):
+    """
+    Department-wide progress on the indicators the Dean cascaded to this Program Chair's own
+    specialization -- the same cascade rows that become the chair's own Departmental Oversight
+    targets on their personal IPCR (see get_oversight_targets, app/models/designated.py). Quota
+    vs. how much of it has actually cleared Program Chair verification so far, summed across
+    every regular faculty member in the department who holds that indicator as their own
+    personal committed target (is_admin_function = 0; a chair's own oversight copy of the same
+    indicator is excluded, same as it is everywhere else this scoping is used).
+
+    "Verified Accomplished" is deliberately Approved-only, not the looser "not Rejected/
+    Returned" convention a target's own actual_quantity uses for scoring (see
+    recalculate_target_accomplished_quantity) -- this is a monitoring figure for the chair, not
+    a score input, and the point is "how much is actually locked in," not "how much has been
+    reported but might still come back." The quota/verified numbers are independent of whether
+    the chair has locked their own IPCR for the term yet -- reads live off the cascade + faculty
+    evidence directly; only the displayed description's duration clause depends on it (blank
+    until the chair has submitted their own oversight row and its real deadline exists).
+    """
+    from app.models.connection import timed_query
+
+    query = """
+        SELECT cq.indicator_id, cq.total_target_value, mi.indicator_description,
+               COALESCE(agg.verified_accomplished, 0) as verified_accomplished,
+               COALESCE(chair_ct.target_duration_value, chair_dt.target_duration_value) as chair_duration_value,
+               COALESCE(chair_ct.target_duration_unit, chair_dt.target_duration_unit) as chair_duration_unit
+        FROM tbl_cascaded_quotas cq
+        JOIN tbl_master_indicators mi ON cq.indicator_id = mi.indicator_id
+        LEFT JOIN (
+            SELECT ct.indicator_id, SUM(er.actual_qty_Q) as verified_accomplished
+            FROM tbl_committed_targets ct
+            JOIN tbl_employee_profiles ep ON ct.emp_id = ep.emp_id
+            JOIN tbl_evidence_repo er ON er.target_id = ct.target_id AND er.verification_status = 'Approved'
+            WHERE ct.is_admin_function = 0
+              AND ep.specialization = %s
+              AND (ep.designation IS NULL OR ep.designation = ''
+                   OR ep.designation NOT IN ('Designated Faculty', 'Program Chair', 'RET Chair', 'Dean'))
+            GROUP BY ct.indicator_id
+        ) agg ON agg.indicator_id = cq.indicator_id
+        -- The chair's own Departmental Oversight row for this same indicator (get_oversight_
+        -- targets) already carries their real deadline input, once they've submitted their own
+        -- IPCR -- pulled in purely for display, so this summary's description reads like a
+        -- normal target sentence instead of a blank "____" placeholder before that happens.
+        -- Committed wins over draft (locked/final beats a still-editable draft value).
+        LEFT JOIN tbl_committed_targets chair_ct
+               ON chair_ct.indicator_id = cq.indicator_id AND chair_ct.is_admin_function = 1
+              AND EXISTS (
+                  SELECT 1 FROM tbl_employee_profiles cep
+                  WHERE cep.emp_id = chair_ct.emp_id AND cep.specialization = %s AND cep.designation = 'Program Chair'
+              )
+        LEFT JOIN tbl_draft_targets chair_dt
+               ON chair_dt.indicator_id = cq.indicator_id AND chair_dt.is_admin_function = 1
+              AND EXISTS (
+                  SELECT 1 FROM tbl_employee_profiles dep
+                  WHERE dep.emp_id = chair_dt.emp_id AND dep.specialization = %s AND dep.designation = 'Program Chair'
+              )
+        WHERE cq.term_id = %s AND mi.term_id = %s
+          AND cq.assigned_to_role = %s AND cq.total_target_value > 0
+        ORDER BY mi.indicator_id
+    """
+    rows = timed_query(cursor, query,
+                       (specialization, specialization, specialization, term_id, term_id, specialization),
+                       label="get_department_accomplishment_summary")
+
+    from app.models.ipcr_description import format_ipcr_target_description
+    for r in rows:
+        # Real duration once the chair has submitted their own oversight row this term;
+        # format_ipcr_target_description's own blank-placeholder fallback only shows before
+        # that (or if this Program Chair record is somehow missing), which is the accurate
+        # "not yet set" state, not a display bug.
+        r['target_description'] = format_ipcr_target_description(
+            r['indicator_description'], r['total_target_value'],
+            r.get('chair_duration_value'), r.get('chair_duration_unit'))
+        quota = r['total_target_value'] or 0
+        r['percent_verified'] = round(min(r['verified_accomplished'], quota) / quota * 100) if quota > 0 else 0
+    return rows
+
+
 def submit_evidence_package_to_dean(conn, cursor, emp_id, term_id):
     """
     Submits a fully approved evidence package for a faculty member to the Dean for final verification.

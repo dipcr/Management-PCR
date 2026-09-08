@@ -1635,6 +1635,56 @@
         </span>
     </div>
 
+    <!-- Department Accomplishment Summary: quota vs. Approved-only accomplishment per
+         indicator cascaded to this department -- the same cascade rows that become this
+         chair's own Departmental Oversight targets. Verified here means already Approved by
+         this Program Chair, not merely reported/pending -- a stricter figure than the
+         "Accomplished Qty" shown elsewhere, meant for at-a-glance monitoring, not scoring. -->
+    <div class="card border-0 shadow-sm mb-4 card-rounded-clip">
+        <div class="card-header bg-white border-0 py-3">
+            <h5 class="mb-0 fw-bold text-dark" role="heading" aria-level="3"><i class="ti ti-sitemap me-2 text-primary"></i>Department Accomplishment Summary</h5>
+            <small class="text-muted">Quota cascaded to {{ specialization }} vs. accomplishment already Approved by you.</small>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-4">Departmental Oversight Target</th>
+                            <th class="text-center">Quota</th>
+                            <th class="text-center">Verified Accomplished</th>
+                            <th class="text-center pe-4" style="width: 180px;">Progress</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if department_accomplishment_summary %}
+                            {% for ind in department_accomplishment_summary %}
+                            <tr>
+                                <td class="ps-4 py-3 small fw-semibold text-dark">{{ ind.target_description | ipcr_preview }}</td>
+                                <td class="text-center fw-bold text-primary fs-6">{{ ind.total_target_value }}</td>
+                                <td class="text-center fw-bold text-success fs-6">{{ ind.verified_accomplished }}</td>
+                                <td class="text-center pe-4">
+                                    <div class="progress" style="height: 8px;" role="progressbar"
+                                         aria-valuenow="{{ ind.percent_verified }}" aria-valuemin="0" aria-valuemax="100">
+                                        <div class="progress-bar bg-success" style="width: {{ ind.percent_verified }}%;"></div>
+                                    </div>
+                                    <small class="text-muted">{{ ind.percent_verified }}%</small>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center py-4 text-muted">
+                                    No indicators have been cascaded to {{ specialization }} yet this term.
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <div class="card border-0 shadow-sm mb-4 card-rounded-clip">
         <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
             <h5 class="mb-0 fw-bold text-dark" role="heading" aria-level="3"><i class="ti ti-clipboard-check me-2 text-primary"></i>Faculty Evidence Submissions</h5>

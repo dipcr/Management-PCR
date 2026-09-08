@@ -622,55 +622,60 @@
                         <table class="table align-middle mb-0">
                             <thead class="table-light">
                                 <tr>
-                                    <th class="ps-4" width="28%">Target Indicator</th>
-                                    <th width="30%">Actual Accomplishment</th>
-                                    <th class="text-center" width="10%">Target Qty</th>
-                                    <th class="text-center" width="10%">Accomplished Qty</th>
-                                    <th class="ps-3 text-center" width="22%">Evidence Action</th>
+                                    <th class="ps-4" width="15%">MFO/PAP</th>
+                                    <th width="25%">Success Indicator</th>
+                                    <th width="22%">Actual Accomplishment</th>
+                                    <th class="text-center" width="6%" title="Quantity">Q</th>
+                                    <th class="text-center" width="6%" title="Efficiency">E</th>
+                                    <th class="text-center" width="6%" title="Timeliness">T</th>
+                                    <th class="text-center" width="6%" title="Average">A</th>
+                                    <th class="ps-3 text-center" width="14%">Evidence Action</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for target in assigned_targets %}
+                                {% for section in evidence_sections %}
+                                <tr style="background-color: var(--c-surface-alt, #eef1f4);">
+                                    <td colspan="8" class="fw-bold py-2 px-4" style="font-size:0.9rem;">
+                                        {% if section.numeral %}{{ section.numeral }}. {% endif %}{{ section.name }}
+                                        {% if section.weight_pct is not none %}<span class="text-muted fw-normal">({{ section.weight_pct | round(0) | int }}%)</span>{% endif %}
+                                    </td>
+                                </tr>
+                                {% for sub in section.subsections %}
+                                {% for target in sub.targets %}
                                 {% set target_has_returned = target.evidence_list and (target.evidence_list | selectattr('verification_status', 'in', ['Returned', 'Rejected']) | list | length > 0) %}
                                 <tr>
-                                    <td class="ps-4 py-4">
-                                        {% if target.category_name == 'A. Instructions' %}
-                                        <span class="badge bg-light text-dark border mb-1">Instruction</span>
-                                        {% elif target.category_name == 'Support Functions' %}
-                                        <span class="badge bg-light text-dark border mb-1">Support</span>
-                                        {% else %}
-                                        <span class="badge bg-light text-dark border mb-1">{{ target.category_name | replace('A. ', '') | replace('B. ', '') | replace('C. ', '') }}</span>
-                                        {% endif %}
+                                    {% if loop.first %}
+                                    <td rowspan="{{ sub.targets | length }}" class="ps-4 py-3 align-top border-end fw-semibold text-dark" style="font-size:0.85rem;">
+                                        {% if sub.letter %}{{ sub.letter }}. {% endif %}{{ sub.label }}
+                                    </td>
+                                    {% endif %}
+                                    <td class="py-3">
                                         {% if target_has_returned %}
-                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle ms-1 mb-1" style="font-size:0.7rem;"><i class="ti ti-arrow-back-up me-1" aria-hidden="true"></i>Evidence Returned</span>
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle mb-1" style="font-size:0.7rem;"><i class="ti ti-arrow-back-up me-1" aria-hidden="true"></i>Evidence Returned</span>
                                         {% endif %}
                                         <p class="mb-0 small fw-semibold text-dark">{{ target.indicator_description | ipcr_preview }}</p>
                                     </td>
-                                    <td class="py-4">
+                                    <td class="py-3">
                                         <p class="mb-1 small text-secondary fst-italic">{{ target.actual_accomplishment }}</p>
                                         {% if not target.actual_duration_value %}
-                                        <span class="badge bg-light text-muted border" style="font-size:0.7rem;"><i class="ti ti-clock me-1" aria-hidden="true"></i>Time to complete not reported</span>
+                                        <span class="badge bg-light text-muted border me-1" style="font-size:0.68rem;"><i class="ti ti-clock me-1" aria-hidden="true"></i>Time not reported</span>
                                         {% endif %}
-                                    </td>
-                                    <td class="text-center fw-bold fs-5 text-primary">
-                                        {{ target.assigned_quantity }}
-                                    </td>
-                                    <td class="text-center fw-bold fs-5">
                                         {% if target.actual_quantity >= target.assigned_quantity %}
-                                        <span class="badge bg-success px-3 py-2 shadow-sm text-white"
-                                            style="font-size: 0.85rem;"><i class="ti ti-circle-check me-1" aria-hidden="true"></i>{{
-                                            target.actual_quantity }}</span>
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:0.68rem;"><i class="ti ti-circle-check me-1" aria-hidden="true"></i>{{ target.actual_quantity }}/{{ target.assigned_quantity }}</span>
                                         {% else %}
-                                        <span class="badge bg-secondary px-3 py-2 shadow-sm text-white"
-                                            style="font-size: 0.85rem;">{{ target.actual_quantity }}</span>
+                                        <span class="badge bg-light text-muted border" style="font-size:0.68rem;">{{ target.actual_quantity }}/{{ target.assigned_quantity }}</span>
                                         {% endif %}
                                     </td>
-                                    <td class="text-center pe-4 py-4">
+                                    <td class="text-center fw-semibold text-primary">{{ target.rating.q if target.rating and target.rating.q is not none else '—' }}</td>
+                                    <td class="text-center fw-semibold text-primary">{{ target.rating.e if target.rating and target.rating.e is not none else '—' }}</td>
+                                    <td class="text-center fw-semibold text-primary">{{ target.rating.t if target.rating and target.rating.t is not none else '—' }}</td>
+                                    <td class="text-center fw-bold" style="background-color: var(--c-surface-alt, #eef1f4);">{{ target.rating.average if target.rating and target.rating.average is not none else '—' }}</td>
+                                    <td class="text-center pe-4 py-3">
                                         <button type="button"
-                                            class="btn {% if has_final_ipcr %}btn-outline-secondary{% elif evidence_readiness and evidence_readiness.evidence_submitted and not evidence_readiness.has_returned_evidence %}btn-secondary{% else %}btn-primary{% endif %} btn-sm px-4 py-2 fw-bold shadow-sm transition-all hover-shadow"
+                                            class="btn {% if has_final_ipcr %}btn-outline-secondary{% elif evidence_readiness and evidence_readiness.evidence_submitted and not evidence_readiness.has_returned_evidence %}btn-secondary{% else %}btn-primary{% endif %} btn-sm px-3 py-2 fw-bold shadow-sm transition-all hover-shadow"
                                             onclick="openEvidenceModal('{{ target.target_id }}', '{{ target.indicator_id }}', {{ 'true' if 'Research' in target.category_name else 'false' }}, '{{ (target.indicator_description | ipcr_preview)|replace('\'', '\\\'')|replace('\"', '\\\"') }}', '{{ target.assigned_quantity }}', '{{ target.actual_quantity }}')">
                                             {% if has_final_ipcr %}
-                                            <i class="ti ti-eye me-1" aria-hidden="true"></i>View Evidences (Approved)
+                                            <i class="ti ti-eye me-1" aria-hidden="true"></i>View (Approved)
                                             {% elif evidence_readiness and evidence_readiness.evidence_submitted and not evidence_readiness.has_returned_evidence %}
                                             <i class="ti ti-eye me-1" aria-hidden="true"></i>View Evidences
                                             {% else %}
@@ -679,6 +684,13 @@
                                         </button>
                                     </td>
                                 </tr>
+                                {% endfor %}
+                                {% endfor %}
+                                {% if section.target_count == 0 %}
+                                <tr>
+                                    <td class="py-2 px-4 text-muted small" colspan="8">No targets under this category.</td>
+                                </tr>
+                                {% endif %}
                                 {% endfor %}
                             </tbody>
                         </table>
@@ -1206,6 +1218,10 @@
                     meta.completionStatus = status;
                     meta.efficiencyRating = effRaw === '' ? null : parseInt(effRaw, 10);
                 }
+                // The Q/E/T/A rating shown in the checklist table is computed server-side from
+                // these values -- reload on close so the table reflects what was just saved,
+                // the same way an evidence upload/delete already does.
+                window.evidenceModalHasChanges = true;
                 if (closeModalOnSuccess) {
                     const modalEl = document.getElementById('evidenceGatheringModal');
                     const modalInstance = bootstrap.Modal.getInstance(modalEl);
@@ -1278,10 +1294,6 @@
             efficiencyType: {{ (target.efficiency_type or '') | tojson }},
             efficiencyRating: {{ target.efficiency_rating_E if target.efficiency_rating_E else 'null' }},
             printRemarks: {{ (target.print_remarks or '') | tojson }},
-            ratingQ: {{ target.rating.q if target.rating and target.rating.q is not none else 'null' }},
-            ratingE: {{ target.rating.e if target.rating and target.rating.e is not none else 'null' }},
-            ratingT: {{ target.rating.t if target.rating and target.rating.t is not none else 'null' }},
-            ratingAvg: {{ target.rating.average if target.rating and target.rating.average is not none else 'null' }},
             hasReturned: {{ 'true' if (target.evidence_list and target.evidence_list | selectattr('verification_status', 'in', ['Returned', 'Rejected']) | list | length > 0) else 'false' }}
         }{% if not loop.last %},{% endif %}
         {% endfor %}
@@ -1453,13 +1465,6 @@
             effRow.style.display = 'none';
             effSelect.value = '';
         }
-        // Computed sub-ratings (read-only)
-        const dash = v => (v === null || v === undefined) ? '—' : v;
-        document.getElementById('ratingQ').textContent = dash(meta.ratingQ);
-        document.getElementById('ratingE').textContent = dash(meta.ratingE);
-        document.getElementById('ratingT').textContent = dash(meta.ratingT);
-        document.getElementById('ratingAvg').textContent = dash(meta.ratingAvg);
-
         document.getElementById('evidenceRemarks').value = meta.printRemarks || '';
         document.getElementById('accomplishmentSaveMsg').textContent = '';
         applyEvidenceLock();
@@ -1643,8 +1648,6 @@
                         </div>
                     </div>
 
-                    <!-- Computed sub-ratings (read-only; derived from the values above) -->
-
                     <div class="row g-3 mt-1">
                         <div class="col-12">
                             <label for="evidenceRemarks" class="form-label fw-semibold text-secondary small">
@@ -1655,16 +1658,8 @@
                         </div>
                     </div>
                     <div class="mt-3 pt-3 border-top">
-                        <label class="form-label fw-semibold text-secondary small mb-2">Computed Rating</label>
-                        <div class="d-flex gap-2 flex-wrap align-items-center">
-                            <span class="badge bg-light text-dark border px-3 py-2">Quantity <span id="ratingQ" class="fw-bold ms-1">—</span></span>
-                            <span class="badge bg-light text-dark border px-3 py-2">Efficiency <span id="ratingE" class="fw-bold ms-1">—</span></span>
-                            <span class="badge bg-light text-dark border px-3 py-2">Timeliness <span id="ratingT" class="fw-bold ms-1">—</span></span>
-                            <i class="ti ti-arrow-right text-muted" aria-hidden="true"></i>
-                            <span class="badge bg-primary px-3 py-2">Average <span id="ratingAvg" class="fw-bold ms-1">—</span></span>
-                        </div>
-                        <small class="text-muted d-block mt-1" style="font-size: 0.72rem;">
-                            Computed automatically — Quantity from your evidence, Timeliness from the values above.
+                        <small class="text-muted d-block" style="font-size: 0.72rem;">
+                            <i class="ti ti-info-circle me-1" aria-hidden="true"></i>Your Quantity/Efficiency/Timeliness/Average rating is shown in the checklist table once you close this dialog.
                         </small>
                     </div>
 

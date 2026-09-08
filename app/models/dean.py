@@ -732,7 +732,7 @@ def get_designated_faculty_draft_preview(cursor, term_id, emp_id):
     from app.models.institution import resolve_teaching_load, teaching_load_description
     from app.models.scoring import format_duration
     from app.models.ipcr_description import format_ipcr_target_description
-    from app.models.designated import get_oversight_targets, get_core_instruction_allocation
+    from app.models.designated import get_oversight_targets, get_core_instruction_allocation, describe_core_instruction_allocation
 
     cursor.execute("""
         SELECT CONCAT(first_name, ' ', last_name), academic_rank, designation, assigned_program, specialization
@@ -759,21 +759,32 @@ def get_designated_faculty_draft_preview(cursor, term_id, emp_id):
 
     # Distributed by the Program Chair in Phase 1 Target Allocation, not by the Dean here —
     # shown so the Dean can see whether it's still pending before issuing the rest of the draft.
-    instruction = [{
-        'indicator_id': r['indicator_id'],
-        'indicator_description': r['indicator_description'],
-        'assigned_quantity': r['assigned_quantity'],
-        'target_deadline': r.get('target_deadline'),
-    } for r in get_core_instruction_allocation(cursor, emp_id, term_id)]
+    instruction = []
+    for r in get_core_instruction_allocation(cursor, emp_id, term_id):
+        desc, deadline, _ = describe_core_instruction_allocation(r)
+        instruction.append({
+            'indicator_id': r['indicator_id'],
+            'indicator_description': desc,
+            'assigned_quantity': r['assigned_quantity'],
+            'target_deadline': deadline,
+        })
 
     oversight = []
     if is_dean_formulated:
         for r in get_oversight_targets(cursor, emp_id, term_id):
             dur_value = r.get('target_duration_value') or 6
             dur_unit = r.get('target_duration_unit') or 'months'
+            # Regenerated against this preview's own dur_value/dur_unit (the 6-month default,
+            # or whatever was already saved) rather than trusting r['target_description'] as-is
+            # -- that field was built by get_oversight_targets against whatever duration a prior
+            # draft happened to have, which can be blank/None the very first time this is
+            # opened, and format_ipcr_target_description must never be skipped in favor of the
+            # bare indicator_description: that's the master indicator's own placeholder/example
+            # number, not this department's actual cascaded quota (r['total_target_value']).
             oversight.append({
                 'indicator_id': r['indicator_id'],
-                'indicator_description': r['indicator_description'],
+                'indicator_description': format_ipcr_target_description(
+                    r['indicator_description'], r['total_target_value'], dur_value, dur_unit),
                 'total_target_value': r['total_target_value'],
                 'target_duration_value': dur_value,
                 'target_duration_unit': dur_unit,

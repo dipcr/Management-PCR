@@ -34,6 +34,7 @@ def faculty_dashboard():
         ipcr_score = None
         has_final_ipcr = False
         gating_status = None
+        evidence_sections = []
 
         if active_term:
             term_id = active_term['term_id']
@@ -98,6 +99,13 @@ def faculty_dashboard():
                 # Live IPCR summary (computed, not persisted — the record is written on finalize)
                 from app.models.scoring import compute_ipcr_score
                 ipcr_score = compute_ipcr_score(cursor, emp_id, term_id)
+                # Same category -> target-type grouping as the printed IPCR, so the checklist
+                # reads like the real form (Regular Faculty's own designation is always
+                # 'Regular Faculty' -- chairs/Dean use the shared /designated/ flow instead).
+                from app.models.ipcr_form import build_evidence_checklist_sections
+                from app.models.criteria import DESIGNATION_REGULAR
+                evidence_sections = build_evidence_checklist_sections(
+                    cursor, assigned_targets, DESIGNATION_REGULAR, term_id, academic_rank)
 
         return render_template('faculty_dashboard.html',
                                active_term=active_term,
@@ -116,7 +124,8 @@ def faculty_dashboard():
                                evidence_readiness=evidence_readiness,
                                ipcr_score=ipcr_score,
                                has_final_ipcr=has_final_ipcr,
-                               gating_status=gating_status)
+                               gating_status=gating_status,
+                               evidence_sections=evidence_sections)
     finally:
         cursor.close()
         conn.close()

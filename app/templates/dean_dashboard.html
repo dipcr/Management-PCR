@@ -27,6 +27,10 @@
     <i class="ti ti-user-plus"></i>
     <span class="nav-text">Target Assignment</span>
 </button>
+<button class="nav-item" data-section="nav-department-accomplishment" onclick="showSection('nav-department-accomplishment')">
+    <i class="ti ti-chart-bar"></i>
+    <span class="nav-text">Department Accomplishment</span>
+</button>
 <button class="nav-item" data-section="nav-evidence-verification" onclick="showSection('nav-evidence-verification')">
     <i class="ti ti-file-search"></i>
     <span class="nav-text">Evidence Verification</span>
@@ -1249,6 +1253,88 @@
     <div class="alert alert-warning border-0 shadow-sm">
         <i class="ti ti-alert-triangle me-2"></i> No active term. Please activate an academic term first.
     </div>
+    {% endif %}
+</div>
+
+<!-- ──────────────────────────────────────────────
+     Department Accomplishment -- read-only, one tab per department. Reuses the exact same
+     Quota vs. Approved-only "Verified Accomplished" figure the Program Chair's own dashboard
+     card computes (get_department_accomplishment_summary) so the two screens can never
+     disagree -- this is a monitoring view for the Dean, not a review/approval action; that
+     stays with the Program Chair (Regular Faculty) and the Dean's own Evidence Verification
+     panel below (Designated Faculty/Chairs).
+     ────────────────────────────────────────────── -->
+<div id="nav-department-accomplishment" class="dashboard-section">
+    <div class="page-header d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold text-dark mb-1"><i class="ti ti-chart-bar text-primary me-2"></i>Department Accomplishment</h2>
+            <p class="text-muted mb-0">Quota cascaded to each department vs. accomplishment already Approved by its Program Chair.</p>
+        </div>
+    </div>
+
+    {% if departments %}
+    <ul class="nav nav-pills mb-3" id="deptAccomplishmentTabs" role="tablist">
+        {% for dept in departments %}
+        <li class="nav-item" role="presentation">
+            <button class="nav-link {% if loop.first %}active{% endif %}" id="dept-tab-{{ dept.department_id }}"
+                    data-bs-toggle="pill" data-bs-target="#dept-pane-{{ dept.department_id }}"
+                    type="button" role="tab" aria-controls="dept-pane-{{ dept.department_id }}"
+                    aria-selected="{{ 'true' if loop.first else 'false' }}">
+                {{ dept.department_name }}
+            </button>
+        </li>
+        {% endfor %}
+    </ul>
+    <div class="tab-content" id="deptAccomplishmentTabContent">
+        {% for dept in departments %}
+        <div class="tab-pane fade {% if loop.first %}show active{% endif %}" id="dept-pane-{{ dept.department_id }}"
+             role="tabpanel" aria-labelledby="dept-tab-{{ dept.department_id }}">
+            {% set summary = department_accomplishment.get(dept.department_name, []) %}
+            <div class="card shadow-sm border-0" style="border-radius: 14px; overflow: hidden;">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-4">Departmental Oversight Target</th>
+                                    <th class="text-center">Quota</th>
+                                    <th class="text-center">Verified Accomplished</th>
+                                    <th class="text-center pe-4" style="width: 180px;">Progress</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if summary %}
+                                    {% for ind in summary %}
+                                    <tr>
+                                        <td class="ps-4 py-3 small fw-semibold text-dark">{{ ind.target_description | ipcr_preview }}</td>
+                                        <td class="text-center fw-bold text-primary fs-6">{{ ind.total_target_value }}</td>
+                                        <td class="text-center fw-bold text-success fs-6">{{ ind.verified_accomplished }}</td>
+                                        <td class="text-center pe-4">
+                                            <div class="progress" style="height: 8px;" role="progressbar"
+                                                 aria-valuenow="{{ ind.percent_verified }}" aria-valuemin="0" aria-valuemax="100">
+                                                <div class="progress-bar bg-success" style="width: {{ ind.percent_verified }}%;"></div>
+                                            </div>
+                                            <small class="text-muted">{{ ind.percent_verified }}%</small>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="4" class="text-center py-4 text-muted">
+                                            No indicators have been cascaded to {{ dept.department_name }} yet this term.
+                                        </td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-info border-0 shadow-sm">No departments configured yet.</div>
     {% endif %}
 </div>
 

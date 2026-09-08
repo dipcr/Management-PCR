@@ -109,6 +109,15 @@ def dean_dashboard():
 
         departments = get_departments(cursor)
 
+        # Faculty Accomplishment: one Department Accomplishment Summary per department, for
+        # the Dean's own read-only overview — reuses the exact same function/definition the
+        # Program Chair's own dashboard card uses (Approved-only "Verified Accomplished" vs.
+        # the department's cascaded quota), so the two screens can never disagree.
+        department_accomplishment = {
+            d['department_name']: get_department_accomplishment_summary(cursor, d['department_name'], term_id)
+            for d in departments
+        }
+
         # Draft IPCR Status column (#assignDesignatedTable) — keyed off the same
         # tbl_ipcr_dean_review status draft_submissions already carries, whether that status
         # was reached by a manual Dean review (Plain Designated Faculty) or by the Dean's
@@ -118,6 +127,7 @@ def dean_dashboard():
         return render_template('dean_dashboard.html',
                                active_term=active_term,
                                departments=departments,
+                               department_accomplishment=department_accomplishment,
                                special_roles=SPECIAL_CASCADE_ROLES,
                                master_indicators=indicators,
                                existing_quotas=existing_quotas,

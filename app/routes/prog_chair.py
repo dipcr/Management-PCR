@@ -108,6 +108,10 @@ def prog_chair_dashboard():
             approved_evidence_faculty_list = [f for f in evidence_faculty_list if f.get('is_both_approved')]
             approved_regular_evidence_list = approved_evidence_faculty_list
 
+            # Department-wide quota vs. Approved-only accomplishment, one row per indicator
+            # cascaded to this specialization -- see get_department_accomplishment_summary.
+            department_accomplishment_summary = get_department_accomplishment_summary(cursor, specialization, term_id)
+
         return render_template(
             'prog_chair_dashboard.html',
             active_term=active_term,
@@ -124,6 +128,7 @@ def prog_chair_dashboard():
             pending_evidence_faculty_list=pending_evidence_faculty_list if 'pending_evidence_faculty_list' in locals() else [],
             approved_evidence_faculty_list=approved_evidence_faculty_list if 'approved_evidence_faculty_list' in locals() else [],
             approved_regular_evidence_list=approved_regular_evidence_list if 'approved_regular_evidence_list' in locals() else [],
+            department_accomplishment_summary=department_accomplishment_summary if 'department_accomplishment_summary' in locals() else [],
             has_own_ipcr=True
         )
     finally:

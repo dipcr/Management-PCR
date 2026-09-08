@@ -755,6 +755,16 @@ def get_faculty_committed_targets(cursor, emp_id, term_id):
             is_auto_description=r.get('is_auto_description'),
         )
         r['rating'] = compute_target_rating(r)
+
+    # get_faculty_committed_targets is the shared source compute_ipcr_score (every rating
+    # summary) and build_ipcr_form (the printed IPCR) both read from, for Regular and
+    # Designated faculty alike -- a Program Chair/RET Chair's Departmental Oversight row has
+    # to be corrected here, not only in get_designated_committed_targets's own (separate)
+    # dashboard query, or the aggregation would show on the Evidence Gathering panel but never
+    # actually count toward the score or the print. No-op for Regular Faculty (no oversight
+    # role) and for anyone with no oversight indicators cascaded to them this term.
+    from app.models.designated import apply_oversight_overrides
+    apply_oversight_overrides(cursor, emp_id, term_id, rows)
     return rows
 
 
@@ -769,13 +779,24 @@ def save_accomplishment_details(conn, cursor, emp_id, target_id, actual_duration
     """
     from app.models.scoring import COMPLETION_STATUSES
     try:
-        cursor.execute(
-            "SELECT emp_id FROM tbl_committed_targets WHERE target_id = %s", (target_id,))
+        cursor.execute("""
+            SELECT ct.emp_id, ct.indicator_id, ct.is_admin_function, mi.term_id
+            FROM tbl_committed_targets ct
+            JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
+            WHERE ct.target_id = %s
+        """, (target_id,))
         row = cursor.fetchone()
         if not row:
             return False, "Target not found."
         if row[0] != emp_id:
             return False, "You can only update your own targets."
+
+        if row[2]:
+            from app.models.designated import get_oversight_indicator_ids
+            if row[1] in get_oversight_indicator_ids(cursor, emp_id, row[3]):
+                return False, ("This is a Departmental Oversight target -- its Accomplished Qty and "
+                                "Timeliness are derived automatically from your department's/RET's "
+                                "faculty evidence.")
 
         if completion_status and completion_status not in COMPLETION_STATUSES:
             return False, "Invalid completion status."
@@ -1070,11 +1091,13 @@ def enrich_faculty_verification_status(cursor, faculty_dict, term_id):
     is_regular_faculty = not is_designated(designation)
 
     cursor.execute("""
-        SELECT 
+        SELECT
             tc.category_name,
             er.evidence_id,
             er.verification_status,
-            ct.status
+            ct.status,
+            ct.indicator_id,
+            ct.is_admin_function
         FROM tbl_committed_targets ct
         JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
         JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
@@ -1082,6 +1105,15 @@ def enrich_faculty_verification_status(cursor, faculty_dict, term_id):
         WHERE ct.emp_id = %s AND mi.term_id = %s
     """, (emp_id, term_id))
     rows = cursor.fetchall()
+
+    # A Departmental Oversight row's real evidence lives on scoped faculty's own committed
+    # targets, already run through their own verification pipeline (see get_oversight_evidence)
+    # -- it never has its own tbl_evidence_repo rows, so it must not count toward or against
+    # this per-category completeness gate either way (same exemption rationale as the
+    # missing-timeliness check in check_designated_evidence_readiness). Empty for anyone
+    # without an oversight role, i.e. every Regular Faculty member.
+    from app.models.designated import get_oversight_indicator_ids
+    oversight_ids = get_oversight_indicator_ids(cursor, emp_id, term_id)
 
     chair_targets_has_ev = False
     chair_all_approved = True
@@ -1092,7 +1124,9 @@ def enrich_faculty_verification_status(cursor, faculty_dict, term_id):
     ret_has_targets = False
     is_submitted_to_dean = any(r[3] in ('Submitted to Dean', 'Dean Approved') for r in rows) if rows else False
 
-    for cat_name, ev_id, ev_status, ct_status in rows:
+    for cat_name, ev_id, ev_status, ct_status, indicator_id, is_admin_function in rows:
+        if is_admin_function and indicator_id in oversight_ids:
+            continue
         cat_str = (cat_name or '')
         is_ret = ('Research' in cat_str or 'Extension' in cat_str)
         if is_ret:

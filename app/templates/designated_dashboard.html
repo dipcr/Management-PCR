@@ -508,6 +508,28 @@
                                             {% endfor %}
                                         </select>
                                     </div>
+                                    {% elif target.is_oversight_cascade and not is_committed %}
+                                    {# A Dean-formulated chair's Table 2 is otherwise entirely read-only (can_edit is
+                                       always False for them, see routes/designated.py) -- but the deadline on their
+                                       own Departmental Oversight row has never had any other source than the chair's
+                                       own input (see get_oversight_targets), so it's correctable here specifically,
+                                       right up until Lock & Commit freezes it. Saved via AJAX, not the page's own
+                                       submit -- everything else on this page stays view-only. #}
+                                    <div class="d-flex gap-1 justify-content-center align-items-center oversight-deadline-editor"
+                                         data-draft-id="{{ target.target_id }}">
+                                        <input type="number" class="form-control form-control-sm text-center shadow-sm oversight-dur-value"
+                                               value="{{ target.target_duration_value or '' }}"
+                                               min="1" placeholder="e.g. 6" style="width: 64px; flex: 0 0 64px;">
+                                        <select class="form-select form-select-sm shadow-sm oversight-dur-unit" style="flex: 1 1 auto; min-width: 90px;">
+                                            {% for u in ['days', 'weeks', 'months', 'semesters'] %}
+                                            <option value="{{ u }}" {% if target.target_duration_unit == u %}selected{% endif %}>{{ u }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <button type="button" class="btn btn-sm btn-outline-primary oversight-dur-save" title="Save deadline">
+                                            <i class="ti ti-device-floppy"></i>
+                                        </button>
+                                    </div>
+                                    <div class="small mt-1 oversight-dur-msg"></div>
                                     {% else %}
                                     {% if target.target_deadline %}
                                     <span class="badge bg-light text-dark border" style="font-size: 0.75rem;"><i class="ti ti-clock me-1 text-primary"></i>{{ target.target_deadline }}</span>
@@ -731,63 +753,84 @@
                         <table class="table align-middle mb-0">
                             <thead class="table-light">
                                 <tr>
-                                    <th class="ps-4" width="45%">Target Indicator</th>
-                                    <th class="text-center" width="15%">Target Qty</th>
-                                    <th class="text-center" width="15%">Accomplished Qty</th>
-                                    <th class="text-center" width="25%">Evidence Submissions</th>
+                                    <th class="ps-4" width="15%">MFO/PAP</th>
+                                    <th width="25%">Success Indicator</th>
+                                    <th width="22%">Actual Accomplishment</th>
+                                    <th class="text-center" width="6%" title="Quantity">Q</th>
+                                    <th class="text-center" width="6%" title="Efficiency">E</th>
+                                    <th class="text-center" width="6%" title="Timeliness">T</th>
+                                    <th class="text-center" width="6%" title="Average">A</th>
+                                    <th class="ps-3 text-center" width="14%">Evidence Action</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for target in dpcr_targets %}
-                                {% if target.is_selected %}
+                                {% for section in evidence_sections %}
+                                <tr style="background-color: var(--c-surface-alt, #eef1f4);">
+                                    <td colspan="8" class="fw-bold py-2 px-4" style="font-size:0.9rem;">
+                                        {% if section.numeral %}{{ section.numeral }}. {% endif %}{{ section.name }}
+                                        {% if section.weight_pct is not none %}<span class="text-muted fw-normal">({{ section.weight_pct | round(0) | int }}%)</span>{% endif %}
+                                    </td>
+                                </tr>
+                                {% for sub in section.subsections %}
+                                {% for target in sub.targets %}
                                 <tr>
-                                    <td class="ps-4 py-4">
+                                    {% if loop.first %}
+                                    <td rowspan="{{ sub.targets | length }}" class="ps-4 py-3 align-top border-end fw-semibold text-dark" style="font-size:0.85rem;">
+                                        {% if sub.letter %}{{ sub.letter }}. {% endif %}{{ sub.label }}
+                                    </td>
+                                    {% endif %}
+                                    <td class="py-3">
                                         {% if target.is_custom %}
                                         <span class="badge bg-warning text-dark border mb-1">Custom</span>
-                                        {% else %}
-                                        {% if target.category_name == 'A. Instructions' %}
-                                        <span class="badge bg-light text-dark border mb-1">Instruction</span>
-                                        {% elif target.category_name == 'Support Functions' %}
-                                        <span class="badge bg-light text-dark border mb-1">Support</span>
-                                        {% else %}
-                                        <span class="badge bg-light text-dark border mb-1">{{ target.category_name | replace('A. ', '') | replace('B. ', '') | replace('C. ', '') if target.category_name else 'Standard' }}</span>
                                         {% endif %}
+                                        {% if target.is_oversight_cascade %}
+                                        <span class="badge bg-info text-dark border mb-1 ms-1"><i class="ti ti-sitemap me-1" aria-hidden="true"></i>Departmental Oversight — Auto-linked</span>
                                         {% endif %}
-                                        <p class="mb-0 small fw-semibold text-dark">{{ target.indicator_description | ipcr_preview }}
-                                        </p>
+                                        <p class="mb-0 small fw-semibold text-dark">{{ target.indicator_description | ipcr_preview }}</p>
                                     </td>
-                                    <td class="text-center fw-bold fs-5 text-primary">
-                                        {{ target.total_target_value or 0 }}
-                                    </td>
-                                    <td class="text-center fw-bold fs-5">
+                                    <td class="py-3">
+                                        <p class="mb-1 small text-secondary fst-italic">{{ target.actual_accomplishment or '' }}</p>
+                                        {% if not target.actual_duration_value %}
+                                        <span class="badge bg-light text-muted border me-1" style="font-size:0.68rem;"><i class="ti ti-clock me-1" aria-hidden="true"></i>Time not reported</span>
+                                        {% endif %}
                                         {% set actual_q = target.actual_quantity or 0 %}
                                         {% if actual_q >= (target.total_target_value or 0) %}
-                                        <span class="badge bg-success px-3 py-2 shadow-sm text-white"
-                                            style="font-size: 0.85rem;"><i class="ti ti-circle-check me-1"></i>{{
-                                            actual_q }}</span>
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:0.68rem;"><i class="ti ti-circle-check me-1" aria-hidden="true"></i>{{ actual_q }}/{{ target.total_target_value or 0 }}</span>
                                         {% else %}
-                                        <span class="badge bg-secondary px-3 py-2 shadow-sm text-white"
-                                            style="font-size: 0.85rem;">{{ actual_q }}</span>
+                                        <span class="badge bg-light text-muted border" style="font-size:0.68rem;">{{ actual_q }}/{{ target.total_target_value or 0 }}</span>
                                         {% endif %}
                                     </td>
-                                    <td class="text-center pe-4 py-4">
+                                    <td class="text-center fw-semibold text-primary">{{ target.rating.q if target.rating and target.rating.q is not none else '—' }}</td>
+                                    <td class="text-center fw-semibold text-primary">{{ target.rating.e if target.rating and target.rating.e is not none else '—' }}</td>
+                                    <td class="text-center fw-semibold text-primary">{{ target.rating.t if target.rating and target.rating.t is not none else '—' }}</td>
+                                    <td class="text-center fw-bold" style="background-color: var(--c-surface-alt, #eef1f4);">{{ target.rating.average if target.rating and target.rating.average is not none else '—' }}</td>
+                                    <td class="text-center pe-4 py-3">
                                         <button type="button"
-                                            class="btn {% if has_final_ipcr %}btn-outline-secondary{% elif evidence_readiness and evidence_readiness.evidence_submitted %}btn-secondary{% else %}btn-primary{% endif %} btn-sm px-4 py-2 fw-bold shadow-sm transition-all hover-shadow"
+                                            class="btn {% if has_final_ipcr or target.is_oversight_cascade %}btn-outline-secondary{% elif evidence_readiness and evidence_readiness.evidence_submitted %}btn-secondary{% else %}btn-primary{% endif %} btn-sm px-3 py-2 fw-bold shadow-sm transition-all hover-shadow"
                                             data-target-id="{{ target.target_id }}"
                                             data-indicator-id="{{ target.indicator_id }}"
                                             data-desc="{{ target.indicator_description | ipcr_preview }}"
                                             data-target-qty="{{ target.total_target_value or 0 }}"
                                             data-actual-qty="{{ target.actual_quantity or 0 }}"
-                                            onclick="openEvidenceModal(this.dataset.targetId, this.dataset.indicatorId, this.dataset.desc, this.dataset.targetQty, this.dataset.actualQty)">
-                                            {% if has_final_ipcr %}
-                                            <i class="ti ti-eye me-1"></i>View Evidences (Approved)
+                                            data-oversight="{{ 'true' if target.is_oversight_cascade else 'false' }}"
+                                            onclick="openEvidenceModal(this.dataset.targetId, this.dataset.indicatorId, this.dataset.desc, this.dataset.targetQty, this.dataset.actualQty, this.dataset.oversight === 'true')">
+                                            {% if target.is_oversight_cascade %}
+                                            <i class="ti ti-link me-1" aria-hidden="true"></i>View Linked Evidence
+                                            {% elif has_final_ipcr %}
+                                            <i class="ti ti-eye me-1" aria-hidden="true"></i>View (Approved)
                                             {% elif evidence_readiness and evidence_readiness.evidence_submitted %}
-                                            <i class="ti ti-eye me-1"></i>View Evidences
+                                            <i class="ti ti-eye me-1" aria-hidden="true"></i>View Evidences
                                             {% else %}
-                                            <i class="ti ti-folder-plus me-1"></i>Add/View Evidence
+                                            <i class="ti ti-folder-plus me-1" aria-hidden="true"></i>Add/View Evidence
                                             {% endif %}
                                         </button>
                                     </td>
+                                </tr>
+                                {% endfor %}
+                                {% endfor %}
+                                {% if section.target_count == 0 %}
+                                <tr>
+                                    <td class="py-2 px-4 text-muted small" colspan="8">No targets under this category.</td>
                                 </tr>
                                 {% endif %}
                                 {% endfor %}
@@ -1430,7 +1473,7 @@
         }
 
         // Helper to show custom confirmation modal
-        window.showCustomConfirm = function ({ title, mainText, subText, confirmText, confirmClass, iconClass, onConfirm }) {
+        window.showCustomConfirm = function ({ title, mainText, subText, confirmText, confirmClass, iconClass, onConfirm, requireCheckbox }) {
             const modal = new bootstrap.Modal(document.getElementById('customConfirmModal'));
 
             document.getElementById('confirmModalTitle').textContent = title;
@@ -1454,6 +1497,25 @@
             const newConfirmBtn = confirmBtn.cloneNode(true);
             confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
 
+            const checkboxContainer = document.getElementById('confirmModalCheckboxContainer');
+            const checkbox = document.getElementById('confirmModalCheckbox');
+            // Reset any listener from a previous call before deciding whether to re-attach one.
+            const newCheckbox = checkbox.cloneNode(true);
+            checkbox.parentNode.replaceChild(newCheckbox, checkbox);
+
+            if (requireCheckbox) {
+                document.getElementById('confirmModalCheckboxLabel').textContent = requireCheckbox.label;
+                checkboxContainer.style.display = '';
+                newCheckbox.checked = false;
+                newConfirmBtn.disabled = true;
+                newCheckbox.addEventListener('change', function () {
+                    newConfirmBtn.disabled = !newCheckbox.checked;
+                });
+            } else {
+                checkboxContainer.style.display = 'none';
+                newConfirmBtn.disabled = false;
+            }
+
             newConfirmBtn.addEventListener('click', function () {
                 modal.hide();
                 onConfirm();
@@ -1474,10 +1536,55 @@
                     confirmText: "Yes, Lock IPCR",
                     confirmClass: "btn-warning text-dark",
                     iconClass: "ti-lock",
+                    requireCheckbox: {
+                        label: "I have reviewed the Quantity and Deadline for every target below, including Departmental Oversight targets."
+                    },
                     onConfirm: () => document.getElementById('lockForm').submit()
                 });
             });
         }
+
+        // Departmental Oversight deadline correction, pre-lock -- the one field on an
+        // otherwise read-only (can_edit = False for a Dean-formulated chair) row that's always
+        // been the chair's own input (see get_oversight_targets). Saved individually via AJAX
+        // rather than folded into Lock & Commit, so a chair can fix it and keep reviewing
+        // without committing to the lock in the same action.
+        document.querySelectorAll('.oversight-deadline-editor .oversight-dur-save').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const wrapper = btn.closest('.oversight-deadline-editor');
+                const draftId = wrapper.dataset.draftId;
+                const durationValue = wrapper.querySelector('.oversight-dur-value').value;
+                const durationUnit = wrapper.querySelector('.oversight-dur-unit').value;
+                const msg = wrapper.nextElementSibling;
+
+                if (!durationValue || parseInt(durationValue, 10) <= 0) {
+                    if (msg) { msg.className = 'small mt-1 oversight-dur-msg text-danger'; msg.textContent = 'Enter a deadline before saving.'; }
+                    return;
+                }
+
+                btn.disabled = true;
+                fetch("{{ url_for('designated.designated_save_oversight_deadline') }}", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ draft_id: draftId, duration_value: durationValue, duration_unit: durationUnit })
+                })
+                .then(r => r.json())
+                .then(data => {
+                    btn.disabled = false;
+                    if (msg) {
+                        msg.className = 'small mt-1 oversight-dur-msg ' + (data.success ? 'text-success' : 'text-danger');
+                        msg.textContent = data.message || (data.success ? 'Saved.' : 'Failed to save.');
+                    }
+                })
+                .catch(err => {
+                    btn.disabled = false;
+                    if (msg) {
+                        msg.className = 'small mt-1 oversight-dur-msg text-danger';
+                        msg.textContent = 'Error: ' + err;
+                    }
+                });
+            });
+        });
 
         // Targets whose accomplished quantity fell short of what was assigned -- surfaced in a
         // warning before submission since quantity is no longer required to submit.
@@ -1551,11 +1658,7 @@
             completionStatus: {{ (target.completion_status or 'COMPLETED') | tojson }},
             efficiencyType: {{ (target.efficiency_type or '') | tojson }},
             efficiencyRating: {{ target.efficiency_rating_E if target.efficiency_rating_E else 'null' }},
-            printRemarks: {{ (target.print_remarks or '') | tojson }},
-            ratingQ: {{ target.rating.q if target.rating and target.rating.q is not none else 'null' }},
-            ratingE: {{ target.rating.e if target.rating and target.rating.e is not none else 'null' }},
-            ratingT: {{ target.rating.t if target.rating and target.rating.t is not none else 'null' }},
-            ratingAvg: {{ target.rating.average if target.rating and target.rating.average is not none else 'null' }}
+            printRemarks: {{ (target.print_remarks or '') | tojson }}
         },{% endif %}{% endfor %}
     };
 
@@ -1614,6 +1717,10 @@
                     meta.completionStatus = status;
                     meta.efficiencyRating = effRaw === '' ? null : parseInt(effRaw, 10);
                 }
+                // The Q/E/T/A rating shown in the checklist table is computed server-side from
+                // these values -- reload on close so the table reflects what was just saved,
+                // the same way an evidence upload/delete already does.
+                window.evidenceModalHasChanges = true;
                 if (closeModalOnSuccess) {
                     const modalEl = document.getElementById('evidenceGatheringModal');
                     const modalInstance = bootstrap.Modal.getInstance(modalEl);
@@ -1640,9 +1747,11 @@
         const notice = document.getElementById('uploadLockedNotice');
         const footerSubmitBtn = document.getElementById('submitAccomplishmentBtn');
         const saveDetailsBtn = document.querySelector('button[onclick="saveAccomplishmentDetails()"]');
+        const accomplishmentSection = document.getElementById('accomplishmentDetailsSection');
         if (!form) return;
 
-        const isLocked = HAS_FINAL_IPCR || EVIDENCE_SUBMITTED;
+        const isOversight = !!window.currentIsOversight;
+        const isLocked = HAS_FINAL_IPCR || EVIDENCE_SUBMITTED || isOversight;
 
         form.querySelectorAll('input, button, select, textarea').forEach(el => {
             el.disabled = isLocked;
@@ -1658,9 +1767,17 @@
         if (saveDetailsBtn) saveDetailsBtn.disabled = isLocked;
         if (footerSubmitBtn) footerSubmitBtn.disabled = isLocked;
 
+        // An oversight row has no upload slot or self-reported Q/duration of its own at all
+        // (see get_oversight_evidence) -- hide the whole Accomplishment Details editor rather
+        // than just disabling it, so it doesn't look like a broken form.
+        if (accomplishmentSection) accomplishmentSection.style.display = isOversight ? 'none' : '';
+
         if (notice) {
             notice.style.display = isLocked ? '' : 'none';
-            if (HAS_FINAL_IPCR) {
+            if (isOversight) {
+                notice.className = 'alert alert-info border-0 small mb-0';
+                notice.innerHTML = '<i class="ti ti-sitemap me-2"></i>This is a Departmental Oversight target — its evidence and Accomplished Qty are linked automatically from your department\'s/RET\'s faculty, not uploaded here.';
+            } else if (HAS_FINAL_IPCR) {
                 notice.className = 'alert alert-success border-0 small mb-0';
                 notice.innerHTML = '<i class="ti ti-shield-lock me-2"></i>Your evidence submission has been fully verified and approved by the Dean. Evidence gathering is now locked.';
             } else if (EVIDENCE_SUBMITTED) {
@@ -1671,9 +1788,10 @@
         form.style.display = isLocked ? 'none' : '';
     }
 
-    window.openEvidenceModal = function (targetId, indicatorId, description, targetQty, actualQty) {
+    window.openEvidenceModal = function (targetId, indicatorId, description, targetQty, actualQty, isOversight = false) {
         window.currentTargetId = targetId;
         window.currentIndicatorId = indicatorId;
+        window.currentIsOversight = !!isOversight;
         // Set standard elements
         document.getElementById('evidenceTargetId').value = targetId;
         document.getElementById('evidenceIndicatorDesc').textContent = description;
@@ -1703,12 +1821,6 @@
             effSelect.value = '';
         }
 
-        const dash = v => (v === null || v === undefined) ? '—' : v;
-        document.getElementById('ratingQ').textContent = dash(meta.ratingQ);
-        document.getElementById('ratingE').textContent = dash(meta.ratingE);
-        document.getElementById('ratingT').textContent = dash(meta.ratingT);
-        document.getElementById('ratingAvg').textContent = dash(meta.ratingAvg);
-
         document.getElementById('evidenceRemarks').value = meta.printRemarks || '';
         document.getElementById('accomplishmentSaveMsg').textContent = '';
         applyEvidenceLock();
@@ -1737,6 +1849,39 @@
             .then(data => {
                 submissionsContainer.innerHTML = '';
                 let totalQty = 0;
+                if (data.success && data.is_oversight) {
+                    // Files here belong to scoped faculty's own committed targets, not this
+                    // row -- no delete action, and the badge is per-file, not per-item
+                    // color-coded the same way a self-uploaded submission is (any status is
+                    // informational only; the faculty member's own dashboard is where it
+                    // gets acted on).
+                    if (data.breakdown.length > 0) {
+                        data.breakdown.forEach(ev => {
+                            const parts = ev.file_path.split('/');
+                            const cleanName = parts[parts.length - 1].substring(33);
+                            const itemDiv = document.createElement('div');
+                            itemDiv.className = 'p-3 border rounded bg-white shadow-xs d-flex align-items-center justify-content-between gap-3 text-start';
+                            itemDiv.style.borderRadius = '10px';
+                            itemDiv.innerHTML = `
+                                <div class="d-flex align-items-center gap-2 overflow-hidden text-start">
+                                    <i class="ti ti-file-upload text-primary fs-4"></i>
+                                    <div class="text-start text-truncate" style="max-width: 250px;">
+                                        <a href="/static/${ev.file_path}" target="_blank" class="small fw-semibold text-decoration-none text-dark" title="View/Download">${cleanName}</a>
+                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                            ${ev.faculty_name} — Qty: ${ev.actual_qty_Q}
+                                        </div>
+                                    </div>
+                                </div>
+                                <span class="badge bg-light text-dark border px-2 py-1" style="font-size: 0.72rem;">${ev.verification_status}</span>
+                            `;
+                            submissionsContainer.appendChild(itemDiv);
+                        });
+                    } else {
+                        submissionsContainer.innerHTML = '<div class="text-center text-muted py-4 small">No department faculty have uploaded evidence for this indicator yet.</div>';
+                    }
+                    document.getElementById('evidenceActualQty').textContent = data.total_actual_quantity || 0;
+                    return;
+                }
                 if (data.success) {
                     if (data.evidence_list.length > 0) {
                         data.evidence_list.forEach(ev => {
@@ -1979,7 +2124,7 @@
                 </div>
 
                 <!-- Accomplishment Details: Timeliness (T) and, where applicable, Efficiency (E) -->
-                <div class="p-3 border border-light shadow-xs text-start" style="border-radius: 12px;">
+                <div id="accomplishmentDetailsSection" class="p-3 border border-light shadow-xs text-start" style="border-radius: 12px;">
                     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                         <h6 class="fw-bold text-dark mb-0"><i class="ti ti-stopwatch me-2 text-primary"></i>Accomplishment Details</h6>
                         <span class="small text-muted">Used to compute your Timeliness rating.</span>
@@ -2027,14 +2172,9 @@
                         </div>
                     </div>
                     <div class="mt-3 pt-3 border-top">
-                        <label class="form-label fw-semibold text-secondary small mb-2">Computed Rating</label>
-                        <div class="d-flex gap-2 flex-wrap align-items-center">
-                            <span class="badge bg-light text-dark border px-3 py-2">Quantity <span id="ratingQ" class="fw-bold ms-1">—</span></span>
-                            <span class="badge bg-light text-dark border px-3 py-2">Efficiency <span id="ratingE" class="fw-bold ms-1">—</span></span>
-                            <span class="badge bg-light text-dark border px-3 py-2">Timeliness <span id="ratingT" class="fw-bold ms-1">—</span></span>
-                            <i class="ti ti-arrow-right text-muted"></i>
-                            <span class="badge bg-primary px-3 py-2">Average <span id="ratingAvg" class="fw-bold ms-1">—</span></span>
-                        </div>
+                        <small class="text-muted d-block" style="font-size: 0.72rem;">
+                            <i class="ti ti-info-circle me-1"></i>Your Quantity/Efficiency/Timeliness/Average rating is shown in the checklist table once you close this dialog.
+                        </small>
                     </div>
 
                     <div class="text-end mt-3">
@@ -2074,6 +2214,11 @@
                     style="font-size: 0.95rem; line-height: 1.5; color: var(--c-text-sub) !important;">Main message</p>
                 <p class="text-muted small px-3 mb-0" id="confirmModalTextSub"
                     style="font-size: 0.85rem; line-height: 1.4;">Sub message</p>
+                <div id="confirmModalCheckboxContainer" class="form-check text-start mt-3 mx-3 p-2 rounded"
+                     style="background: var(--c-accent-glow); display: none;">
+                    <input type="checkbox" class="form-check-input" id="confirmModalCheckbox">
+                    <label class="form-check-label small fw-semibold" for="confirmModalCheckbox" id="confirmModalCheckboxLabel"></label>
+                </div>
             </div>
             <div class="modal-footer border-0 justify-content-center pb-4 pt-0 gap-2 px-4">
                 <button type="button" class="btn px-4 py-2 fw-bold text-white shadow-sm" data-bs-dismiss="modal"
