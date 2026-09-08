@@ -964,7 +964,7 @@ def get_dean_evidence_faculty(cursor, term_id):
     approved_list = []
 
     for r in rows:
-        enrich_faculty_verification_status(cursor, r, term_id)
+        enrich_faculty_verification_status(cursor, r, term_id, reviewer_label='Dean')
         # Check if all committed targets for this faculty member are marked 'Dean Approved'
         cursor.execute("""
             SELECT COUNT(*)

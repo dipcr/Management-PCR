@@ -200,8 +200,10 @@
                 <h6 class="fw-bold text-success mb-1">Your IPCR was formulated and pre-approved by the Dean!</h6>
                 {% if instruction_ready %}
                 <p class="mb-0 text-dark small">Review your finalized commitment targets below and click <strong>"Lock My IPCR"</strong> to commit your targets and proceed to evidence gathering.</p>
-                {% else %}
+                {% elif designation == 'Program Chair' %}
                 <p class="mb-0 text-dark small">Your Core Functions aren't complete yet — distribute your own Instruction share to yourself in Phase 1 Target Allocation before you can lock this IPCR.</p>
+                {% else %}
+                <p class="mb-0 text-dark small">Your Core Functions aren't complete yet — your Program Chair still needs to distribute your Instruction share before you can lock this IPCR.</p>
                 {% endif %}
                 {% else %}
                 <h6 class="fw-bold text-success mb-1">Your IPCR has been Approved by the Dean!</h6>
@@ -596,11 +598,16 @@
                 <button type="button" id="lockBtn" class="btn btn-warning btn-lg px-5 shadow fw-bold text-dark">
                     <i class="ti ti-lock me-2"></i>Lock My IPCR
                 </button>
-                {% else %}
+                {% elif designation == 'Program Chair' %}
                 <button type="button" class="btn btn-warning btn-lg px-5 shadow fw-bold text-dark" disabled title="Distribute your own Instruction share in Phase 1 Target Allocation first">
                     <i class="ti ti-lock me-2"></i>Lock My IPCR
                 </button>
                 <small class="text-muted">Distribute your own Instruction share in Phase 1 Target Allocation first.</small>
+                {% else %}
+                <button type="button" class="btn btn-warning btn-lg px-5 shadow fw-bold text-dark" disabled title="Your Program Chair still needs to distribute your Instruction share first">
+                    <i class="ti ti-lock me-2"></i>Lock My IPCR
+                </button>
+                <small class="text-muted">Your Program Chair still needs to distribute your Instruction share first.</small>
                 {% endif %}
             </div>
             {% elif dean_review and dean_review.overall_status == 'Rejected' %}
@@ -1746,7 +1753,6 @@
         const form = document.getElementById('uploadEvidenceForm');
         const notice = document.getElementById('uploadLockedNotice');
         const footerSubmitBtn = document.getElementById('submitAccomplishmentBtn');
-        const saveDetailsBtn = document.querySelector('button[onclick="saveAccomplishmentDetails()"]');
         const accomplishmentSection = document.getElementById('accomplishmentDetailsSection');
         if (!form) return;
 
@@ -1764,7 +1770,6 @@
         const remarks = document.getElementById('evidenceRemarks');
         if (remarks) remarks.disabled = isLocked;
 
-        if (saveDetailsBtn) saveDetailsBtn.disabled = isLocked;
         if (footerSubmitBtn) footerSubmitBtn.disabled = isLocked;
 
         // An oversight row has no upload slot or self-reported Q/duration of its own at all
@@ -2179,10 +2184,6 @@
 
                     <div class="text-end mt-3">
                         <span id="accomplishmentSaveMsg" class="small me-2"></span>
-                        <button type="button" class="btn btn-outline-primary btn-sm fw-semibold px-4"
-                                onclick="saveAccomplishmentDetails()">
-                            <i class="ti ti-device-floppy me-1"></i>Save Details
-                        </button>
                     </div>
                 </div>
             </div>

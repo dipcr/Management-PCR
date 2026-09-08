@@ -224,9 +224,7 @@ def build_ipcr_form(cursor, emp_id, term_id, force_final=False):
     is_final = bool(targets) and (force_final or all(
         (t.get('status') or '') == STATUS_DEAN_APPROVED for t in targets))
     form_stage = 'final_evaluation' if is_final else 'commitment'
-    stage_title = ('INDIVIDUAL PERFORMANCE COMMITMENT AND REVIEW (IPCR) - FINAL EVALUATION'
-                   if is_final else
-                   'INDIVIDUAL PERFORMANCE COMMITMENT AND REVIEW (IPCR) - APPROVED COMMITMENT')
+    stage_title = 'INDIVIDUAL PERFORMANCE COMMITMENT AND REVIEW (IPCR)'
 
     return {
         'emp_id': emp_id,

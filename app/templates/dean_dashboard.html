@@ -855,6 +855,24 @@
         </div>
     </div>
 
+    <style>
+        /* Draft IPCR Studio: bigger, consistently-sized checkboxes, top-aligned so a long
+           wrapped description doesn't leave them looking mis-centered against the first line. */
+        #designatedAssignmentModal .dean-assign-checkbox {
+            width: 1.25rem;
+            height: 1.25rem;
+            margin-top: 0.2rem;
+        }
+        /* min-width: 0 overrides a flex item's default auto min-width -- without it, the
+           browser lets this span push the row wider (or truncate) instead of actually
+           wrapping the long indicator text within the space the sibling badges/inputs leave. */
+        #designatedAssignmentModal .dean-assign-desc-text {
+            min-width: 0;
+            white-space: normal;
+            word-break: break-word;
+        }
+    </style>
+
     <script>
     function filterDesignatedFacultyTable() {
         const filter = (document.getElementById('assignDesignatedSearch').value || '').toLowerCase();
@@ -976,10 +994,10 @@
             });
             html +=
               '<div class="list-group-item py-3">' +
-                '<div class="d-flex align-items-center gap-2">' +
-                  '<span class="badge bg-warning-subtle text-warning border small">Oversight</span>' +
-                  '<span class="flex-grow-1 fw-semibold small text-dark">' + escapeHtml(window.renderIndicatorPreview(it.indicator_description)) + '</span>' +
-                  '<span class="badge bg-light text-dark border small">Qty: ' + it.total_target_value + ' (locked)</span>' +
+                '<div class="d-flex align-items-start gap-2 flex-wrap">' +
+                  '<span class="badge bg-warning-subtle text-warning border small flex-shrink-0">Oversight</span>' +
+                  '<span class="flex-grow-1 fw-semibold small text-dark dean-assign-desc-text">' + escapeHtml(window.renderIndicatorPreview(it.indicator_description)) + '</span>' +
+                  '<span class="badge bg-light text-dark border small flex-shrink-0">Qty: ' + it.total_target_value + ' (locked)</span>' +
                 '</div>' +
                 '<div class="row g-2 mt-2 ps-4">' +
                   '<div class="col-md-6">' +
@@ -1064,17 +1082,19 @@
 
                 html +=
                   '<div class="list-group-item py-3">' +
-                    '<div class="d-flex align-items-center gap-2">' +
-                      '<input class="form-check-input m-0" type="checkbox" name="assign_indicator_ids[]" value="' + it.indicator_id + '" ' + checked + ' onchange="toggleDesignatedAssignRowInputs(' + it.indicator_id + ', this.checked)">' +
-                      '<span class="flex-grow-1 fw-semibold small text-dark">' +
+                    '<div class="d-flex align-items-start gap-2 flex-wrap">' +
+                      '<input class="form-check-input dean-assign-checkbox flex-shrink-0" type="checkbox" name="assign_indicator_ids[]" value="' + it.indicator_id + '" ' + checked + ' onchange="toggleDesignatedAssignRowInputs(' + it.indicator_id + ', this.checked)">' +
+                      '<span class="flex-grow-1 fw-semibold small text-dark dean-assign-desc-text">' +
                         '<span class="badge bg-secondary small me-1">' + catLabel + '</span> ' +
                         escapeHtml(window.renderIndicatorPreview(it.indicator_description)) +
                       '</span>' +
-                      '<span class="badge bg-light text-dark border small">Quota: ' + it.total_quota + '</span>' +
-                      '<span class="text-muted small ms-2">Qty:</span>' +
-                      '<input type="number" min="1" class="form-control form-control-sm text-center dean-assign-input-' + it.indicator_id + '" style="width:80px;" ' +
-                             'name="assign_quantity_' + it.indicator_id + '" value="' + qty + '" ' + disabledAttr + ' ' +
-                             'aria-label="Quantity for ' + ariaDesc + '">' +
+                      '<span class="d-flex align-items-center gap-2 flex-shrink-0">' +
+                        '<span class="badge bg-light text-dark border small">Quota: ' + it.total_quota + '</span>' +
+                        '<span class="text-muted small">Qty:</span>' +
+                        '<input type="number" min="1" class="form-control form-control-sm text-center dean-assign-input-' + it.indicator_id + '" style="width:80px;" ' +
+                               'name="assign_quantity_' + it.indicator_id + '" value="' + qty + '" ' + disabledAttr + ' ' +
+                               'aria-label="Quantity for ' + ariaDesc + '">' +
+                      '</span>' +
                     '</div>' +
                     '<div class="row g-2 mt-2 ps-4">' +
                       '<div class="col-md-7">' +

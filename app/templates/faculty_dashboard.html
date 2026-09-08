@@ -1249,7 +1249,6 @@
         const form = document.getElementById('uploadEvidenceForm');
         const notice = document.getElementById('uploadLockedNotice');
         const footerSubmitBtn = document.getElementById('submitAccomplishmentBtn');
-        const saveDetailsBtn = document.querySelector('button[onclick="saveAccomplishmentDetails()"]');
         if (!form) return;
 
         const targetMeta = TARGET_META[String(currentTargetId)] || {};
@@ -1266,7 +1265,6 @@
         const remarks = document.getElementById('evidenceRemarks');
         if (remarks) remarks.disabled = isLocked;
 
-        if (saveDetailsBtn) saveDetailsBtn.disabled = isLocked;
         if (footerSubmitBtn) footerSubmitBtn.disabled = isLocked;
 
         if (notice) {
@@ -1665,10 +1663,6 @@
 
                     <div class="text-end mt-3">
                         <span id="accomplishmentSaveMsg" class="small me-2"></span>
-                        <button type="button" class="btn btn-outline-primary btn-sm fw-semibold px-4"
-                                onclick="saveAccomplishmentDetails()">
-                            <i class="ti ti-device-floppy me-1" aria-hidden="true"></i>Save Details
-                        </button>
                     </div>
                 </div>
             </div>

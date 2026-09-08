@@ -503,6 +503,8 @@ def review_ipcr(emp_id):
                     'original_quantity': item['original_quantity'],
                     'reviewed_quantity': rev_qty,
                     'item_remarks': item['item_remarks'] or '',
+                    'target_duration_value': item.get('target_duration_value'),
+                    'target_duration_unit': item.get('target_duration_unit'),
                 })
                 selected_ids.add(item['indicator_id'])
 

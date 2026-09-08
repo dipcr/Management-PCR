@@ -497,6 +497,19 @@ def submit_faculty_ipcr(conn, cursor, emp_id, term_id, selected_research_targets
                         ret_editable = False
 
             if ret_editable:
+                # Capture any quantity the RET Chair already edited during a prior review
+                # (synced into proposed_quantity by save_ret_review_items/decide_ret_review)
+                # before the rewrite below wipes it — otherwise a resubmit that doesn't touch
+                # a given indicator silently resets it back to the rank menu's default qty.
+                cursor.execute("""
+                    SELECT dt.indicator_id, dt.proposed_quantity
+                    FROM tbl_draft_targets dt
+                    JOIN tbl_master_indicators mi ON dt.indicator_id = mi.indicator_id
+                    JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
+                    WHERE dt.emp_id = %s AND tc.slug = 'research'
+                """, (emp_id,))
+                prior_research_qty = {ind_id: qty for ind_id, qty in cursor.fetchall()}
+
                 # Rewrite only Research selections. Extension is distributed separately
                 # and must survive this rewrite (scoped to slug='research').
                 cursor.execute("""
@@ -522,7 +535,8 @@ def submit_faculty_ipcr(conn, cursor, emp_id, term_id, selected_research_targets
                         LIMIT 1
                     """, (emp_rank_band, res_ind_id))
                     row = cursor.fetchone()
-                    res_qty = row[0] if (row and row[0] is not None) else 1
+                    default_qty = row[0] if (row and row[0] is not None) else 1
+                    res_qty = prior_research_qty.get(res_ind_id, default_qty)
                     res_desc = row[1] if row else None
                     res_dur_value = row[2] if row else None
                     res_dur_unit = row[3] if row else None
@@ -1064,7 +1078,7 @@ def submit_faculty_evidences(conn, cursor, emp_id, term_id):
         return False, f"Error submitting evidences: {str(e)}"
 
 
-def enrich_faculty_verification_status(cursor, faculty_dict, term_id):
+def enrich_faculty_verification_status(cursor, faculty_dict, term_id, reviewer_label=None):
     """
     Computes the verification status for a faculty member across Program Chair (CHAIR) and RET Chair (RET).
     Sets:
@@ -1082,6 +1096,13 @@ def enrich_faculty_verification_status(cursor, faculty_dict, term_id):
     (they never review designated faculty's evidence either; the Dean does, directly), it's
     so Dean's own final-approval gate still requires every evidence file, R&E-categorized
     ones included, to be explicitly reviewed before a designated faculty's package clears.
+
+    The CHAIR/RET lane labels ("Waiting for Program Chair/RET Chair Approval") assume those
+    are the actual reviewers, which is only true on Program Chair's/RET Chair's own dashboards.
+    On the Dean's final-verification page, the Dean is the sole reviewer for both lanes (a
+    Program Chair/RET Chair/Designated Faculty/Dean's own evidence has no one else to review
+    it) -- pass reviewer_label='Dean' there so the status text names the actual approver
+    instead of a role that never touches this package at this stage.
     """
     emp_id = faculty_dict['emp_id']
     cursor.execute("SELECT designation FROM tbl_employee_profiles WHERE emp_id = %s", (emp_id,))
@@ -1128,7 +1149,13 @@ def enrich_faculty_verification_status(cursor, faculty_dict, term_id):
         if is_admin_function and indicator_id in oversight_ids:
             continue
         cat_str = (cat_name or '')
-        is_ret = ('Research' in cat_str or 'Extension' in cat_str)
+        # Regular Faculty's Research/Extension evidence is reviewed by the Program Chair too
+        # (see docstring) -- it must feed chair_all_approved, not ret_all_approved, or it gets
+        # silently exempted by the ret_finished=True override below. That was the actual bug:
+        # a regular faculty member's uploaded-but-still-Pending Research/Extension evidence
+        # was bucketed into the RET lane, whose completion is forced true for regular faculty,
+        # so the package read "ready to submit" while that evidence had never been reviewed.
+        is_ret = (not is_regular_faculty) and ('Research' in cat_str or 'Extension' in cat_str)
         if is_ret:
             ret_has_targets = True
             if ev_id is not None:
@@ -1158,15 +1185,18 @@ def enrich_faculty_verification_status(cursor, faculty_dict, term_id):
 
     is_both_approved = chair_finished and ret_finished and (chair_has_targets or ret_has_targets)
 
+    chair_reviewer = reviewer_label or 'Program Chair'
+    ret_reviewer = reviewer_label or 'RET Chair'
+
     if is_both_approved:
         status_code = 'APPROVED'
         status_label = 'Approved'
     elif ret_finished and not chair_finished:
         status_code = 'WAITING_CHAIR'
-        status_label = 'Waiting for Program Chair Approval'
+        status_label = f'Waiting for {chair_reviewer} Approval'
     elif chair_finished and not ret_finished:
         status_code = 'WAITING_RET'
-        status_label = 'Waiting for RET Chair Approval'
+        status_label = f'Waiting for {ret_reviewer} Approval'
     else:
         status_code = 'SUBMITTED'
         status_label = 'Evidences Submitted'

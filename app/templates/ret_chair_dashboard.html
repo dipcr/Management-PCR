@@ -367,12 +367,102 @@ document.addEventListener('DOMContentLoaded', function() {
             // unless unlocked first — confirm before committing to that.
             const rankSelect = saveRuleForm.querySelector('#academic_rank');
             const rankLabel = rankSelect && rankSelect.selectedOptions.length ? rankSelect.selectedOptions[0].text : 'this rank band';
-            if (!confirm(`Save the Research & Extension menu rule for ${rankLabel}? This replaces the rank band's entire existing Research rule — any previously configured indicators not checked here will be removed. A locked Extension configuration is skipped unless unlocked first.`)) {
-                e.preventDefault();
+            e.preventDefault();
+            if (window.showCustomConfirm) {
+                showCustomConfirm({
+                    title: 'Save Menu Rule?',
+                    mainText: `Save the Research &amp; Extension menu rule for ${rankLabel}?`,
+                    subText: "This replaces the rank band's entire existing Research rule — any previously configured indicators not checked here will be removed. A locked Extension configuration is skipped unless unlocked first.",
+                    confirmText: 'Yes, Save',
+                    confirmClass: 'btn-primary',
+                    iconClass: 'ti-device-floppy',
+                    onConfirm: () => saveRuleForm.submit()
+                });
+            } else if (confirm(`Save the Research & Extension menu rule for ${rankLabel}? This replaces the rank band's entire existing Research rule — any previously configured indicators not checked here will be removed. A locked Extension configuration is skipped unless unlocked first.`)) {
+                saveRuleForm.submit();
             }
         });
     }
 });
+</script>
+
+<!-- Custom Confirmation Modal -->
+<div class="modal fade" id="customConfirmModal" tabindex="-1" aria-hidden="true" style="z-index: 1060;">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 20px;">
+            <div class="modal-header border-0 pb-0 pe-3 pt-3 justify-content-end">
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"
+                    style="font-size: 0.85rem; opacity: 0.6;"></button>
+            </div>
+            <div class="modal-body text-center px-4 pb-4 pt-1">
+                <h5 class="modal-title fw-bold text-dark mb-3" id="confirmModalTitle"
+                    style="font-size: 1.35rem; letter-spacing: -0.2px;">Title</h5>
+                <p class="mb-2 text-secondary fw-semibold px-2" id="confirmModalTextMain"
+                    style="font-size: 0.95rem; line-height: 1.5; color: var(--c-text-sub) !important;">Main message</p>
+                <p class="text-muted small px-3 mb-0" id="confirmModalTextSub"
+                    style="font-size: 0.85rem; line-height: 1.4;">Sub message</p>
+            </div>
+            <div class="modal-footer border-0 justify-content-center pb-4 pt-0 gap-2 px-4">
+                <button type="button" class="btn px-4 py-2 fw-bold text-white shadow-sm" data-bs-dismiss="modal"
+                    id="confirmModalCancelBtn"
+                    style="border-radius: 10px; background-color: var(--bs-secondary); font-size: 0.9rem; min-width: 110px; transition: all 0.2s;">Cancel</button>
+                <button type="button"
+                    class="btn px-4 py-2 fw-bold text-white shadow-sm d-inline-flex align-items-center justify-content-center gap-2"
+                    id="confirmModalConfirmBtn"
+                    style="border-radius: 10px; font-size: 0.9rem; min-width: 140px; transition: all 0.2s;">
+                    <i class="" id="confirmModalIcon"></i>
+                    <span id="confirmModalConfirmText">Confirm</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    #customConfirmModal .btn-close:focus {
+        box-shadow: none;
+    }
+
+    #customConfirmModal .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12) !important;
+    }
+</style>
+
+<script>
+    // Helper to show custom confirmation modal
+    window.showCustomConfirm = function ({ title, mainText, subText, confirmText, confirmClass, iconClass, onConfirm }) {
+        const modal = new bootstrap.Modal(document.getElementById('customConfirmModal'));
+
+        document.getElementById('confirmModalTitle').textContent = title;
+        document.getElementById('confirmModalTextMain').innerHTML = mainText;
+        document.getElementById('confirmModalTextSub').textContent = subText;
+
+        const confirmBtn = document.getElementById('confirmModalConfirmBtn');
+        confirmBtn.className = `btn px-4 py-2 fw-bold text-white shadow-sm d-inline-flex align-items-center justify-content-center gap-2 ${confirmClass}`;
+
+        const confirmTextSpan = document.getElementById('confirmModalConfirmText');
+        confirmTextSpan.textContent = confirmText;
+
+        const icon = document.getElementById('confirmModalIcon');
+        if (iconClass) {
+            icon.className = `ti ${iconClass}`;
+            icon.style.display = '';
+        } else {
+            icon.style.display = 'none';
+        }
+
+        // Remove previous listeners
+        const newConfirmBtn = confirmBtn.cloneNode(true);
+        confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+
+        newConfirmBtn.addEventListener('click', function () {
+            modal.hide();
+            onConfirm();
+        });
+
+        modal.show();
+    };
 </script>
 
 <!-- Assignment Editor Modal (Dual Assignment Workflow) -->
@@ -1694,6 +1784,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 const val = parseInt(input.value) || 0;
                 const item = retReviewItems.find(x => x.indicator_id === indId);
                 if (item) item.reviewed_quantity = val;
+
+                // Live-update the indicator text to reflect the new quantity.
+                const descEl = document.getElementById(`ret-item-desc-${indId}`);
+                if (descEl) {
+                    descEl.textContent = window.generateIpcrDescription(
+                        input.dataset.indicatorText, val,
+                        input.dataset.durValue, input.dataset.durUnit);
+                }
+
                 checkRetEdits();
             } else if (input.classList.contains('ret-item-remarks-input')) {
                 const val = input.value;
@@ -1834,12 +1933,17 @@ document.addEventListener('DOMContentLoaded', function() {
             const origQtyDisplay = item.original_quantity === -1
                 ? '0'
                 : item.original_quantity;
-            const previewDesc = window.renderIndicatorPreview(item.indicator_description);
+            // Live description: regenerated from the indicator's own template using the
+            // *actual* reviewed quantity, so it stays in sync as the RET Chair edits the
+            // Reviewed Qty input instead of freezing on the indicator's display-only default.
+            const previewDesc = window.generateIpcrDescription(
+                item.indicator_description, item.reviewed_quantity,
+                item.target_duration_value, item.target_duration_unit);
 
             tr.innerHTML = `
                 <td><span class="badge bg-light text-dark border small">${displayCat}</span></td>
                 <td>
-                    <div class="small fw-semibold">${escapeHtml(previewDesc)}</div>
+                    <div class="small fw-semibold ret-item-desc" id="ret-item-desc-${item.indicator_id}">${escapeHtml(previewDesc)}</div>
                     ${item.original_quantity === -1 ? '<span class="badge bg-info text-dark mt-1" style="font-size: 0.75rem; width: fit-content; display: block;">Added by RET</span>' : ''}
                 </td>
                 <td class="text-center text-muted">${origQtyDisplay}</td>
@@ -1848,6 +1952,9 @@ document.addEventListener('DOMContentLoaded', function() {
                            value="${item.reviewed_quantity}"
                            min="1"
                            data-indicator-id="${item.indicator_id}"
+                           data-indicator-text="${escapeHtml(item.indicator_description || '')}"
+                           data-dur-value="${item.target_duration_value != null ? item.target_duration_value : ''}"
+                           data-dur-unit="${item.target_duration_unit != null ? item.target_duration_unit : ''}"
                            aria-label="Reviewed quantity for ${escapeHtml(previewDesc)}"
                            ${isDecided ? 'disabled' : ''}>
                 </td>

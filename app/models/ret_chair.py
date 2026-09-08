@@ -585,10 +585,13 @@ def get_ret_review_items(cursor, review_id):
             ri.reviewed_quantity,
             ri.item_remarks,
             mi.indicator_description,
-            tc.category_name
+            tc.category_name,
+            dt.target_duration_value,
+            dt.target_duration_unit
         FROM tbl_ipcr_ret_review_items ri
         JOIN tbl_master_indicators mi ON ri.indicator_id = mi.indicator_id
         JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
+        LEFT JOIN tbl_draft_targets dt ON dt.draft_id = ri.draft_id
         WHERE ri.review_id = %s
         ORDER BY tc.category_name, mi.indicator_id
     """

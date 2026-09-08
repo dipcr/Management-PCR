@@ -511,7 +511,11 @@ def get_review_items(cursor, review_id):
             ri.reviewed_quantity,
             ri.item_remarks,
             COALESCE(dt.target_description, mi.indicator_description) AS indicator_description,
+            mi.indicator_description AS indicator_template,
             dt.target_deadline,
+            dt.target_duration_value,
+            dt.target_duration_unit,
+            dt.is_auto_description,
             tc.category_name,
             dt.review_status AS draft_status
         FROM tbl_ipcr_chair_review_items ri
@@ -813,7 +817,18 @@ def get_department_accomplishment_summary(cursor, specialization, term_id):
 def submit_evidence_package_to_dean(conn, cursor, emp_id, term_id):
     """
     Submits a fully approved evidence package for a faculty member to the Dean for final verification.
+
+    Re-checks readiness server-side rather than trusting the caller -- the "Submit to Dean"
+    button is only shown once is_both_approved reads true, but a stale page (or a second
+    request racing an in-progress review) must not be able to forward a package that still
+    has uploaded evidence sitting unapproved. A target with no evidence at all is not blocked
+    -- an incomplete faculty submission is expected and fine; only evidence that was actually
+    uploaded has to be reviewed before the package can move on.
     """
+    from app.models.faculty import enrich_faculty_verification_status
+    status = enrich_faculty_verification_status(cursor, {'emp_id': emp_id}, term_id)
+    if not status.get('is_both_approved'):
+        return False, "Not all evidence has been approved yet. Finish verifying every target before submitting to the Dean."
     try:
         query = """
             UPDATE tbl_committed_targets ct
