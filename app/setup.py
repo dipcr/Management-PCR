@@ -24,6 +24,8 @@ def bootstrap_admin():
         logger.warning(f"ADMIN_PASSWORD rejected by policy: {msg} — skipping bootstrap.")
         return
 
+    conn = None
+    cursor = None
     try:
         conn = mysql.connector.connect(
             host=os.getenv('DB_HOST'),
@@ -40,8 +42,6 @@ def bootstrap_admin():
         )
         if cursor.fetchone()[0] > 0:
             logger.info("Admin account already exists — skipping bootstrap.")
-            cursor.close()
-            conn.close()
             return
 
         logger.info("No admin found. Bootstrapping first admin...")
@@ -71,8 +71,16 @@ def bootstrap_admin():
         conn.commit()
         logger.info(f"Admin account created: {admin_email}")
 
-        cursor.close()
-        conn.close()
-
     except Error as e:
         logger.error(f"Failed to bootstrap admin: {e}")
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass

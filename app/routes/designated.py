@@ -1,3 +1,4 @@
+import functools
 from flask import Blueprint, render_template, session, request, jsonify, redirect, url_for, flash
 from app.models import *
 from app.decorators import role_required, designated_ipcr_required
@@ -9,11 +10,32 @@ from app.models.designated import (
 designated_bp = Blueprint('designated', __name__, url_prefix='/designated')
 
 
+def _with_db_connection(func):
+
+    from app.models.connection import get_db_connection
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            return func(*args, conn=conn, cursor=cursor, **kwargs)
+        finally:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+            try:
+                conn.close()
+            except Exception:
+                pass
+    return wrapper
+
+
 @designated_bp.route('/')
 @designated_ipcr_required
-def designated_dashboard():
-    conn = get_db_connection()
-    cursor = conn.cursor()
+@_with_db_connection
+def designated_dashboard(conn, cursor):
     from app.models.connection import timed_query
 
     emp_id = session.get('user_id')
@@ -444,9 +466,6 @@ def designated_dashboard():
                     """, (term_id, term_id, specialization or ''))
                     requires_instruction = cursor.fetchone()[0] > 0
                     instruction_ready = not requires_instruction
-
-    cursor.close()
-    conn.close()
 
     return render_template('designated_dashboard.html',
                            emp_name=f"{first_name} {last_name}",
