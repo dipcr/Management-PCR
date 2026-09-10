@@ -1,4 +1,4 @@
-def open_new_term(conn, cursor, academic_year, semester, deadline_date,
+def open_new_term(conn, cursor, academic_year, semester,
                   period_start=None, period_end=None):
     """
     Open a term and make it the active one.
@@ -14,10 +14,10 @@ def open_new_term(conn, cursor, academic_year, semester, deadline_date,
         # Insert and activate the new term
         query_open = """
             INSERT INTO tbl_academic_terms
-                (academic_year, semester, deadline_date, period_start, period_end, is_active)
-            VALUES (%s, %s, %s, %s, %s, TRUE)
+                (academic_year, semester, period_start, period_end, is_active)
+            VALUES (%s, %s, %s, %s, TRUE)
         """
-        cursor.execute(query_open, (academic_year, semester, deadline_date,
+        cursor.execute(query_open, (academic_year, semester,
                                     period_start or None, period_end or None))
         new_term_id = cursor.lastrowid
 
@@ -85,7 +85,7 @@ def carry_forward_teaching_load(cursor, new_term_id):
 def get_all_terms(cursor):
     from app.models.connection import timed_query
     query = """
-        SELECT term_id, academic_year, semester, deadline_date,
+        SELECT term_id, academic_year, semester,
                period_start, period_end, is_active
         FROM tbl_academic_terms ORDER BY term_id DESC
     """

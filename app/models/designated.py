@@ -124,6 +124,73 @@ def get_claimed_indicator_ids(cursor, term_id):
     return {r[0] for r in cursor.fetchall()}
 
 
+def get_core_instruction_allocation(cursor, emp_id, term_id):
+    """
+    This person's own personal Instruction share: cascaded to their program by the Dean, then
+    distributed to them specifically by the Program Chair in Phase 1 Target Allocation
+    (tbl_draft_allocation). Rates under Core Functions, never Strategic Priorities/Support —
+    unlike a chair's departmental oversight quota for the same indicator (get_oversight_targets),
+    which is the department's whole number, not a personal share.
+
+    Used both to classify a submitted target as Core (submit_designated_ipcr) and, for a
+    Dean-formulated draft (see save_and_issue_designated_draft_ipcr in app/models/dean.py), to
+    fold this share into tbl_draft_targets at Lock & Commit time — see
+    lock_and_commit_designated_ipcr for why that has to happen there rather than at issue time.
+    """
+    from app.models.connection import timed_query
+    query = """
+        SELECT da.allocation_id, da.indicator_id, da.assigned_quantity, da.custom_description,
+               da.target_deadline, da.target_duration_value, da.target_duration_unit,
+               da.is_auto_description, mi.indicator_description, tc.category_name
+        FROM tbl_draft_allocation da
+        JOIN tbl_master_indicators mi ON da.indicator_id = mi.indicator_id
+        JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
+        WHERE da.emp_id = %s AND mi.term_id = %s
+          AND tc.slug = 'instruction' AND tc.review_lane = 'CHAIR'
+          AND COALESCE(da.assigned_quantity, 0) > 0
+          AND EXISTS (
+              -- A JOIN here (rather than EXISTS) would fan this row out once per matching
+              -- tbl_cascaded_quotas row -- e.g. an indicator cascaded to several departments,
+              -- each getting its own non-College-Wide quota row for it -- silently duplicating
+              -- this person's single personal allocation. The old inline version of this
+              -- query (before it became a shared helper) got away with a JOIN here because its
+              -- only caller collapsed the result into a Python set; every caller now consumes
+              -- full rows, so the duplication is no longer harmless.
+              SELECT 1 FROM tbl_cascaded_quotas cq
+              WHERE cq.indicator_id = mi.indicator_id AND cq.term_id = mi.term_id
+                AND cq.assigned_to_role != 'College-Wide'
+          )
+        ORDER BY mi.indicator_id
+    """
+    return timed_query(cursor, query, (emp_id, term_id), label="get_core_instruction_allocation")
+
+
+def describe_core_instruction_allocation(r):
+    """
+    (description, deadline, is_auto_description) for one get_core_instruction_allocation() row.
+
+    Mirrors the is_auto_description convention used everywhere else: None (never explicitly
+    set) or 1 both mean "still auto-mirroring" -- only an explicit 0, paired with real
+    hand-typed text, means the Program Chair customized this allocation and it must not be
+    silently regenerated. Never falls back to the bare indicator_description on its own --
+    that's the master indicator's own placeholder/example text (e.g. a stale embedded
+    quantity), not this person's real assigned_quantity.
+    """
+    from app.models.ipcr_description import format_ipcr_target_description
+    from app.models.scoring import format_duration
+    dur_value = r.get('target_duration_value')
+    dur_unit = r.get('target_duration_unit')
+    is_auto = r.get('is_auto_description')
+    is_auto = 1 if (is_auto is None or is_auto == 1 or not r.get('custom_description')) else 0
+    if is_auto:
+        desc = format_ipcr_target_description(
+            r['indicator_description'], r['assigned_quantity'], dur_value, dur_unit)
+    else:
+        desc = r['custom_description']
+    deadline = r.get('target_deadline') or format_duration(dur_value, dur_unit)
+    return desc, deadline, is_auto
+
+
 def get_oversight_targets(cursor, emp_id, term_id):
     """
     The cascaded quotas a chair carries on their own IPCR as an administrative function.
@@ -207,6 +274,255 @@ def get_oversight_targets(cursor, emp_id, term_id):
     return rows
 
 
+def get_oversight_indicator_ids(cursor, emp_id, term_id):
+    """
+    The set of indicator_ids cascaded to this chair's oversight role this term (see
+    get_oversight_cascade_role) -- narrower than is_admin_function, which is also 1 for any
+    freely-picked Strategic Priorities/Support pool item, not just a genuine departmental
+    oversight quota. Shared by get_designated_committed_targets (to tag committed rows) and
+    routes/designated.py (to badge draft rows) so both stay in sync off one query.
+    """
+    from app.models.connection import timed_query
+    role = get_oversight_cascade_role(cursor, emp_id)
+    if not role:
+        return set()
+    query = """
+        SELECT cq.indicator_id
+        FROM tbl_cascaded_quotas cq
+        JOIN tbl_master_indicators mi ON cq.indicator_id = mi.indicator_id
+        WHERE cq.term_id = %s AND mi.term_id = %s
+          AND cq.assigned_to_role = %s AND cq.total_target_value > 0
+    """
+    rows = timed_query(cursor, query, (term_id, term_id, role), label="get_oversight_indicator_ids")
+    return {r['indicator_id'] for r in rows}
+
+
+def get_oversight_evidence(cursor, emp_id, term_id, indicator_id):
+    """
+    Aggregates the real work behind one of this chair's Departmental Oversight rows: the
+    scoped faculty who hold their own personal committed target for the same indicator_id
+    (never another chair's own oversight copy -- is_admin_function = 0 excludes that), summed
+    from their already-verification-clean actual_quantity (see
+    recalculate_target_accomplished_quantity, which already nets out Rejected/Returned
+    evidence there); their MAX actual_duration_value (the department isn't done until its
+    last contributor is) and rounded-average efficiency_rating_E (for Client Satisfaction
+    indicators only -- see the aggregation rule inline below); plus the evidence files behind
+    those numbers for a read-only viewer.
+
+    Scope mirrors get_program_chair_evidence_faculty / get_ret_chair_evidence_faculty exactly:
+    a Program Chair's oversight role is their own specialization string; the RET Chair's is
+    ROLE_RET, which has no specialization -- college-wide instead.
+    """
+    from app.models.connection import timed_query
+    from app.models.institution import ROLE_RET
+
+    empty = {
+        'total_actual_quantity': 0,
+        'max_actual_duration_value': None,
+        'avg_efficiency_rating': None,
+        'evidence_count': 0,
+        'evidence_breakdown': [],
+    }
+
+    role = get_oversight_cascade_role(cursor, emp_id)
+    if not role:
+        return empty
+
+    params = [indicator_id, term_id]
+    scope_clause = ""
+    if role != ROLE_RET:
+        scope_clause = "AND ep.specialization = %s"
+        params.append(role)
+
+    query = f"""
+        SELECT ct.target_id, ct.actual_quantity, ct.actual_duration_value, ct.efficiency_rating_E,
+               ep.first_name, ep.last_name
+        FROM tbl_committed_targets ct
+        JOIN tbl_employee_profiles ep ON ct.emp_id = ep.emp_id
+        JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
+        WHERE ct.indicator_id = %s
+          AND mi.term_id = %s
+          AND ct.is_admin_function = 0
+          AND (ep.designation IS NULL OR ep.designation = ''
+               OR ep.designation NOT IN ('Designated Faculty', 'Program Chair', 'RET Chair', 'Dean'))
+          {scope_clause}
+    """
+    rows = timed_query(cursor, query, tuple(params), label="get_oversight_evidence_targets")
+    if not rows:
+        return empty
+
+    total_actual_quantity = sum(r.get('actual_quantity') or 0 for r in rows)
+    # actual_duration_value/efficiency_rating_E are not cleared when a target's only evidence
+    # gets Returned/Rejected after having once been reported
+    # (recalculate_target_accomplished_quantity nets the quantity back to 0 but only
+    # _clear_accomplishment_details_if_unaccomplished, called from the delete path, clears
+    # these) -- guard on actual_quantity > 0 here so a faculty member whose evidence was
+    # returned can't still inflate the department's MAX Timeliness input, or skew its average
+    # Client Satisfaction rating, with values that no longer have any accomplishment behind them.
+    reported_rows = [r for r in rows if (r.get('actual_quantity') or 0) > 0]
+    durations = [r['actual_duration_value'] for r in reported_rows if r.get('actual_duration_value') is not None]
+    max_actual_duration_value = max(durations) if durations else None
+
+    # Client Satisfaction rating (efficiency_rating_E) has no single-value semantic across
+    # multiple contributors the way a summed quantity does -- averaged, rounded to the
+    # nearest whole point on the 1-5 scale (round-half-up, not Python's round-half-to-even,
+    # since a report-facing score rounding 4.5 down to 4 would read as a silent understatement).
+    # Inert for indicators not rated by Client Satisfaction: rate_efficiency() only consults
+    # efficiency_rating_E for that efficiency_type, so setting it here is harmless otherwise.
+    ratings = [r['efficiency_rating_E'] for r in reported_rows if r.get('efficiency_rating_E') is not None]
+    avg_efficiency_rating = int(sum(ratings) / len(ratings) + 0.5) if ratings else None
+
+    faculty_by_target = {r['target_id']: f"{r['first_name']} {r['last_name']}".strip() for r in rows}
+
+    target_ids = list(faculty_by_target.keys())
+    placeholders = ','.join(['%s'] * len(target_ids))
+    ev_query = f"""
+        SELECT evidence_id, target_id, file_path, actual_qty_Q, verification_status
+        FROM tbl_evidence_repo
+        WHERE target_id IN ({placeholders})
+        ORDER BY evidence_id
+    """
+    ev_rows = timed_query(cursor, ev_query, tuple(target_ids), label="get_oversight_evidence_files")
+    evidence_breakdown = [{
+        'evidence_id': ev['evidence_id'],
+        'faculty_name': faculty_by_target.get(ev['target_id'], 'Unknown'),
+        'file_path': ev['file_path'],
+        'actual_qty_Q': ev['actual_qty_Q'],
+        'verification_status': ev['verification_status'],
+    } for ev in ev_rows]
+
+    return {
+        'total_actual_quantity': total_actual_quantity,
+        'max_actual_duration_value': max_actual_duration_value,
+        'avg_efficiency_rating': avg_efficiency_rating,
+        'evidence_count': len(evidence_breakdown),
+        'evidence_breakdown': evidence_breakdown,
+    }
+
+
+def apply_oversight_overrides(cursor, emp_id, term_id, rows):
+    """
+    Post-processes a list of committed-target rows (dicts with at least 'indicator_id',
+    'is_admin_function', and the fields build_actual_accomplishment/compute_target_rating
+    need) so that every genuine Departmental Oversight row reflects the scoped faculty's
+    real work instead of its own (never-uploaded-to) actual_quantity/actual_duration_value.
+
+    This is the one place the override happens, called from both
+    get_designated_committed_targets (the Evidence Gathering dashboard/readiness gate) and
+    get_faculty_committed_targets (the scoring engine via compute_ipcr_score, and the printed
+    IPCR via build_ipcr_form) -- those two functions are a genuinely separate pair of queries
+    against tbl_committed_targets, not layers on top of one another, so both need this call
+    for the aggregation to reach the dashboard, the rating, and the print consistently.
+    A no-op for anyone with no oversight role (get_oversight_indicator_ids returns an empty
+    set immediately), which is every Regular Faculty member.
+    """
+    from app.models.scoring import build_actual_accomplishment, client_satisfaction_label, compute_target_rating
+
+    oversight_ids = get_oversight_indicator_ids(cursor, emp_id, term_id)
+    if not oversight_ids:
+        for r in rows:
+            r['is_oversight_cascade'] = False
+        return rows
+
+    for r in rows:
+        r['is_oversight_cascade'] = bool(r.get('is_admin_function')) and r.get('indicator_id') in oversight_ids
+        if not r['is_oversight_cascade']:
+            continue
+        agg = get_oversight_evidence(cursor, emp_id, term_id, r['indicator_id'])
+        r['actual_quantity'] = agg['total_actual_quantity']
+        r['actual_duration_value'] = agg['max_actual_duration_value']
+        r['evidence_count'] = agg['evidence_count']
+        # Only meaningful for a Client Satisfaction indicator (rate_efficiency ignores this
+        # field for every other efficiency_type) -- see get_oversight_evidence's
+        # avg_efficiency_rating for the aggregation rule (rounded average across contributors).
+        r['efficiency_rating_E'] = agg['avg_efficiency_rating']
+        r['actual_accomplishment'] = build_actual_accomplishment(
+            r.get('indicator_description'),
+            r.get('actual_quantity'),
+            r.get('actual_duration_value'),
+            r.get('target_duration_unit'),
+            client_satisfaction_label(r.get('efficiency_rating_E')),
+            raw_indicator_description=r.get('raw_indicator_description'),
+            is_auto_description=r.get('is_auto_description'),
+        )
+        r['rating'] = compute_target_rating(r)
+    return rows
+
+
+def update_oversight_draft_deadline(conn, cursor, emp_id, draft_id, duration_value, duration_unit):
+    """
+    Lets a chair correct their own Departmental Oversight row's deadline before locking -- the
+    one field on that row that's never had any source but the chair's own input (see
+    get_oversight_targets: quantity is the department's fixed cascade, never editable; the
+    deadline has no other source at all). This is deliberately its own narrow save, separate
+    from the full submit/re-submit path: everything else about a Dean-formulated draft stays
+    read-only (see routes/designated.py's can_edit, always False for Program Chair/RET Chair/
+    Dean) right up to Lock & Commit.
+
+    Ownership, oversight-row identity, and not-yet-locked are all re-verified here -- the UI
+    only ever renders this control for a genuine, still-unlocked oversight row, but that's not
+    enforcement on its own against a direct POST.
+    """
+    from app.models.scoring import DURATION_UNITS, format_duration
+    from app.models.ipcr_description import format_ipcr_target_description
+
+    if duration_unit not in DURATION_UNITS:
+        return False, "Invalid duration unit."
+    try:
+        duration_value = int(duration_value)
+        if duration_value <= 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        return False, "Duration must be a positive number."
+
+    try:
+        cursor.execute("""
+            SELECT dt.emp_id, dt.indicator_id, dt.is_admin_function, dt.proposed_quantity,
+                   mi.indicator_description, mi.term_id
+            FROM tbl_draft_targets dt
+            JOIN tbl_master_indicators mi ON dt.indicator_id = mi.indicator_id
+            WHERE dt.draft_id = %s
+        """, (draft_id,))
+        row = cursor.fetchone()
+        if not row:
+            return False, "Target not found."
+        if row[0] != emp_id:
+            return False, "You can only update your own targets."
+        if not row[2]:
+            return False, "This is not a Departmental Oversight target."
+
+        term_id = row[5]
+        if row[1] not in get_oversight_indicator_ids(cursor, emp_id, term_id):
+            return False, "This is not a Departmental Oversight target."
+
+        # Scoped to this same term -- a plain "has this emp_id ever committed anything"
+        # check would permanently lock out anyone with committed targets from a *past* term,
+        # which is every returning employee after their first term.
+        cursor.execute("""
+            SELECT COUNT(*) FROM tbl_committed_targets ct
+            JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
+            WHERE ct.emp_id = %s AND mi.term_id = %s
+        """, (emp_id, term_id))
+        if cursor.fetchone()[0] > 0:
+            return False, "Your IPCR is already locked and can no longer be edited."
+
+        new_description = format_ipcr_target_description(
+            row[4], row[3], duration_value, duration_unit)
+        new_deadline = format_duration(duration_value, duration_unit)
+
+        cursor.execute("""
+            UPDATE tbl_draft_targets
+            SET target_duration_value = %s, target_duration_unit = %s,
+                target_description = %s, target_deadline = %s
+            WHERE draft_id = %s
+        """, (duration_value, duration_unit, new_description, new_deadline, draft_id))
+        conn.commit()
+        return True, "Deadline updated."
+    except Exception as e:
+        conn.rollback()
+        return False, str(e)
+
+
 def submit_designated_ipcr(conn, cursor, emp_id, term_id, selected_targets, custom_targets, oversight_durations=None):
     """
     Transactionally processes standard baseline selections and inserts custom ad-hoc targets
@@ -250,19 +566,7 @@ def submit_designated_ipcr(conn, cursor, emp_id, term_id, selected_targets, cust
         #
         # Derived here rather than taken from the form so the category cannot be spoofed or
         # drift out of step with what the dashboard displayed.
-        cursor.execute("""
-            SELECT da.indicator_id
-            FROM tbl_draft_allocation da
-            JOIN tbl_master_indicators mi ON da.indicator_id = mi.indicator_id
-            JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
-            JOIN tbl_cascaded_quotas cq ON mi.indicator_id = cq.indicator_id AND cq.term_id = mi.term_id
-            WHERE da.emp_id = %s AND mi.term_id = %s 
-              AND tc.slug = 'instruction'
-              AND tc.review_lane = 'CHAIR'
-              AND cq.assigned_to_role != 'College-Wide'
-              AND COALESCE(da.assigned_quantity, 0) > 0
-        """, (emp_id, term_id))
-        core_indicator_ids = {r[0] for r in cursor.fetchall()}
+        core_indicator_ids = {r['indicator_id'] for r in get_core_instruction_allocation(cursor, emp_id, term_id)}
 
         # A chair's/RET chair's departmental oversight quota (see get_oversight_targets) can
         # be the *same indicator* as their personal Core Function allocation above — e.g. the
@@ -516,6 +820,11 @@ def get_designated_committed_targets(cursor, emp_id, term_id):
             is_auto_description=r.get('is_auto_description'),
         )
         r['rating'] = compute_target_rating(r)
+
+    # Overrides any genuine Departmental Oversight row's qty/duration/evidence/rating with
+    # the scoped faculty's aggregate -- see apply_oversight_overrides. A no-op for anyone
+    # without an oversight role (every plain Designated Faculty member).
+    apply_oversight_overrides(cursor, emp_id, term_id, rows)
     return rows
 
 
@@ -525,6 +834,8 @@ def check_designated_evidence_readiness(cursor, emp_id, term_id, dpcr_targets):
         return {
             'all_evidence_ready': False,
             'evidence_submitted': False,
+            'has_missing_timeliness': False,
+            'targets_missing_timeliness': [],
             'total_targets': 0,
             'targets_with_evidence': 0,
             'targets_met_qty': 0
@@ -536,16 +847,33 @@ def check_designated_evidence_readiness(cursor, emp_id, term_id, dpcr_targets):
     targets_with_evidence = 0
     targets_met_qty = 0
     submitted_count = 0
+    targets_missing_timeliness = []
 
     for t in dpcr_targets:
-        ev_list = t.get('evidence_list')
-        if ev_list is None:
-            ev_list = get_evidence_by_target(cursor, t['target_id'])
-            t['evidence_list'] = ev_list
+        if t.get('is_oversight_cascade'):
+            # Its evidence lives on scoped faculty's own committed targets, not this row's
+            # own target_id -- get_designated_committed_targets already aggregated it into
+            # actual_duration_value/evidence_count. Exempt from the raw per-file lookup and
+            # from the missing-timeliness block below: a chair has no way to make a scoped
+            # faculty member enter a duration themselves (same rationale as the
+            # target-duration edge case documented in the evidence-verification plan).
+            if t.get('evidence_count', 0) > 0:
+                targets_with_evidence += 1
+        else:
+            ev_list = t.get('evidence_list')
+            if ev_list is None:
+                ev_list = get_evidence_by_target(cursor, t['target_id'])
+                t['evidence_list'] = ev_list
 
-        valid_evs = [e for e in ev_list if e.get('verification_status') not in ('Returned', 'Rejected')]
-        if len(valid_evs) > 0:
-            targets_with_evidence += 1
+            valid_evs = [e for e in ev_list if e.get('verification_status') not in ('Returned', 'Rejected')]
+            if len(valid_evs) > 0:
+                targets_with_evidence += 1
+                # Evidence exists but there's nothing to compute Timeliness from -- would
+                # otherwise resolve to a silently-dropped None instead of a real score. 0 is
+                # a legitimate "completed instantly" value (rate_timeliness treats it as
+                # valid too) -- only a genuinely blank duration counts as missing.
+                if t.get('actual_duration_value') is None:
+                    targets_missing_timeliness.append(t.get('indicator_description') or f"target #{t.get('target_id')}")
 
         actual_q = t.get('actual_quantity') or 0
         assigned_q = t.get('assigned_quantity') or t.get('total_target_value') or 0
@@ -555,16 +883,20 @@ def check_designated_evidence_readiness(cursor, emp_id, term_id, dpcr_targets):
         if t.get('status') in ('Submitted', 'Pending Verification', 'Verified', 'Submitted to Dean', 'Dean Approved'):
             submitted_count += 1
 
+    has_missing_timeliness = len(targets_missing_timeliness) > 0
+
     # Neither quantity nor evidence needs to be present to submit -- a target a faculty
     # member never accomplished at all is still a valid target to report; scoring.py
     # already handles zero accomplishment gracefully (lowest band, not an error).
     # targets_with_evidence/targets_met_qty stay informational (progress badges) only.
-    all_ready = total_targets > 0
+    all_ready = (total_targets > 0) and not has_missing_timeliness
     evidence_submitted = (submitted_count == total_targets) and (total_targets > 0)
 
     return {
         'all_evidence_ready': all_ready,
         'evidence_submitted': evidence_submitted,
+        'has_missing_timeliness': has_missing_timeliness,
+        'targets_missing_timeliness': targets_missing_timeliness,
         'total_targets': total_targets,
         'targets_with_evidence': targets_with_evidence,
         'targets_met_qty': targets_met_qty
@@ -580,8 +912,9 @@ def submit_designated_evidences(conn, cursor, emp_id, term_id):
     if readiness['evidence_submitted']:
         return False, "Evidences have already been submitted for verification."
 
-    # readiness['all_evidence_ready'] is just total_targets > 0 -- already guaranteed by the
-    # dpcr_targets check above, so there's nothing left to gate on here.
+    if readiness.get('has_missing_timeliness'):
+        names = ', '.join(readiness['targets_missing_timeliness'])
+        return False, f"Provide a completion duration for evidence already uploaded on: {names}."
 
     # Every Designated Faculty member -- plain or a Program Chair/RET Chair/Dean's own
     # IPCR -- has their evidence reviewed by the Dean, not a Program Chair; only Regular
@@ -614,6 +947,37 @@ def lock_and_commit_designated_ipcr(conn, cursor, emp_id, term_id):
             return False, "Your IPCR must be approved by the Dean before locking."
 
         review_id = review_row[1]
+
+        # A Dean-formulated draft (save_and_issue_designated_draft_ipcr, app/models/dean.py)
+        # never inserts this person's own Core instruction share into tbl_draft_targets at
+        # issue time -- it can't, since the Program Chair may distribute it to them before or
+        # after the Dean issues the rest of the draft. Folding it in here, at commit time,
+        # makes the two actions order-independent: whichever happens last, this still picks it
+        # up. A no-op for the classic self-submitted flow, where the row already exists
+        # (inserted by submit_designated_ipcr from the person's own checkbox selection).
+        for r in get_core_instruction_allocation(cursor, emp_id, term_id):
+            # is_admin_function = 0 specifically: the same indicator can also carry this
+            # person's departmental oversight copy (is_admin_function = 1, inserted separately
+            # from get_oversight_targets) — that row existing must never be mistaken for the
+            # personal Core share already being present. fetchall() (not fetchone()) drains the
+            # cursor fully even if duplicates ever exist, since this connection isn't buffered
+            # and a left-over unread row would break the very next execute() on this cursor.
+            cursor.execute(
+                "SELECT draft_id FROM tbl_draft_targets WHERE emp_id = %s AND indicator_id = %s AND is_admin_function = 0",
+                (emp_id, r['indicator_id'])
+            )
+            if cursor.fetchall():
+                continue
+            desc, deadline, is_auto = describe_core_instruction_allocation(r)
+            dur_value = r.get('target_duration_value')
+            dur_unit = r.get('target_duration_unit')
+            cursor.execute("""
+                INSERT INTO tbl_draft_targets (emp_id, indicator_id, proposed_quantity, review_status,
+                                               target_description, target_deadline,
+                                               target_duration_value, target_duration_unit, is_admin_function,
+                                               is_auto_description)
+                VALUES (%s, %s, %s, 'Approved', %s, %s, %s, %s, 0, %s)
+            """, (emp_id, r['indicator_id'], r['assigned_quantity'], desc, deadline, dur_value, dur_unit, is_auto))
 
         # Fetch approved draft items
         cursor.execute("""

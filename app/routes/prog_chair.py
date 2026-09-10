@@ -108,6 +108,10 @@ def prog_chair_dashboard():
             approved_evidence_faculty_list = [f for f in evidence_faculty_list if f.get('is_both_approved')]
             approved_regular_evidence_list = approved_evidence_faculty_list
 
+            # Department-wide quota vs. Approved-only accomplishment, one row per indicator
+            # cascaded to this specialization -- see get_department_accomplishment_summary.
+            department_accomplishment_summary = get_department_accomplishment_summary(cursor, specialization, term_id)
+
         return render_template(
             'prog_chair_dashboard.html',
             active_term=active_term,
@@ -124,6 +128,7 @@ def prog_chair_dashboard():
             pending_evidence_faculty_list=pending_evidence_faculty_list if 'pending_evidence_faculty_list' in locals() else [],
             approved_evidence_faculty_list=approved_evidence_faculty_list if 'approved_evidence_faculty_list' in locals() else [],
             approved_regular_evidence_list=approved_regular_evidence_list if 'approved_regular_evidence_list' in locals() else [],
+            department_accomplishment_summary=department_accomplishment_summary if 'department_accomplishment_summary' in locals() else [],
             has_own_ipcr=True
         )
     finally:
@@ -225,8 +230,7 @@ def prog_chair_faculty_evidence_details(emp_id):
 
         for t in targets:
             cat_name = t.get('category_name', '')
-            is_ret = ('Research' in cat_name) or ('Extension' in cat_name)
-            t['is_ret'] = is_ret
+            t['is_ret'] = ('Research' in cat_name) or ('Extension' in cat_name)
             # A designated faculty/chair's Core Functions vs Strategic Priorities & Support
             # Functions split is driven by is_admin_function, not category — the same
             # indicator (e.g. Instruction) can be either depending on whether this is their
@@ -235,12 +239,9 @@ def prog_chair_faculty_evidence_details(emp_id):
             if designated:
                 t['is_core'] = not bool(t.get('is_admin_function'))
 
-            # Program Chair can ONLY view evidence files for Instructions & Support, NOT Research & Extension
-            if not is_ret:
-                ev_list = get_evidence_by_target(cursor, t['target_id'])
-                t['evidence_list'] = ev_list
-            else:
-                t['evidence_list'] = []
+            # Program Chair now approves all evidence for regular faculty, Research &
+            # Extension included.
+            t['evidence_list'] = get_evidence_by_target(cursor, t['target_id'])
 
         return jsonify({
             'success': True,
@@ -518,7 +519,11 @@ def review_ipcr(emp_id):
                     'draft_id': item['draft_id'],
                     'indicator_id': item['indicator_id'],
                     'indicator_description': item['indicator_description'],
+                    'indicator_template': item.get('indicator_template'),
                     'target_deadline': item.get('target_deadline') or '',
+                    'target_duration_value': item.get('target_duration_value'),
+                    'target_duration_unit': item.get('target_duration_unit'),
+                    'is_auto_description': item.get('is_auto_description'),
                     'category_name': item['category_name'],
                     'original_quantity': max(0, item['original_quantity']) if item['original_quantity'] is not None else 0,
                     'reviewed_quantity': item['reviewed_quantity'],

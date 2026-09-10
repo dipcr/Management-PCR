@@ -585,10 +585,13 @@ def get_ret_review_items(cursor, review_id):
             ri.reviewed_quantity,
             ri.item_remarks,
             mi.indicator_description,
-            tc.category_name
+            tc.category_name,
+            dt.target_duration_value,
+            dt.target_duration_unit
         FROM tbl_ipcr_ret_review_items ri
         JOIN tbl_master_indicators mi ON ri.indicator_id = mi.indicator_id
         JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
+        LEFT JOIN tbl_draft_targets dt ON dt.draft_id = ri.draft_id
         WHERE ri.review_id = %s
         ORDER BY tc.category_name, mi.indicator_id
     """
@@ -767,6 +770,14 @@ def save_ret_review_items(cursor, conn, review_id, items):
 
 
 def get_ret_chair_evidence_faculty(cursor, term_id):
+    """
+    Regular faculty with Research/Extension targets whose evidence Program Chair has fully
+    approved — a read-only monitor list for the RET Chair. RET Chair no longer verifies
+    anyone's evidence (not even designated faculty's, which the Dean reviews directly), so
+    designated designations are excluded here the same way
+    get_program_chair_evidence_faculty() excludes them from Program Chair's list, and only
+    already-approved faculty are returned — there is nothing left for RET Chair to act on.
+    """
     from app.models.connection import timed_query
     from app.models.faculty import enrich_faculty_verification_status
     query = """
@@ -779,11 +790,16 @@ def get_ret_chair_evidence_faculty(cursor, term_id):
         JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
         JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
         WHERE mi.term_id = %s AND (tc.category_name LIKE '%%Research%%' OR tc.category_name LIKE '%%Extension%%')
+          AND (ep.designation IS NULL OR ep.designation = ''
+               OR ep.designation NOT IN ('Designated Faculty', 'Program Chair', 'RET Chair', 'Dean'))
         GROUP BY ep.emp_id, ep.first_name, ep.last_name, ep.academic_rank, ep.specialization
         HAVING MAX(CASE WHEN ct.status IN ('Submitted', 'Pending Verification', 'Verified', 'Submitted to Dean', 'Dean Approved') THEN 1 ELSE 0 END) = 1
         ORDER BY ep.last_name, ep.first_name
     """
     rows = timed_query(cursor, query, (term_id,), label="get_ret_chair_evidence_faculty")
+    approved = []
     for r in rows:
         enrich_faculty_verification_status(cursor, r, term_id)
-    return rows
+        if r.get('is_both_approved'):
+            approved.append(r)
+    return approved

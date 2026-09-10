@@ -1,0 +1,33 @@
+-- MIGRATION_group19.sql
+-- Add tbl_cascaded_quotas.allow_chair_allocation: gates whether a College-Wide
+-- quota cascades down to Program Chairs for per-faculty distribution, or stays
+-- Silent / Dean Only.
+--
+-- Context: previously every College-Wide Support quota automatically appeared
+-- on every Program Chair's Target Allocation table, including quotas that were
+-- meant as Dean/institutional-only duties. Chairs had to remember to leave
+-- those at 0 -- one accidental "Auto Divide All" click would push an
+-- institutional duty onto every regular faculty member's IPCR.
+--
+-- Defaults to 0 (Silent) so nothing cascades to chairs unless the Dean
+-- explicitly flips it on. There is no active-term data to backfill for this
+-- column yet (no quotas have been cascaded for the current active term), so a
+-- plain DEFAULT 0 is safe -- no separate backfill UPDATE needed.
+--
+-- Changed alongside this migration (see the same commit):
+--   app/models/dean.py       - save_cascaded_quotas() inserts the new column
+--   app/routes/dean.py       - cascade_quotas() reads the per-indicator toggle
+--                               from the form; College-Wide defaults to 0,
+--                               department/RET rows default to 1 (unused by
+--                               the Chair filter, kept for column consistency)
+--   app/templates/dean_dashboard.html - Cascade to Chairs / Silent toggle on
+--                               the College-Wide column, read-only badge once
+--                               quotas are locked
+--   app/models/prog_chair.py - get_chair_indicators() only pulls in a
+--                               College-Wide row when allow_chair_allocation = 1
+--   db/schema.sql             - allow_chair_allocation column definition
+--
+-- Run AFTER MIGRATION_group18.sql.
+
+ALTER TABLE `tbl_cascaded_quotas`
+ADD COLUMN `allow_chair_allocation` TINYINT(1) NOT NULL DEFAULT 0;

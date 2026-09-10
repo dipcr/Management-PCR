@@ -44,6 +44,9 @@ app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME') or os.getenv('SMTP_USER
 app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD') or os.getenv('SMTP_PASSWORD') or ''
 app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', 'D-IPCR System <no-reply@cict.edu.ph>')
 app.config['MAIL_SUPPRESS_SEND'] = (os.getenv('MAIL_SUPPRESS_SEND') or 'false').lower() in ('1', 'true', 'yes')
+# Flask-Mail defaults this to app.debug, which dumps the raw SMTP protocol exchange
+# (every "send:"/"data:" line) to the terminal whenever FLASK_DEBUG is on.
+app.config['MAIL_DEBUG'] = False
 
 mail = Mail(app)
 

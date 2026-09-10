@@ -243,6 +243,107 @@ def is_faculty_ret_eligible(cursor, emp_id, term_id):
     return cursor.fetchone()[0] > 0
 
 
+def is_faculty_resubmission(cursor, emp_id, term_id):
+    """
+    True once a Program Chair review record exists for this faculty/term — i.e. this is
+    at least the faculty member's second pass through the submit pipeline (a first
+    submission already happened, or was returned for corrections). Shared by the dashboard
+    gating check, the submit route, and submit_faculty_ipcr so all three agree on what
+    counts as a resubmission.
+    """
+    cursor.execute("""
+        SELECT 1 FROM tbl_ipcr_chair_review
+        WHERE emp_id = %s AND term_id = %s
+        LIMIT 1
+    """, (emp_id, term_id))
+    return cursor.fetchone() is not None
+
+
+def check_faculty_draft_gating(cursor, emp_id, term_id):
+    """
+    Regular Faculty may only submit an *initial* draft IPCR once the Program Chair has
+    allocated their department's baseline Instruction/Support targets and the RET Chair
+    has configured Research/Extension rules for their rank band. Without this, a faculty
+    member in an unallocated department gets nothing but the mandatory Teaching Load
+    target synthesized, is_faculty_ret_eligible() evaluates False for lack of any RET
+    rule, and the submission silently skips RET review entirely, delivering a crippled
+    single-item IPCR straight to the Program Chair.
+
+    Bypassed for non-Regular-Faculty designations (they don't use this submit pipeline)
+    and for resubmissions — by the time a return/resubmit cycle exists the prerequisites
+    were already met once, and re-blocking on a later change (e.g. the chair adjusting an
+    allocation) would strand a returned IPCR with no way to resubmit.
+    """
+    result = {
+        'can_submit': True,
+        'has_chair_instruction': True,
+        'has_chair_support': True,
+        'has_ret_extension': True,
+        'has_ret_research': True,
+        'missing_reasons': [],
+    }
+    if not term_id:
+        return result
+
+    cursor.execute(
+        "SELECT designation, academic_rank, specialization FROM tbl_employee_profiles WHERE emp_id = %s",
+        (emp_id,))
+    row = cursor.fetchone()
+    designation = row[0] if row else None
+    academic_rank = row[1] if row else None
+    specialization = row[2] if row else None
+
+    if designation != 'Regular Faculty':
+        return result
+
+    if is_faculty_resubmission(cursor, emp_id, term_id):
+        return result
+
+    # Scoped by specialization (not just this emp_id) to match how submit_faculty_ipcr
+    # itself pulls chair allocations — a faculty member who joined after the Program
+    # Chair's batch save has no tbl_draft_allocation row of their own yet, but the
+    # department-wide allocation still applies to them.
+    cursor.execute("""
+        SELECT DISTINCT tc.slug
+        FROM tbl_draft_allocation da
+        JOIN tbl_master_indicators mi ON da.indicator_id = mi.indicator_id
+        JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
+        JOIN tbl_employee_profiles ep ON da.emp_id = ep.emp_id
+        WHERE mi.term_id = %s
+          AND ep.specialization = %s
+          AND ep.designation = 'Regular Faculty'
+          AND tc.slug IN ('instruction', 'support')
+          AND da.assigned_quantity > 0
+    """, (term_id, specialization))
+    chair_slugs = {r[0] for r in cursor.fetchall()}
+    result['has_chair_instruction'] = 'instruction' in chair_slugs
+    result['has_chair_support'] = 'support' in chair_slugs
+
+    if not academic_rank:
+        result['has_ret_extension'] = False
+        result['has_ret_research'] = False
+    else:
+        ret_menu = get_faculty_ret_menu(cursor, academic_rank, term_id)
+        result['has_ret_extension'] = len(ret_menu['extension_indicators']) > 0
+        result['has_ret_research'] = ret_menu['research_required'] > 0
+
+    band = rank_band(academic_rank)
+    if not result['has_chair_instruction']:
+        result['missing_reasons'].append("Program Chair has not allocated Strategic Priorities (Instruction) targets for your specialization")
+    if not result['has_chair_support']:
+        result['missing_reasons'].append("Program Chair has not allocated Support Function targets for your specialization")
+    if not academic_rank:
+        result['missing_reasons'].append("Your profile has no academic rank set, so RET Chair rules cannot be matched")
+    else:
+        if not result['has_ret_extension']:
+            result['missing_reasons'].append(f"RET Chair has not configured Extension targets for your rank ({band})")
+        if not result['has_ret_research']:
+            result['missing_reasons'].append(f"RET Chair has not configured a Research target pool for your rank ({band})")
+
+    result['can_submit'] = len(result['missing_reasons']) == 0
+    return result
+
+
 def submit_faculty_ipcr(conn, cursor, emp_id, term_id, selected_research_targets):
     """
     selected_research_targets parameter format:
@@ -263,14 +364,11 @@ def submit_faculty_ipcr(conn, cursor, emp_id, term_id, selected_research_targets
         rank_row = cursor.fetchone()
         emp_rank_band = rank_band(rank_row[0] if rank_row else None)
 
-        # Check if they are resubmitting (meaning a review record already exists for the active term)
-        is_resubmission = False
-        cursor.execute("""
-            SELECT 1 FROM tbl_ipcr_chair_review 
-            WHERE emp_id = %s AND term_id = %s
-            LIMIT 1
-        """, (emp_id, active_term_id))
-        is_resubmission = cursor.fetchone() is not None
+        is_resubmission = is_faculty_resubmission(cursor, emp_id, active_term_id)
+        if not is_resubmission:
+            gating = check_faculty_draft_gating(cursor, emp_id, active_term_id)
+            if not gating['can_submit']:
+                return False, "Cannot submit draft IPCR. Prerequisites not met: " + "; ".join(gating['missing_reasons'])
 
         ret_eligible = is_faculty_ret_eligible(cursor, emp_id, active_term_id)
         ret_editable = False
@@ -399,6 +497,19 @@ def submit_faculty_ipcr(conn, cursor, emp_id, term_id, selected_research_targets
                         ret_editable = False
 
             if ret_editable:
+                # Capture any quantity the RET Chair already edited during a prior review
+                # (synced into proposed_quantity by save_ret_review_items/decide_ret_review)
+                # before the rewrite below wipes it — otherwise a resubmit that doesn't touch
+                # a given indicator silently resets it back to the rank menu's default qty.
+                cursor.execute("""
+                    SELECT dt.indicator_id, dt.proposed_quantity
+                    FROM tbl_draft_targets dt
+                    JOIN tbl_master_indicators mi ON dt.indicator_id = mi.indicator_id
+                    JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
+                    WHERE dt.emp_id = %s AND tc.slug = 'research'
+                """, (emp_id,))
+                prior_research_qty = {ind_id: qty for ind_id, qty in cursor.fetchall()}
+
                 # Rewrite only Research selections. Extension is distributed separately
                 # and must survive this rewrite (scoped to slug='research').
                 cursor.execute("""
@@ -424,7 +535,8 @@ def submit_faculty_ipcr(conn, cursor, emp_id, term_id, selected_research_targets
                         LIMIT 1
                     """, (emp_rank_band, res_ind_id))
                     row = cursor.fetchone()
-                    res_qty = row[0] if (row and row[0] is not None) else 1
+                    default_qty = row[0] if (row and row[0] is not None) else 1
+                    res_qty = prior_research_qty.get(res_ind_id, default_qty)
                     res_desc = row[1] if row else None
                     res_dur_value = row[2] if row else None
                     res_dur_unit = row[3] if row else None
@@ -657,6 +769,16 @@ def get_faculty_committed_targets(cursor, emp_id, term_id):
             is_auto_description=r.get('is_auto_description'),
         )
         r['rating'] = compute_target_rating(r)
+
+    # get_faculty_committed_targets is the shared source compute_ipcr_score (every rating
+    # summary) and build_ipcr_form (the printed IPCR) both read from, for Regular and
+    # Designated faculty alike -- a Program Chair/RET Chair's Departmental Oversight row has
+    # to be corrected here, not only in get_designated_committed_targets's own (separate)
+    # dashboard query, or the aggregation would show on the Evidence Gathering panel but never
+    # actually count toward the score or the print. No-op for Regular Faculty (no oversight
+    # role) and for anyone with no oversight indicators cascaded to them this term.
+    from app.models.designated import apply_oversight_overrides
+    apply_oversight_overrides(cursor, emp_id, term_id, rows)
     return rows
 
 
@@ -671,19 +793,28 @@ def save_accomplishment_details(conn, cursor, emp_id, target_id, actual_duration
     """
     from app.models.scoring import COMPLETION_STATUSES
     try:
-        cursor.execute(
-            "SELECT emp_id FROM tbl_committed_targets WHERE target_id = %s", (target_id,))
+        cursor.execute("""
+            SELECT ct.emp_id, ct.indicator_id, ct.is_admin_function, mi.term_id
+            FROM tbl_committed_targets ct
+            JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
+            WHERE ct.target_id = %s
+        """, (target_id,))
         row = cursor.fetchone()
         if not row:
             return False, "Target not found."
         if row[0] != emp_id:
             return False, "You can only update your own targets."
 
+        if row[2]:
+            from app.models.designated import get_oversight_indicator_ids
+            if row[1] in get_oversight_indicator_ids(cursor, emp_id, row[3]):
+                return False, ("This is a Departmental Oversight target -- its Accomplished Qty and "
+                                "Timeliness are derived automatically from your department's/RET's "
+                                "faculty evidence.")
+
         if completion_status and completion_status not in COMPLETION_STATUSES:
             return False, "Invalid completion status."
-        # Only a completed target carries a meaningful elapsed duration.
-        if completion_status and completion_status != 'COMPLETED':
-            actual_duration_value = None
+        completion_status = completion_status or 'COMPLETED'
 
         remarks = (print_remarks or '').strip()[:255] or None
         cursor.execute("""
@@ -691,7 +822,7 @@ def save_accomplishment_details(conn, cursor, emp_id, target_id, actual_duration
             SET actual_duration_value = %s, completion_status = %s, efficiency_rating_E = %s,
                 print_remarks = %s
             WHERE target_id = %s
-        """, (actual_duration_value, completion_status or None, efficiency_rating_E,
+        """, (actual_duration_value, completion_status, efficiency_rating_E,
               remarks, target_id))
         conn.commit()
         return True, "Accomplishment details saved."
@@ -796,6 +927,8 @@ def check_faculty_evidence_readiness(cursor, emp_id, term_id, assigned_targets):
             'all_evidence_ready': False,
             'evidence_submitted': False,
             'has_returned_evidence': False,
+            'has_missing_timeliness': False,
+            'targets_missing_timeliness': [],
             'total_targets': 0,
             'targets_with_evidence': 0,
             'targets_met_qty': 0
@@ -806,6 +939,7 @@ def check_faculty_evidence_readiness(cursor, emp_id, term_id, assigned_targets):
     targets_met_qty = 0
     submitted_count = 0
     has_returned_evidence = False
+    targets_missing_timeliness = []
 
     for t in assigned_targets:
         ev_list = t.get('evidence_list')
@@ -816,6 +950,12 @@ def check_faculty_evidence_readiness(cursor, emp_id, term_id, assigned_targets):
         valid_evs = [e for e in ev_list if e.get('verification_status') not in ('Returned', 'Rejected')]
         if len(valid_evs) > 0:
             targets_with_evidence += 1
+            # Evidence exists but there's nothing to compute Timeliness from -- would
+            # otherwise resolve to a silently-dropped None instead of a real score. 0 is
+            # a legitimate "completed instantly" value (rate_timeliness treats it as
+            # valid too) -- only a genuinely blank duration counts as missing.
+            if t.get('actual_duration_value') is None:
+                targets_missing_timeliness.append(t.get('indicator_description') or f"target #{t.get('target_id')}")
 
         if any(e.get('verification_status') in ('Returned', 'Rejected') for e in ev_list):
             has_returned_evidence = True
@@ -828,18 +968,22 @@ def check_faculty_evidence_readiness(cursor, emp_id, term_id, assigned_targets):
         if t.get('status') in ('Submitted', 'Pending Verification', 'Verified', 'Submitted to Dean', 'Dean Approved') and not any(e.get('verification_status') in ('Returned', 'Rejected') for e in ev_list):
             submitted_count += 1
 
+    has_missing_timeliness = len(targets_missing_timeliness) > 0
+
     # Neither quantity nor evidence needs to be present to submit -- a target a faculty
     # member never accomplished at all is still a valid target to report; scoring.py
-    # already handles zero accomplishment gracefully (lowest band, not an error). The one
-    # thing that still blocks submission is an unresolved Returned/Rejected file -- that's
-    # a verifier waiting on a fix, not an unattempted target, and should still be honored.
-    all_ready = (total_targets > 0) and not has_returned_evidence
+    # already handles zero accomplishment gracefully (lowest band, not an error). What still
+    # blocks submission is an unresolved Returned/Rejected file (a verifier waiting on a fix)
+    # or evidence uploaded with no "Completed in" duration to score Timeliness from.
+    all_ready = (total_targets > 0) and not has_returned_evidence and not has_missing_timeliness
     evidence_submitted = (submitted_count == total_targets) and (total_targets > 0) and not has_returned_evidence
 
     return {
         'all_evidence_ready': all_ready,
         'evidence_submitted': evidence_submitted,
         'has_returned_evidence': has_returned_evidence,
+        'has_missing_timeliness': has_missing_timeliness,
+        'targets_missing_timeliness': targets_missing_timeliness,
         'total_targets': total_targets,
         'targets_with_evidence': targets_with_evidence,
         'targets_met_qty': targets_met_qty
@@ -908,6 +1052,10 @@ def submit_faculty_evidences(conn, cursor, emp_id, term_id):
     if readiness['evidence_submitted']:
         return False, "Evidences have already been submitted for verification."
 
+    if readiness.get('has_missing_timeliness'):
+        names = ', '.join(readiness['targets_missing_timeliness'])
+        return False, f"Provide a completion duration for evidence already uploaded on: {names}."
+
     if not readiness['all_evidence_ready']:
         return False, "One or more targets have evidence returned for revision. Please address it before resubmitting."
 
@@ -930,7 +1078,7 @@ def submit_faculty_evidences(conn, cursor, emp_id, term_id):
         return False, f"Error submitting evidences: {str(e)}"
 
 
-def enrich_faculty_verification_status(cursor, faculty_dict, term_id):
+def enrich_faculty_verification_status(cursor, faculty_dict, term_id, reviewer_label=None):
     """
     Computes the verification status for a faculty member across Program Chair (CHAIR) and RET Chair (RET).
     Sets:
@@ -940,14 +1088,37 @@ def enrich_faculty_verification_status(cursor, faculty_dict, term_id):
       - chair_finished: True if Program Chair target evidences are all approved (or no Chair targets exist)
       - ret_finished: True if RET target evidences are all approved, or there are no RET targets /
         no RET evidence was uploaded (nothing for the RET Chair to verify)
+
+    Regular Faculty bypass the RET gate entirely: RET Chair no longer verifies their
+    evidence, Program Chair approves everything (Instruction, Support, Research, Extension
+    alike), so ret_finished is forced True for them regardless of RET-categorized evidence
+    state. Designated faculty keep the full dual-gate — this isn't about RET Chair review
+    (they never review designated faculty's evidence either; the Dean does, directly), it's
+    so Dean's own final-approval gate still requires every evidence file, R&E-categorized
+    ones included, to be explicitly reviewed before a designated faculty's package clears.
+
+    The CHAIR/RET lane labels ("Waiting for Program Chair/RET Chair Approval") assume those
+    are the actual reviewers, which is only true on Program Chair's/RET Chair's own dashboards.
+    On the Dean's final-verification page, the Dean is the sole reviewer for both lanes (a
+    Program Chair/RET Chair/Designated Faculty/Dean's own evidence has no one else to review
+    it) -- pass reviewer_label='Dean' there so the status text names the actual approver
+    instead of a role that never touches this package at this stage.
     """
     emp_id = faculty_dict['emp_id']
+    cursor.execute("SELECT designation FROM tbl_employee_profiles WHERE emp_id = %s", (emp_id,))
+    desig_row = cursor.fetchone()
+    designation = (desig_row[0] or '').strip() if desig_row else ''
+    from app.models.criteria import is_designated
+    is_regular_faculty = not is_designated(designation)
+
     cursor.execute("""
-        SELECT 
+        SELECT
             tc.category_name,
             er.evidence_id,
             er.verification_status,
-            ct.status
+            ct.status,
+            ct.indicator_id,
+            ct.is_admin_function
         FROM tbl_committed_targets ct
         JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
         JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
@@ -955,6 +1126,15 @@ def enrich_faculty_verification_status(cursor, faculty_dict, term_id):
         WHERE ct.emp_id = %s AND mi.term_id = %s
     """, (emp_id, term_id))
     rows = cursor.fetchall()
+
+    # A Departmental Oversight row's real evidence lives on scoped faculty's own committed
+    # targets, already run through their own verification pipeline (see get_oversight_evidence)
+    # -- it never has its own tbl_evidence_repo rows, so it must not count toward or against
+    # this per-category completeness gate either way (same exemption rationale as the
+    # missing-timeliness check in check_designated_evidence_readiness). Empty for anyone
+    # without an oversight role, i.e. every Regular Faculty member.
+    from app.models.designated import get_oversight_indicator_ids
+    oversight_ids = get_oversight_indicator_ids(cursor, emp_id, term_id)
 
     chair_targets_has_ev = False
     chair_all_approved = True
@@ -965,9 +1145,17 @@ def enrich_faculty_verification_status(cursor, faculty_dict, term_id):
     ret_has_targets = False
     is_submitted_to_dean = any(r[3] in ('Submitted to Dean', 'Dean Approved') for r in rows) if rows else False
 
-    for cat_name, ev_id, ev_status, ct_status in rows:
+    for cat_name, ev_id, ev_status, ct_status, indicator_id, is_admin_function in rows:
+        if is_admin_function and indicator_id in oversight_ids:
+            continue
         cat_str = (cat_name or '')
-        is_ret = ('Research' in cat_str or 'Extension' in cat_str)
+        # Regular Faculty's Research/Extension evidence is reviewed by the Program Chair too
+        # (see docstring) -- it must feed chair_all_approved, not ret_all_approved, or it gets
+        # silently exempted by the ret_finished=True override below. That was the actual bug:
+        # a regular faculty member's uploaded-but-still-Pending Research/Extension evidence
+        # was bucketed into the RET lane, whose completion is forced true for regular faculty,
+        # so the package read "ready to submit" while that evidence had never been reviewed.
+        is_ret = (not is_regular_faculty) and ('Research' in cat_str or 'Extension' in cat_str)
         if is_ret:
             ret_has_targets = True
             if ev_id is not None:
@@ -986,7 +1174,9 @@ def enrich_faculty_verification_status(cursor, faculty_dict, term_id):
     else:
         chair_finished = chair_targets_has_ev and chair_all_approved
 
-    if not ret_has_targets:
+    if is_regular_faculty:
+        ret_finished = True
+    elif not ret_has_targets:
         ret_finished = True
     elif not ret_targets_has_ev:
         ret_finished = True
@@ -995,15 +1185,18 @@ def enrich_faculty_verification_status(cursor, faculty_dict, term_id):
 
     is_both_approved = chair_finished and ret_finished and (chair_has_targets or ret_has_targets)
 
+    chair_reviewer = reviewer_label or 'Program Chair'
+    ret_reviewer = reviewer_label or 'RET Chair'
+
     if is_both_approved:
         status_code = 'APPROVED'
         status_label = 'Approved'
     elif ret_finished and not chair_finished:
         status_code = 'WAITING_CHAIR'
-        status_label = 'Waiting for Program Chair Approval'
+        status_label = f'Waiting for {chair_reviewer} Approval'
     elif chair_finished and not ret_finished:
         status_code = 'WAITING_RET'
-        status_label = 'Waiting for RET Chair Approval'
+        status_label = f'Waiting for {ret_reviewer} Approval'
     else:
         status_code = 'SUBMITTED'
         status_label = 'Evidences Submitted'

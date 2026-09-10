@@ -12,21 +12,21 @@
 </button>
 
 <div class="nav-label">Management</div>
+<button class="nav-item" data-section="nav-term" onclick="showSection('nav-term')">
+    <i class="ti ti-calendar"></i>
+    <span class="nav-text">Term Configuration</span>
+</button>
 <button class="nav-item" data-section="nav-roster" onclick="showSection('nav-roster')">
     <i class="ti ti-users"></i>
-    <span class="nav-text">HR Roster</span>
-</button>
-<button class="nav-item" data-section="nav-criteria" onclick="showSection('nav-criteria')">
-    <i class="ti ti-sitemap"></i>
-    <span class="nav-text">Criteria</span>
+    <span class="nav-text">Faculty Configuration</span>
 </button>
 <button class="nav-item" data-section="nav-institution" onclick="showSection('nav-institution')">
     <i class="ti ti-building"></i>
     <span class="nav-text">Institution Setup</span>
 </button>
-<button class="nav-item" data-section="nav-term" onclick="showSection('nav-term')">
-    <i class="ti ti-calendar"></i>
-    <span class="nav-text">Term Configuration</span>
+<button class="nav-item" data-section="nav-criteria" onclick="showSection('nav-criteria')">
+    <i class="ti ti-sitemap"></i>
+    <span class="nav-text">Criteria</span>
 </button>
 <button class="nav-item" data-section="nav-indicators" onclick="showSection('nav-indicators')">
     <i class="ti ti-target"></i>
@@ -68,8 +68,8 @@
         <div class="col-md-6">
             <div class="card card-elevated p-4">
                 <div class="card-body p-0">
-                    <h6 role="heading" aria-level="4" class="text-muted fw-bold mb-2" style="font-size: 0.82rem; letter-spacing: 0.5px;">TERM DEADLINE</h6>
-                    <h3 class="text-dark fw-bold mb-0" style="font-size: 2rem;">{{ kpis.term_status }}</h3>
+                    <h6 role="heading" aria-level="4" class="text-muted fw-bold mb-2" style="font-size: 0.82rem; letter-spacing: 0.5px;">ACTIVE ACADEMIC TERM</h6>
+                    <h3 class="text-dark fw-bold mb-0" style="font-size: 2rem;">{{ active_term.academic_year + ' (' + active_term.semester + ')' if active_term else 'No Active Term' }}</h3>
                 </div>
             </div>
         </div>
@@ -88,11 +88,124 @@
 {% endif %}
 {% endwith %}
 
-<!-- HR ROSTER SECTION -->
+<!-- TERM CONFIGURATION SECTION -->
+<div id="nav-term" class="dashboard-section">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <h2 class="fw-bold text-dark mb-0" style="font-size: 1.85rem; letter-spacing: -0.5px;">Term Configuration</h2>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-5">
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-white border-0 pt-4 pb-2">
+                    <h5 role="heading" aria-level="3" class="fw-bold text-dark mb-0">Open New Term</h5>
+                </div>
+                <div class="card-body">
+                    <form action="{{ url_for('admin.admin_open_term') }}" method="POST">
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold" for="openTermAcademicYear">Academic Year</label>
+                            <input type="text" class="form-control" id="openTermAcademicYear" name="academic_year"
+                                placeholder="YYYY - YYYY (e.g. 2025 - 2026)" pattern="^\d{4}\s*-\s*\d{4}$" maxlength="11"
+                                required>
+                            <div class="form-text">Format: <code>YYYY - YYYY</code> with consecutive years (e.g. 2025 - 2026).</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold" for="openTermSemester">Semester</label>
+                            <select class="form-select" id="openTermSemester" name="semester" required>
+                                <option value="1st Semester">1st Semester</option>
+                                <option value="2nd Semester">2nd Semester</option>
+                                <option value="Mid Year">Mid Year</option>
+                            </select>
+                        </div>
+                        {# The rating period printed on the IPCR header —
+                           "...for the period JANUARY to JUNE 2026." #}
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label small fw-bold" for="openTermPeriodStart">Rating Period From</label>
+                                <input type="date" class="form-control" id="openTermPeriodStart" name="period_start">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small fw-bold" for="openTermPeriodEnd">Rating Period To</label>
+                                <input type="date" class="form-control" id="openTermPeriodEnd" name="period_end">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 fw-bold">Open Term & Deactivate
+                            Others</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-7">
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-white border-0 pt-4 pb-2">
+                    <h5 role="heading" aria-level="3" class="fw-bold text-dark mb-0">Term History</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>A.Y.</th>
+                                    <th>Semester</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for term in terms %}
+                                <tr>
+                                    <td>{{ term.academic_year }}</td>
+                                    <td>{{ term.semester }}</td>
+                                    <td>
+                                        {% if term.is_active == 1 %}
+                                        <span class="badge bg-success">Active</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Locked</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted py-4">No academic terms
+                                        found.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    (function () {
+        const ayInput = document.getElementById('openTermAcademicYear');
+        if (!ayInput) return;
+
+        ayInput.addEventListener('input', function () {
+            let digits = ayInput.value.replace(/[^\d]/g, '').slice(0, 8);
+            ayInput.value = digits.length > 4 ? digits.slice(0, 4) + ' - ' + digits.slice(4) : digits;
+        });
+
+        ayInput.closest('form').addEventListener('submit', function (e) {
+            const match = ayInput.value.match(/^(\d{4})\s*-\s*(\d{4})$/);
+            if (!match || parseInt(match[2], 10) !== parseInt(match[1], 10) + 1) {
+                e.preventDefault();
+                ayInput.setCustomValidity('Enter consecutive years in YYYY - YYYY format (e.g. 2025 - 2026).');
+                ayInput.reportValidity();
+            } else {
+                ayInput.setCustomValidity('');
+            }
+        });
+    })();
+</script>
+
+<!-- FACULTY CONFIGURATION SECTION -->
 <div id="nav-roster" class="dashboard-section">
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div>
-            <h2 class="fw-bold text-dark mb-0" style="font-size: 1.85rem; letter-spacing: -0.5px;">HR Roster Management</h2>
+            <h2 class="fw-bold text-dark mb-0" style="font-size: 1.85rem; letter-spacing: -0.5px;">Faculty Configuration</h2>
         </div>
         <div class="d-flex gap-2">
             <button class="btn btn-dark-navy btn-sm px-3 py-2 fw-semibold" data-bs-toggle="modal" data-bs-target="#csvUploadModal">
@@ -166,7 +279,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="8" class="text-center text-muted py-4">No HR Roster data available. Update via CSV to populate.</td>
+                        <td colspan="8" class="text-center text-muted py-4">No Faculty Configuration data available. Update via CSV to populate.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -175,99 +288,444 @@
     </div>
 </div>
 
-<!-- TERM CONFIGURATION SECTION -->
-<div id="nav-term" class="dashboard-section">
+<!-- INSTITUTION SETUP: departments + teaching load -->
+<div id="nav-institution" class="dashboard-section">
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div>
-            <h2 class="fw-bold text-dark mb-0" style="font-size: 1.85rem; letter-spacing: -0.5px;">Term Configuration</h2>
+            <h2 class="fw-bold text-dark mb-0" style="font-size: 1.85rem; letter-spacing: -0.5px;">Institution Setup</h2>
+            <p class="text-muted small mb-0">Departments and the mandated teaching load — previously hardcoded.</p>
         </div>
     </div>
-    <div class="row">
-        <div class="col-md-5">
-            <div class="card shadow-sm border-0 mb-4">
-                <div class="card-header bg-white border-0 pt-4 pb-2">
-                    <h5 role="heading" aria-level="3" class="fw-bold text-dark mb-0">Open New Term</h5>
+
+    <!-- Departments -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white border-0 pt-4 pb-2 d-flex justify-content-between align-items-center">
+            <div>
+                <h5 role="heading" aria-level="3" class="fw-bold text-dark mb-0">Departments / Programs</h5>
+                <small class="text-muted">Drives the Dean's cascade columns and the faculty roster's
+                    specialization. Renaming one updates the faculty and quota rows that reference it.</small>
+            </div>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="ti ti-search text-muted"></i>
+                    <input type="text" id="departmentSearchInput" class="form-control form-control-sm"
+                           placeholder="Search departments..." style="width: 220px;" onkeyup="filterDepartmentsTable()">
                 </div>
-                <div class="card-body">
-                    <form action="{{ url_for('admin.admin_open_term') }}" method="POST">
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold" for="openTermAcademicYear">Academic Year</label>
-                            <input type="text" class="form-control" id="openTermAcademicYear" name="academic_year" placeholder="e.g. 2024-2025"
-                                required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold" for="openTermSemester">Semester</label>
-                            <select class="form-select" id="openTermSemester" name="semester" required>
-                                <option value="1st Semester">1st Semester</option>
-                                <option value="2nd Semester">2nd Semester</option>
-                                <option value="Mid Year">Mid Year</option>
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold" for="openTermDeadline">Submission Deadline</label>
-                            <input type="date" class="form-control" id="openTermDeadline" name="deadline_date" required>
-                        </div>
-                        {# The rating period printed on the IPCR header —
-                           "...for the period JANUARY to JUNE 2026." #}
-                        <div class="row g-2 mb-3">
-                            <div class="col-6">
-                                <label class="form-label small fw-bold" for="openTermPeriodStart">Rating Period From</label>
-                                <input type="date" class="form-control" id="openTermPeriodStart" name="period_start">
-                            </div>
-                            <div class="col-6">
-                                <label class="form-label small fw-bold" for="openTermPeriodEnd">Rating Period To</label>
-                                <input type="date" class="form-control" id="openTermPeriodEnd" name="period_end">
-                            </div>
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100 fw-bold">Open Term & Deactivate
-                            Others</button>
-                    </form>
-                </div>
+                <button type="button" class="btn btn-sm btn-primary" onclick="newDepartment()">
+                    <i class="ti ti-plus me-1"></i>Add Department
+                </button>
             </div>
         </div>
-        <div class="col-md-7">
-            <div class="card shadow-sm border-0 mb-4">
-                <div class="card-header bg-white border-0 pt-4 pb-2">
-                    <h5 role="heading" aria-level="3" class="fw-bold text-dark mb-0">Term History</h5>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>A.Y.</th>
-                                    <th>Semester</th>
-                                    <th>Deadline</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for term in terms %}
-                                <tr>
-                                    <td>{{ term.academic_year }}</td>
-                                    <td>{{ term.semester }}</td>
-                                    <td>{{ term.deadline_date }}</td>
-                                    <td>
-                                        {% if term.is_active == 1 %}
-                                        <span class="badge bg-success">Active</span>
-                                        {% else %}
-                                        <span class="badge bg-secondary">Locked</span>
-                                        {% endif %}
-                                    </td>
-                                </tr>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="departmentsTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-4">Department</th>
+                            <th style="width: 15%;">Code</th>
+                            <th class="text-center" style="width: 70px;">Order</th>
+                            <th class="text-center" style="width: 12%;">Status</th>
+                            <th class="text-end" style="width: 22%;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for d in departments %}
+                        {% set dim = 'opacity-50' if not d.is_active else '' %}
+                        <tr>
+                            <td class="ps-4 fw-semibold {{ dim }}">{{ d.department_name }}</td>
+                            <td class="{{ dim }}">{{ d.department_code or '—' }}</td>
+                            <td class="text-center">
+                                <div class="d-flex justify-content-center gap-1">
+                                    <form action="{{ url_for('admin.admin_reorder_department') }}" method="POST" class="d-inline">
+                                        <input type="hidden" name="department_id" value="{{ d.department_id }}">
+                                        <input type="hidden" name="direction" value="up">
+                                        <button type="submit" class="btn btn-sm btn-outline-secondary px-2 py-0" {% if loop.first %}disabled{% endif %} title="Move up">&#9650;</button>
+                                    </form>
+                                    <form action="{{ url_for('admin.admin_reorder_department') }}" method="POST" class="d-inline">
+                                        <input type="hidden" name="department_id" value="{{ d.department_id }}">
+                                        <input type="hidden" name="direction" value="down">
+                                        <button type="submit" class="btn btn-sm btn-outline-secondary px-2 py-0" {% if loop.last %}disabled{% endif %} title="Move down">&#9660;</button>
+                                    </form>
+                                </div>
+                            </td>
+                            <td class="text-center {{ dim }}">
+                                {% if d.is_active %}
+                                <span class="badge bg-success-subtle text-success border border-success">Active</span>
                                 {% else %}
-                                <tr>
-                                    <td colspan="4" class="text-center text-muted py-4">No academic terms
-                                        found.</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+                                <span class="badge bg-secondary">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <div class="d-flex justify-content-end gap-2">
+                                    <button type="button" class="btn btn-sm btn-outline-primary"
+                                            data-did="{{ d.department_id }}"
+                                            data-name="{{ d.department_name | e }}"
+                                            data-code="{{ d.department_code or '' }}"
+                                            onclick="fillDepartmentModal(this)">Edit</button>
+                                    <form action="{{ url_for('admin.admin_toggle_department') }}" method="POST" class="d-inline">
+                                        <input type="hidden" name="department_id" value="{{ d.department_id }}">
+                                        <input type="hidden" name="is_active" value="{{ 0 if d.is_active else 1 }}">
+                                        <button type="submit" class="btn btn-sm {% if d.is_active %}btn-outline-danger{% else %}btn-outline-success{% endif %}">
+                                            {% if d.is_active %}Deactivate{% else %}Activate{% endif %}
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="5" class="text-center text-muted py-4">No departments defined yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Teaching load -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white border-0 pt-4 pb-2">
+            <h5 role="heading" aria-level="3" class="fw-bold text-dark mb-0">Teaching Load</h5>
+            <small class="text-muted">The mandatory teaching load target added to every IPCR. The duration
+                drives its Timeliness rating. Configured per designation type, either the same for all ranks
+                or per academic rank band.</small>
+        </div>
+        <div class="card-body">
+            {% if not active_term %}
+            <div class="text-center py-4 text-muted">
+                <i class="ti ti-calendar-x fs-3 d-block mb-2"></i>No active academic term.
+            </div>
+            {% else %}
+            <div class="btn-group mb-3" role="group">
+                {% for dt in designation_types %}
+                {% set tslug = dt | lower | replace(' ', '_') %}
+                <button type="button" class="btn btn-sm {% if loop.first %}btn-primary{% else %}btn-outline-primary{% endif %} tl-tab-btn"
+                        id="tlTabBtn_{{ tslug }}" onclick="showTlTab('{{ tslug }}')">{{ dt }}</button>
+                {% endfor %}
+            </div>
+
+            {% for dt in designation_types %}
+            {% set tslug = dt | lower | replace(' ', '_') %}
+            {% set grid = teaching_load.get(dt, {}) %}
+            {% set cur_mode = teaching_load_mode.get(dt, 'GENERAL') %}
+            <div class="tl-tab-panel" id="tlTabPanel_{{ tslug }}"
+                 data-configured="{{ 1 if (grid | length > 0) else 0 }}"
+                 style="{% if not loop.first %}display:none;{% endif %}">
+                <form action="{{ url_for('admin.admin_save_teaching_load') }}" method="POST">
+                    <input type="hidden" name="term_id" value="{{ active_term.term_id }}">
+                    <input type="hidden" name="designation_type" value="{{ dt }}">
+                    <input type="hidden" name="mode" id="tlMode_{{ tslug }}" value="{{ cur_mode }}">
+
+                    <fieldset class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+                        <legend class="small fw-semibold text-muted mb-0 w-auto">Applies:</legend>
+                        <div class="form-check form-check-inline mb-0">
+                            <input class="form-check-input" type="radio" name="tl_mode_{{ tslug }}"
+                                   id="tlGeneral_{{ tslug }}" {% if cur_mode == 'GENERAL' %}checked{% endif %}
+                                   onchange="setTlMode('{{ tslug }}', 'GENERAL')">
+                            <label class="form-check-label small" for="tlGeneral_{{ tslug }}">
+                                Same for all ranks
+                            </label>
+                        </div>
+                        <div class="form-check form-check-inline mb-0">
+                            <input class="form-check-input" type="radio" name="tl_mode_{{ tslug }}"
+                                   id="tlSpecific_{{ tslug }}" {% if cur_mode == 'SPECIFIC' %}checked{% endif %}
+                                   onchange="setTlMode('{{ tslug }}', 'SPECIFIC')">
+                            <label class="form-check-label small" for="tlSpecific_{{ tslug }}">
+                                Per academic rank
+                            </label>
+                        </div>
+                    </fieldset>
+
+                    {% set gen = grid.get(general_band, {}) %}
+                    <div id="tlGeneralBlock_{{ tslug }}" style="{% if cur_mode != 'GENERAL' %}display:none;{% endif %}">
+                        <div class="row g-2 align-items-end mb-3">
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold" for="tlGeneralHours_{{ tslug }}">Hours</label>
+                                <input type="number" min="1" class="form-control" id="tlGeneralHours_{{ tslug }}" name="tl_general_hours"
+                                       value="{{ gen.get('hours', '') }}">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold" for="tlGeneralDuration_{{ tslug }}">Duration</label>
+                                <input type="number" min="1" class="form-control" id="tlGeneralDuration_{{ tslug }}" name="tl_general_duration"
+                                       value="{{ gen.get('duration_value', 6) }}">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold" for="tlGeneralUnit_{{ tslug }}">Unit</label>
+                                <select class="form-select" id="tlGeneralUnit_{{ tslug }}" name="tl_general_unit">
+                                    {% for u in ['days', 'weeks', 'months', 'semesters'] %}
+                                    <option value="{{ u }}" {% if gen.get('duration_unit', 'months') == u %}selected{% endif %}>{{ u }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="tlSpecificBlock_{{ tslug }}" style="{% if cur_mode != 'SPECIFIC' %}display:none;{% endif %}">
+                        <div class="table-responsive">
+                            <table class="table table-bordered align-middle mb-3">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th scope="col">Academic Rank</th>
+                                        <th scope="col" class="text-center" style="width: 20%;">Hours</th>
+                                        <th scope="col" class="text-center" style="width: 20%;">Duration</th>
+                                        <th scope="col" class="text-center" style="width: 20%;">Unit</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for band in rank_bands %}
+                                    {% set row = grid.get(band, {}) %}
+                                    <tr>
+                                        <th scope="row" class="fw-semibold">{{ band }}</th>
+                                        <td><input type="number" min="0" class="form-control form-control-sm text-center"
+                                                   name="tl_{{ loop.index0 }}_hours" value="{{ row.get('hours', '') }}"></td>
+                                        <td><input type="number" min="1" class="form-control form-control-sm text-center"
+                                                   name="tl_{{ loop.index0 }}_duration" value="{{ row.get('duration_value', 6) }}"></td>
+                                        <td>
+                                            <select class="form-select form-select-sm" name="tl_{{ loop.index0 }}_unit">
+                                                {% for u in ['days', 'weeks', 'months', 'semesters'] %}
+                                                <option value="{{ u }}" {% if row.get('duration_unit', 'months') == u %}selected{% endif %}>{{ u }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="text-end">
+                        {% set is_saved = grid | length > 0 %}
+                        <button type="button" class="btn btn-outline-secondary fw-bold me-2"
+                                id="tlEditBtn_{{ tslug }}" onclick="unlockTeachingLoad('{{ tslug }}')"
+                                {% if not is_saved %}style="display:none;"{% endif %}>
+                            <i class="ti ti-pencil me-1"></i>Edit
+                        </button>
+                        <button type="submit" class="btn btn-primary fw-bold" id="tlSaveBtn_{{ tslug }}"
+                                {% if is_saved %}style="display:none;"{% endif %}>
+                            <i class="ti ti-device-floppy me-1"></i>Save {{ dt }} Teaching Load
+                        </button>
+                    </div>
+                </form>
+            </div>
+            {% endfor %}
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Printed IPCR: institution text + who signs each block -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white border-0 pt-4 pb-2">
+            <h5 role="heading" aria-level="3" class="fw-bold text-dark mb-0">Printed IPCR</h5>
+            <small class="text-muted">The header text and signature blocks on the generated
+                IPCR form. Two blocks follow the org chart automatically; the rest are people
+                you name here.</small>
+        </div>
+        <div class="card-body">
+            <form action="{{ url_for('admin.admin_save_institution') }}" method="POST" class="mb-4">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-8">
+                        <label class="form-label small fw-bold" for="collegeFullName">College Full Name</label>
+                        <input type="text" class="form-control" id="collegeFullName" name="college_full_name"
+                               value="{{ institution.get('college_full_name', '') }}"
+                               placeholder="College of Information and Communications Technology">
+                        <div class="form-text small">Printed in the commitment sentence.</div>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold" for="collegeCode">Code</label>
+                        <input type="text" class="form-control" id="collegeCode" name="college_code"
+                               value="{{ institution.get('college_code', '') }}" placeholder="CICT">
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-outline-primary w-100 fw-semibold">Save</button>
                     </div>
                 </div>
+            </form>
+
+            <form action="{{ url_for('admin.admin_save_signatories') }}" method="POST" id="signatoriesForm">
+                <div class="table-responsive" id="signatoriesTable">
+                    <table class="table table-bordered align-middle mb-3">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 18%;">Block</th>
+                                <th style="width: 17%;">Applies to</th>
+                                <th style="width: 22%;">Filled from</th>
+                                <th style="width: 25%;">Name</th>
+                                <th style="width: 18%;">Position Label</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for sig in signatories %}
+                            <tr>
+                                <td class="fw-semibold small">{{ signatory_labels.get(sig.block_key, sig.block_key) }}</td>
+                                <td class="small text-muted">{{ sig.designation_type or 'Both forms' }}</td>
+                                <td>
+                                    <select class="form-select form-select-sm sig-source"
+                                            name="sig_{{ sig.signatory_id }}_source"
+                                            data-sid="{{ sig.signatory_id }}" onchange="toggleSigName(this)">
+                                        {% for src in signatory_sources %}
+                                        <option value="{{ src }}" {% if sig.source == src %}selected{% endif %}>
+                                            {% if src == 'FIXED' %}A named person
+                                            {% elif src == 'PROGRAM_CHAIR' %}Their Program Chair
+                                            {% else %}The Dean{% endif %}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                                <td>
+                                    <input type="text" class="form-control form-control-sm"
+                                           id="sigName_{{ sig.signatory_id }}"
+                                           name="sig_{{ sig.signatory_id }}_name"
+                                           value="{{ sig.full_name or '' }}"
+                                           placeholder="e.g. JUAN D. CRUZ, Ed.D."
+                                           {% if sig.source != 'FIXED' %}disabled{% endif %}>
+                                </td>
+                                <td>
+                                    <input type="text" class="form-control form-control-sm"
+                                           name="sig_{{ sig.signatory_id }}_title"
+                                           value="{{ sig.position_title or '' }}"
+                                           placeholder="e.g. Head of Office">
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="text-end">
+                    <button type="button" class="btn btn-outline-secondary fw-bold me-2" id="sigEditBtn"
+                            onclick="unlockSignatories()">
+                        <i class="ti ti-pencil me-1"></i>Edit
+                    </button>
+                    <button type="submit" class="btn btn-primary fw-bold" id="sigSaveBtn" style="display:none;">
+                        <i class="ti ti-device-floppy me-1"></i>Save Signatories
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add/Edit Department Modal -->
+    <div class="modal fade" id="departmentModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form action="{{ url_for('admin.admin_save_department') }}" method="POST">
+                    <input type="hidden" name="department_id" id="deptId">
+                    <div class="modal-header">
+                        <h5 class="modal-title fw-bold">Department</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold" for="deptName">Department Name</label>
+                            <input type="text" class="form-control" name="department_name" id="deptName" required
+                                   placeholder="e.g. DST Program">
+                            <div class="form-text small">Must match the value used as the faculty's specialization.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold" for="deptCode">Short Code</label>
+                            <input type="text" class="form-control" name="department_code" id="deptCode"
+                                   placeholder="e.g. DST">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Department</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
+
+    <script>
+    function toggleSigName(sel) {
+        // Only a named person needs a name typed in; derived blocks follow the roster.
+        const input = document.getElementById('sigName_' + sel.dataset.sid);
+        if (!input) return;
+        input.disabled = (sel.value !== 'FIXED');
+        if (input.disabled) input.value = '';
+    }
+    function setSignatoriesLocked(locked) {
+        const table = document.getElementById('signatoriesTable');
+        if (!table) return;
+        table.querySelectorAll('select.sig-source, input[type="text"]').forEach(function (el) {
+            el.disabled = locked;
+        });
+        // A derived block's name field stays disabled even when unlocked.
+        if (!locked) {
+            table.querySelectorAll('select.sig-source').forEach(toggleSigName);
+        }
+        const editBtn = document.getElementById('sigEditBtn');
+        const saveBtn = document.getElementById('sigSaveBtn');
+        if (editBtn) editBtn.style.display = locked ? '' : 'none';
+        if (saveBtn) saveBtn.style.display = locked ? 'none' : '';
+    }
+    function unlockSignatories() {
+        setSignatoriesLocked(false);
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+        setSignatoriesLocked(true);
+    });
+    function newDepartment() {
+        document.getElementById('deptId').value = '';
+        document.getElementById('deptName').value = '';
+        document.getElementById('deptCode').value = '';
+        new bootstrap.Modal(document.getElementById('departmentModal')).show();
+    }
+    function fillDepartmentModal(btn) {
+        document.getElementById('deptId').value = btn.dataset.did;
+        document.getElementById('deptName').value = btn.dataset.name;
+        document.getElementById('deptCode').value = btn.dataset.code;
+        new bootstrap.Modal(document.getElementById('departmentModal')).show();
+    }
+    function filterDepartmentsTable() {
+        const input = document.getElementById('departmentSearchInput').value.toLowerCase();
+        document.querySelectorAll('#departmentsTable tbody tr').forEach(row => {
+            if (row.cells.length === 1) return; // "No departments defined yet." row
+            row.style.display = row.innerText.toLowerCase().includes(input) ? '' : 'none';
+        });
+    }
+    function showTlTab(slug) {
+        document.querySelectorAll('.tl-tab-panel').forEach(p => { p.style.display = 'none'; });
+        document.querySelectorAll('.tl-tab-btn').forEach(b => {
+            b.classList.remove('btn-primary'); b.classList.add('btn-outline-primary');
+        });
+        const panel = document.getElementById('tlTabPanel_' + slug);
+        const btn = document.getElementById('tlTabBtn_' + slug);
+        if (panel) panel.style.display = '';
+        if (btn) { btn.classList.remove('btn-outline-primary'); btn.classList.add('btn-primary'); }
+    }
+    function setTeachingLoadLocked(slug, locked) {
+        const panel = document.getElementById('tlTabPanel_' + slug);
+        if (!panel) return;
+        panel.querySelectorAll('input, select').forEach(function (el) {
+            if (el.type === 'hidden') return;
+            el.disabled = locked;
+        });
+        const editBtn = document.getElementById('tlEditBtn_' + slug);
+        const saveBtn = document.getElementById('tlSaveBtn_' + slug);
+        if (editBtn) editBtn.style.display = locked ? '' : 'none';
+        if (saveBtn) saveBtn.style.display = locked ? 'none' : '';
+    }
+    function unlockTeachingLoad(slug) {
+        setTeachingLoadLocked(slug, false);
+    }
+
+    // Lock every teaching-load panel that already has a saved configuration. This runs on
+    // DOMContentLoaded rather than inline, because the panels are rendered well before
+    // these functions are defined.
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('.tl-tab-panel[data-configured="1"]').forEach(function (panel) {
+            setTeachingLoadLocked(panel.id.replace('tlTabPanel_', ''), true);
+        });
+    });
+    function setTlMode(slug, mode) {
+        const hidden = document.getElementById('tlMode_' + slug);
+        if (hidden) hidden.value = mode;
+        const gen = document.getElementById('tlGeneralBlock_' + slug);
+        const spec = document.getElementById('tlSpecificBlock_' + slug);
+        if (gen) gen.style.display = (mode === 'GENERAL') ? '' : 'none';
+        if (spec) spec.style.display = (mode === 'SPECIFIC') ? '' : 'none';
+    }
+    </script>
 </div>
 
 <!-- MASTER INDICATORS SECTION -->
@@ -833,421 +1291,6 @@
     </script>
 </div>
 
-<!-- INSTITUTION SETUP: departments + teaching load -->
-<div id="nav-institution" class="dashboard-section">
-    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-        <div>
-            <h2 class="fw-bold text-dark mb-0" style="font-size: 1.85rem; letter-spacing: -0.5px;">Institution Setup</h2>
-            <p class="text-muted small mb-0">Departments and the mandated teaching load — previously hardcoded.</p>
-        </div>
-    </div>
-
-    <!-- Departments -->
-    <div class="card shadow-sm border-0 mb-4">
-        <div class="card-header bg-white border-0 pt-4 pb-2 d-flex justify-content-between align-items-center">
-            <div>
-                <h5 role="heading" aria-level="3" class="fw-bold text-dark mb-0">Departments / Programs</h5>
-                <small class="text-muted">Drives the Dean's cascade columns and the faculty roster's
-                    specialization. Renaming one updates the faculty and quota rows that reference it.</small>
-            </div>
-            <div class="d-flex align-items-center gap-2 flex-wrap">
-                <div class="d-flex align-items-center gap-2">
-                    <i class="ti ti-search text-muted"></i>
-                    <input type="text" id="departmentSearchInput" class="form-control form-control-sm"
-                           placeholder="Search departments..." style="width: 220px;" onkeyup="filterDepartmentsTable()">
-                </div>
-                <button type="button" class="btn btn-sm btn-primary" onclick="newDepartment()">
-                    <i class="ti ti-plus me-1"></i>Add Department
-                </button>
-            </div>
-        </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0" id="departmentsTable">
-                    <thead class="table-light">
-                        <tr>
-                            <th class="ps-4">Department</th>
-                            <th style="width: 15%;">Code</th>
-                            <th class="text-center" style="width: 70px;">Order</th>
-                            <th class="text-center" style="width: 12%;">Status</th>
-                            <th class="text-end" style="width: 22%;">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for d in departments %}
-                        {% set dim = 'opacity-50' if not d.is_active else '' %}
-                        <tr>
-                            <td class="ps-4 fw-semibold {{ dim }}">{{ d.department_name }}</td>
-                            <td class="{{ dim }}">{{ d.department_code or '—' }}</td>
-                            <td class="text-center">
-                                <div class="d-flex justify-content-center gap-1">
-                                    <form action="{{ url_for('admin.admin_reorder_department') }}" method="POST" class="d-inline">
-                                        <input type="hidden" name="department_id" value="{{ d.department_id }}">
-                                        <input type="hidden" name="direction" value="up">
-                                        <button type="submit" class="btn btn-sm btn-outline-secondary px-2 py-0" {% if loop.first %}disabled{% endif %} title="Move up">&#9650;</button>
-                                    </form>
-                                    <form action="{{ url_for('admin.admin_reorder_department') }}" method="POST" class="d-inline">
-                                        <input type="hidden" name="department_id" value="{{ d.department_id }}">
-                                        <input type="hidden" name="direction" value="down">
-                                        <button type="submit" class="btn btn-sm btn-outline-secondary px-2 py-0" {% if loop.last %}disabled{% endif %} title="Move down">&#9660;</button>
-                                    </form>
-                                </div>
-                            </td>
-                            <td class="text-center {{ dim }}">
-                                {% if d.is_active %}
-                                <span class="badge bg-success-subtle text-success border border-success">Active</span>
-                                {% else %}
-                                <span class="badge bg-secondary">Inactive</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-end">
-                                <div class="d-flex justify-content-end gap-2">
-                                    <button type="button" class="btn btn-sm btn-outline-primary"
-                                            data-did="{{ d.department_id }}"
-                                            data-name="{{ d.department_name | e }}"
-                                            data-code="{{ d.department_code or '' }}"
-                                            onclick="fillDepartmentModal(this)">Edit</button>
-                                    <form action="{{ url_for('admin.admin_toggle_department') }}" method="POST" class="d-inline">
-                                        <input type="hidden" name="department_id" value="{{ d.department_id }}">
-                                        <input type="hidden" name="is_active" value="{{ 0 if d.is_active else 1 }}">
-                                        <button type="submit" class="btn btn-sm {% if d.is_active %}btn-outline-danger{% else %}btn-outline-success{% endif %}">
-                                            {% if d.is_active %}Deactivate{% else %}Activate{% endif %}
-                                        </button>
-                                    </form>
-                                </div>
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr><td colspan="5" class="text-center text-muted py-4">No departments defined yet.</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <!-- Teaching load -->
-    <div class="card shadow-sm border-0 mb-4">
-        <div class="card-header bg-white border-0 pt-4 pb-2">
-            <h5 role="heading" aria-level="3" class="fw-bold text-dark mb-0">Teaching Load</h5>
-            <small class="text-muted">The mandatory teaching load target added to every IPCR. The duration
-                drives its Timeliness rating. Configured per designation type, either the same for all ranks
-                or per academic rank band.</small>
-        </div>
-        <div class="card-body">
-            {% if not active_term %}
-            <div class="text-center py-4 text-muted">
-                <i class="ti ti-calendar-x fs-3 d-block mb-2"></i>No active academic term.
-            </div>
-            {% else %}
-            <div class="btn-group mb-3" role="group">
-                {% for dt in designation_types %}
-                {% set tslug = dt | lower | replace(' ', '_') %}
-                <button type="button" class="btn btn-sm {% if loop.first %}btn-primary{% else %}btn-outline-primary{% endif %} tl-tab-btn"
-                        id="tlTabBtn_{{ tslug }}" onclick="showTlTab('{{ tslug }}')">{{ dt }}</button>
-                {% endfor %}
-            </div>
-
-            {% for dt in designation_types %}
-            {% set tslug = dt | lower | replace(' ', '_') %}
-            {% set grid = teaching_load.get(dt, {}) %}
-            {% set cur_mode = teaching_load_mode.get(dt, 'GENERAL') %}
-            <div class="tl-tab-panel" id="tlTabPanel_{{ tslug }}"
-                 data-configured="{{ 1 if (grid | length > 0) else 0 }}"
-                 style="{% if not loop.first %}display:none;{% endif %}">
-                <form action="{{ url_for('admin.admin_save_teaching_load') }}" method="POST">
-                    <input type="hidden" name="term_id" value="{{ active_term.term_id }}">
-                    <input type="hidden" name="designation_type" value="{{ dt }}">
-                    <input type="hidden" name="mode" id="tlMode_{{ tslug }}" value="{{ cur_mode }}">
-
-                    <fieldset class="d-flex align-items-center gap-3 mb-3 flex-wrap">
-                        <legend class="small fw-semibold text-muted mb-0 w-auto">Applies:</legend>
-                        <div class="form-check form-check-inline mb-0">
-                            <input class="form-check-input" type="radio" name="tl_mode_{{ tslug }}"
-                                   id="tlGeneral_{{ tslug }}" {% if cur_mode == 'GENERAL' %}checked{% endif %}
-                                   onchange="setTlMode('{{ tslug }}', 'GENERAL')">
-                            <label class="form-check-label small" for="tlGeneral_{{ tslug }}">
-                                Same for all ranks
-                            </label>
-                        </div>
-                        <div class="form-check form-check-inline mb-0">
-                            <input class="form-check-input" type="radio" name="tl_mode_{{ tslug }}"
-                                   id="tlSpecific_{{ tslug }}" {% if cur_mode == 'SPECIFIC' %}checked{% endif %}
-                                   onchange="setTlMode('{{ tslug }}', 'SPECIFIC')">
-                            <label class="form-check-label small" for="tlSpecific_{{ tslug }}">
-                                Per academic rank
-                            </label>
-                        </div>
-                    </fieldset>
-
-                    {% set gen = grid.get(general_band, {}) %}
-                    <div id="tlGeneralBlock_{{ tslug }}" style="{% if cur_mode != 'GENERAL' %}display:none;{% endif %}">
-                        <div class="row g-2 align-items-end mb-3">
-                            <div class="col-md-3">
-                                <label class="form-label small fw-bold" for="tlGeneralHours_{{ tslug }}">Hours</label>
-                                <input type="number" min="1" class="form-control" id="tlGeneralHours_{{ tslug }}" name="tl_general_hours"
-                                       value="{{ gen.get('hours', '') }}">
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label small fw-bold" for="tlGeneralDuration_{{ tslug }}">Duration</label>
-                                <input type="number" min="1" class="form-control" id="tlGeneralDuration_{{ tslug }}" name="tl_general_duration"
-                                       value="{{ gen.get('duration_value', 6) }}">
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label small fw-bold" for="tlGeneralUnit_{{ tslug }}">Unit</label>
-                                <select class="form-select" id="tlGeneralUnit_{{ tslug }}" name="tl_general_unit">
-                                    {% for u in ['days', 'weeks', 'months', 'semesters'] %}
-                                    <option value="{{ u }}" {% if gen.get('duration_unit', 'months') == u %}selected{% endif %}>{{ u }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div id="tlSpecificBlock_{{ tslug }}" style="{% if cur_mode != 'SPECIFIC' %}display:none;{% endif %}">
-                        <div class="table-responsive">
-                            <table class="table table-bordered align-middle mb-3">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th scope="col">Academic Rank</th>
-                                        <th scope="col" class="text-center" style="width: 20%;">Hours</th>
-                                        <th scope="col" class="text-center" style="width: 20%;">Duration</th>
-                                        <th scope="col" class="text-center" style="width: 20%;">Unit</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for band in rank_bands %}
-                                    {% set row = grid.get(band, {}) %}
-                                    <tr>
-                                        <th scope="row" class="fw-semibold">{{ band }}</th>
-                                        <td><input type="number" min="0" class="form-control form-control-sm text-center"
-                                                   name="tl_{{ loop.index0 }}_hours" value="{{ row.get('hours', '') }}"></td>
-                                        <td><input type="number" min="1" class="form-control form-control-sm text-center"
-                                                   name="tl_{{ loop.index0 }}_duration" value="{{ row.get('duration_value', 6) }}"></td>
-                                        <td>
-                                            <select class="form-select form-select-sm" name="tl_{{ loop.index0 }}_unit">
-                                                {% for u in ['days', 'weeks', 'months', 'semesters'] %}
-                                                <option value="{{ u }}" {% if row.get('duration_unit', 'months') == u %}selected{% endif %}>{{ u }}</option>
-                                                {% endfor %}
-                                            </select>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <div class="text-end">
-                        {% set is_saved = grid | length > 0 %}
-                        <button type="button" class="btn btn-outline-secondary fw-bold me-2"
-                                id="tlEditBtn_{{ tslug }}" onclick="unlockTeachingLoad('{{ tslug }}')"
-                                {% if not is_saved %}style="display:none;"{% endif %}>
-                            <i class="ti ti-pencil me-1"></i>Edit
-                        </button>
-                        <button type="submit" class="btn btn-primary fw-bold" id="tlSaveBtn_{{ tslug }}"
-                                {% if is_saved %}style="display:none;"{% endif %}>
-                            <i class="ti ti-device-floppy me-1"></i>Save {{ dt }} Teaching Load
-                        </button>
-                    </div>
-                </form>
-            </div>
-            {% endfor %}
-            {% endif %}
-        </div>
-    </div>
-
-    <!-- Printed IPCR: institution text + who signs each block -->
-    <div class="card shadow-sm border-0 mb-4">
-        <div class="card-header bg-white border-0 pt-4 pb-2">
-            <h5 role="heading" aria-level="3" class="fw-bold text-dark mb-0">Printed IPCR</h5>
-            <small class="text-muted">The header text and signature blocks on the generated
-                IPCR form. Two blocks follow the org chart automatically; the rest are people
-                you name here.</small>
-        </div>
-        <div class="card-body">
-            <form action="{{ url_for('admin.admin_save_institution') }}" method="POST" class="mb-4">
-                <div class="row g-3 align-items-end">
-                    <div class="col-md-8">
-                        <label class="form-label small fw-bold" for="collegeFullName">College Full Name</label>
-                        <input type="text" class="form-control" id="collegeFullName" name="college_full_name"
-                               value="{{ institution.get('college_full_name', '') }}"
-                               placeholder="College of Information and Communications Technology">
-                        <div class="form-text small">Printed in the commitment sentence.</div>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label small fw-bold" for="collegeCode">Code</label>
-                        <input type="text" class="form-control" id="collegeCode" name="college_code"
-                               value="{{ institution.get('college_code', '') }}" placeholder="CICT">
-                    </div>
-                    <div class="col-md-2">
-                        <button type="submit" class="btn btn-outline-primary w-100 fw-semibold">Save</button>
-                    </div>
-                </div>
-            </form>
-
-            <form action="{{ url_for('admin.admin_save_signatories') }}" method="POST">
-                <div class="table-responsive">
-                    <table class="table table-bordered align-middle mb-3">
-                        <thead class="table-light">
-                            <tr>
-                                <th style="width: 18%;">Block</th>
-                                <th style="width: 17%;">Applies to</th>
-                                <th style="width: 22%;">Filled from</th>
-                                <th style="width: 25%;">Name</th>
-                                <th style="width: 18%;">Position Label</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for sig in signatories %}
-                            <tr>
-                                <td class="fw-semibold small">{{ signatory_labels.get(sig.block_key, sig.block_key) }}</td>
-                                <td class="small text-muted">{{ sig.designation_type or 'Both forms' }}</td>
-                                <td>
-                                    <select class="form-select form-select-sm sig-source"
-                                            name="sig_{{ sig.signatory_id }}_source"
-                                            data-sid="{{ sig.signatory_id }}" onchange="toggleSigName(this)">
-                                        {% for src in signatory_sources %}
-                                        <option value="{{ src }}" {% if sig.source == src %}selected{% endif %}>
-                                            {% if src == 'FIXED' %}A named person
-                                            {% elif src == 'PROGRAM_CHAIR' %}Their Program Chair
-                                            {% else %}The Dean{% endif %}
-                                        </option>
-                                        {% endfor %}
-                                    </select>
-                                </td>
-                                <td>
-                                    <input type="text" class="form-control form-control-sm"
-                                           id="sigName_{{ sig.signatory_id }}"
-                                           name="sig_{{ sig.signatory_id }}_name"
-                                           value="{{ sig.full_name or '' }}"
-                                           placeholder="e.g. JUAN D. CRUZ, Ed.D."
-                                           {% if sig.source != 'FIXED' %}disabled{% endif %}>
-                                </td>
-                                <td>
-                                    <input type="text" class="form-control form-control-sm"
-                                           name="sig_{{ sig.signatory_id }}_title"
-                                           value="{{ sig.position_title or '' }}"
-                                           placeholder="e.g. Head of Office">
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                <div class="text-end">
-                    <button type="submit" class="btn btn-primary fw-bold">
-                        <i class="ti ti-device-floppy me-1"></i>Save Signatories
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Add/Edit Department Modal -->
-    <div class="modal fade" id="departmentModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <form action="{{ url_for('admin.admin_save_department') }}" method="POST">
-                    <input type="hidden" name="department_id" id="deptId">
-                    <div class="modal-header">
-                        <h5 class="modal-title fw-bold">Department</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold" for="deptName">Department Name</label>
-                            <input type="text" class="form-control" name="department_name" id="deptName" required
-                                   placeholder="e.g. DST Program">
-                            <div class="form-text small">Must match the value used as the faculty's specialization.</div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold" for="deptCode">Short Code</label>
-                            <input type="text" class="form-control" name="department_code" id="deptCode"
-                                   placeholder="e.g. DST">
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-primary">Save Department</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <script>
-    function toggleSigName(sel) {
-        // Only a named person needs a name typed in; derived blocks follow the roster.
-        const input = document.getElementById('sigName_' + sel.dataset.sid);
-        if (!input) return;
-        input.disabled = (sel.value !== 'FIXED');
-        if (input.disabled) input.value = '';
-    }
-    function newDepartment() {
-        document.getElementById('deptId').value = '';
-        document.getElementById('deptName').value = '';
-        document.getElementById('deptCode').value = '';
-        new bootstrap.Modal(document.getElementById('departmentModal')).show();
-    }
-    function fillDepartmentModal(btn) {
-        document.getElementById('deptId').value = btn.dataset.did;
-        document.getElementById('deptName').value = btn.dataset.name;
-        document.getElementById('deptCode').value = btn.dataset.code;
-        new bootstrap.Modal(document.getElementById('departmentModal')).show();
-    }
-    function filterDepartmentsTable() {
-        const input = document.getElementById('departmentSearchInput').value.toLowerCase();
-        document.querySelectorAll('#departmentsTable tbody tr').forEach(row => {
-            if (row.cells.length === 1) return; // "No departments defined yet." row
-            row.style.display = row.innerText.toLowerCase().includes(input) ? '' : 'none';
-        });
-    }
-    function showTlTab(slug) {
-        document.querySelectorAll('.tl-tab-panel').forEach(p => { p.style.display = 'none'; });
-        document.querySelectorAll('.tl-tab-btn').forEach(b => {
-            b.classList.remove('btn-primary'); b.classList.add('btn-outline-primary');
-        });
-        const panel = document.getElementById('tlTabPanel_' + slug);
-        const btn = document.getElementById('tlTabBtn_' + slug);
-        if (panel) panel.style.display = '';
-        if (btn) { btn.classList.remove('btn-outline-primary'); btn.classList.add('btn-primary'); }
-    }
-    function setTeachingLoadLocked(slug, locked) {
-        const panel = document.getElementById('tlTabPanel_' + slug);
-        if (!panel) return;
-        panel.querySelectorAll('input, select').forEach(function (el) {
-            if (el.type === 'hidden') return;
-            el.disabled = locked;
-        });
-        const editBtn = document.getElementById('tlEditBtn_' + slug);
-        const saveBtn = document.getElementById('tlSaveBtn_' + slug);
-        if (editBtn) editBtn.style.display = locked ? '' : 'none';
-        if (saveBtn) saveBtn.style.display = locked ? 'none' : '';
-    }
-    function unlockTeachingLoad(slug) {
-        setTeachingLoadLocked(slug, false);
-    }
-
-    // Lock every teaching-load panel that already has a saved configuration. This runs on
-    // DOMContentLoaded rather than inline, because the panels are rendered well before
-    // these functions are defined.
-    document.addEventListener('DOMContentLoaded', function () {
-        document.querySelectorAll('.tl-tab-panel[data-configured="1"]').forEach(function (panel) {
-            setTeachingLoadLocked(panel.id.replace('tlTabPanel_', ''), true);
-        });
-    });
-    function setTlMode(slug, mode) {
-        const hidden = document.getElementById('tlMode_' + slug);
-        if (hidden) hidden.value = mode;
-        const gen = document.getElementById('tlGeneralBlock_' + slug);
-        const spec = document.getElementById('tlSpecificBlock_' + slug);
-        if (gen) gen.style.display = (mode === 'GENERAL') ? '' : 'none';
-        if (spec) spec.style.display = (mode === 'SPECIFIC') ? '' : 'none';
-    }
-    </script>
-</div>
-
 <div id="nav-indicators" class="dashboard-section">
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div>
@@ -1766,7 +1809,7 @@ function openAddIndicator(categoryName, targetTypes) {
         <div class="modal-content border-0 shadow">
             <form action="{{ url_for('admin.import_csv') }}" method="POST" enctype="multipart/form-data">
                 <div class="modal-header bg-light">
-                    <h5 class="modal-title fw-bold">Upload HR Roster (CSV)</h5>
+                    <h5 class="modal-title fw-bold">Upload Faculty Configuration (CSV)</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">

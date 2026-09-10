@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, session, url_fo
 from app.models import *
 from app.decorators import role_required
 from app.auth import hash_pass
-import io, csv, secrets, string, datetime
+import io, csv, secrets, string, datetime, re
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
@@ -132,21 +132,26 @@ def admin_backup():
 @admin_bp.route('/open_term', methods=['POST'])
 @role_required('ADMIN')
 def admin_open_term():
-    academic_year = request.form.get('academic_year')
+    academic_year = request.form.get('academic_year', '').strip()
     semester = request.form.get('semester')
-    deadline_date = request.form.get('deadline_date')
     period_start = request.form.get('period_start')
     period_end = request.form.get('period_end')
+
+    match = re.match(r'^(\d{4})\s*-\s*(\d{4})$', academic_year)
+    if not match or int(match.group(2)) != int(match.group(1)) + 1 or not (2000 <= int(match.group(1)) <= 2099):
+        flash("Invalid Academic Year format. Please use consecutive years in YYYY - YYYY format (e.g., 2025 - 2026).", "danger")
+        return redirect(url_for('admin.admin_dashboard'))
+    academic_year = f"{match.group(1)} - {match.group(2)}"
 
     conn = None
     cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        open_new_term(conn, cursor, academic_year, semester, deadline_date,
+        open_new_term(conn, cursor, academic_year, semester,
                       period_start, period_end)
         log_audit_action(conn, cursor, session.get('user_id'), 'Term Opened',
-                         f"New term opened: {academic_year} {semester} (Deadline: {deadline_date})",
+                         f"New term opened: {academic_year} {semester}",
                          request.remote_addr)
         flash("New Academic Term opened successfully.", "success")
     except Exception as e:

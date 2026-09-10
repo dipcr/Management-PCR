@@ -1251,7 +1251,15 @@
 
                     const headerCat = getHeaderCategoryName(item.category_name);
                     const badgeCat = getBadgeCategoryName(item.category_name);
-                    const previewDesc = window.renderIndicatorPreview(item.indicator_description);
+                    // Auto-generated descriptions regenerate from the indicator's own template
+                    // using the actual reviewed quantity, so the text stays in sync as the
+                    // Program Chair edits Reviewed Qty; a manually customized description
+                    // (is_auto_description = 0) is left exactly as authored.
+                    const isAutoDesc = item.is_auto_description !== 0;
+                    const previewDesc = isAutoDesc
+                        ? window.generateIpcrDescription(item.indicator_template, item.reviewed_quantity,
+                            item.target_duration_value, item.target_duration_unit)
+                        : window.renderIndicatorPreview(item.indicator_description);
 
                     // Insert category banner row if category changes
                     if (headerCat !== lastCategory) {
@@ -1282,7 +1290,7 @@
                     <td><span class="badge bg-light text-dark border small">${badgeCat}</span></td>
                     <td>
                         <div class="small fw-semibold">
-                            ${escapeHtml(previewDesc)}
+                            <span class="item-desc" id="item-desc-${item.item_id}">${escapeHtml(previewDesc)}</span>
                             ${item.target_deadline ? `<span class="badge bg-info text-dark ms-1" style="font-size:0.7rem;"><i class="ti ti-clock me-1"></i>Deadline: ${escapeHtml(item.target_deadline)}</span>` : ''}
                         </div>
                         ${retTag}
@@ -1296,6 +1304,10 @@
                                data-item-id="${item.item_id}"
                                data-original="${item.original_quantity}"
                                data-initial-val="${item.reviewed_quantity}"
+                               data-auto-desc="${isAutoDesc ? '1' : '0'}"
+                               data-indicator-text="${escapeHtml(item.indicator_template || '')}"
+                               data-dur-value="${item.target_duration_value != null ? item.target_duration_value : ''}"
+                               data-dur-unit="${item.target_duration_unit != null ? item.target_duration_unit : ''}"
                                aria-label="Reviewed quantity for ${escapeHtml(previewDesc)}"
                                ${isInputDisabled ? 'disabled' : ''}>
                         ${qtyChanged ? `<small class="qty-edited-tag text-warning d-block mt-1"><i class="ti ti-pencil"></i> Edited</small>` : '<small class="qty-edited-tag" style="display:none"></small>'}
@@ -1400,6 +1412,18 @@
                         tag.style.display = 'none';
                     }
                 }
+
+                // Live-update the indicator text to reflect the new quantity, unless it's a
+                // manually customized description (data-auto-desc="0"), which stays as authored.
+                if (inp.dataset.autoDesc === '1') {
+                    const descEl = document.getElementById(`item-desc-${inp.dataset.itemId}`);
+                    if (descEl) {
+                        descEl.textContent = window.generateIpcrDescription(
+                            inp.dataset.indicatorText, currentQty,
+                            inp.dataset.durValue, inp.dataset.durUnit);
+                    }
+                }
+
                 checkProgChairEdits();
             }
         });
@@ -1635,6 +1659,56 @@
         </span>
     </div>
 
+    <!-- Department Accomplishment Summary: quota vs. Approved-only accomplishment per
+         indicator cascaded to this department -- the same cascade rows that become this
+         chair's own Departmental Oversight targets. Verified here means already Approved by
+         this Program Chair, not merely reported/pending -- a stricter figure than the
+         "Accomplished Qty" shown elsewhere, meant for at-a-glance monitoring, not scoring. -->
+    <div class="card border-0 shadow-sm mb-4 card-rounded-clip">
+        <div class="card-header bg-white border-0 py-3">
+            <h5 class="mb-0 fw-bold text-dark" role="heading" aria-level="3"><i class="ti ti-sitemap me-2 text-primary"></i>Department Accomplishment Summary</h5>
+            <small class="text-muted">Quota cascaded to {{ specialization }} vs. accomplishment already Approved by you.</small>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-4">Departmental Oversight Target</th>
+                            <th class="text-center">Quota</th>
+                            <th class="text-center">Verified Accomplished</th>
+                            <th class="text-center pe-4" style="width: 180px;">Progress</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if department_accomplishment_summary %}
+                            {% for ind in department_accomplishment_summary %}
+                            <tr>
+                                <td class="ps-4 py-3 small fw-semibold text-dark">{{ ind.target_description | ipcr_preview }}</td>
+                                <td class="text-center fw-bold text-primary fs-6">{{ ind.total_target_value }}</td>
+                                <td class="text-center fw-bold text-success fs-6">{{ ind.verified_accomplished }}</td>
+                                <td class="text-center pe-4">
+                                    <div class="progress" style="height: 8px;" role="progressbar"
+                                         aria-valuenow="{{ ind.percent_verified }}" aria-valuemin="0" aria-valuemax="100">
+                                        <div class="progress-bar bg-success" style="width: {{ ind.percent_verified }}%;"></div>
+                                    </div>
+                                    <small class="text-muted">{{ ind.percent_verified }}%</small>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center py-4 text-muted">
+                                    No indicators have been cascaded to {{ specialization }} yet this term.
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <div class="card border-0 shadow-sm mb-4 card-rounded-clip">
         <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
             <h5 class="mb-0 fw-bold text-dark" role="heading" aria-level="3"><i class="ti ti-clipboard-check me-2 text-primary"></i>Faculty Evidence Submissions</h5>
@@ -1671,8 +1745,6 @@
                                 <td class="text-center">
                                     {% if fac.verification_status_code == 'WAITING_CHAIR' %}
                                         <span class="badge bg-warning text-dark px-3 py-2"><i class="ti ti-hourglass me-1"></i>Waiting for Program Chair Approval</span>
-                                    {% elif fac.verification_status_code == 'WAITING_RET' %}
-                                        <span class="badge bg-info text-dark px-3 py-2"><i class="ti ti-hourglass me-1"></i>Waiting for RET Chair Approval</span>
                                     {% else %}
                                         <span class="badge bg-secondary px-3 py-2"><i class="ti ti-hourglass me-1"></i>Evidences Submitted</span>
                                     {% endif %}
@@ -1733,11 +1805,7 @@
                                 <td class="text-center fw-bold text-primary fs-6">{{ fac.total_targets }}</td>
                                 <td class="text-center fw-bold text-success fs-6">{{ fac.met_targets }} / {{ fac.total_targets }}</td>
                                 <td class="text-center">
-                                    {% if fac.is_both_approved %}
-                                    <span class="badge bg-success px-3 py-2"><i class="ti ti-checks me-1"></i>Approved by Both</span>
-                                    {% else %}
-                                    <span class="badge bg-info text-dark px-3 py-2"><i class="ti ti-circle-check me-1"></i>Approved by Chair (Waiting for RET)</span>
-                                    {% endif %}
+                                    <span class="badge bg-success px-3 py-2"><i class="ti ti-checks me-1"></i>Approved</span>
                                 </td>
                                 <td class="text-center pe-4">
                                     <div class="d-inline-flex gap-2 align-items-center justify-content-center">
@@ -1907,9 +1975,7 @@ function openFacultyEvidenceVerificationModal(empId, facultyName) {
                     EVIDENCE_BY_TARGET[t.target_id] = t.evidence_list || [];
 
                     let evHtml = '';
-                    if (t.is_ret) {
-                        evHtml = '<span class="badge bg-light text-secondary border px-3 py-2"><i class="ti ti-shield-lock me-1"></i>Managed by RET Sector</span>';
-                    } else if (t.evidence_list && t.evidence_list.length > 0) {
+                    if (t.evidence_list && t.evidence_list.length > 0) {
                         evHtml = `<button type="button" class="btn btn-outline-primary btn-sm px-3 fw-semibold shadow-xs"
                             onclick="openEvidenceViewerFor(${t.target_id})">
                             <i class="ti ti-folder-open me-1"></i>View Uploaded Evidence (${t.evidence_list.length})
@@ -1958,9 +2024,7 @@ function openFacultyEvidenceVerificationModal(empId, facultyName) {
                     // Aggregate verification status across this target's evidence files.
                     let verifyHtml;
                     const evs = t.evidence_list || [];
-                    if (t.is_ret) {
-                        verifyHtml = '<span class="badge bg-light text-secondary border small">RET Sector</span>';
-                    } else if (evs.length === 0) {
+                    if (evs.length === 0) {
                         verifyHtml = '<span class="badge bg-light text-muted border small">No evidence</span>';
                     } else {
                         const returned = evs.filter(e => e.verification_status === 'Returned').length;

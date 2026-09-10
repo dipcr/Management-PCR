@@ -8,7 +8,6 @@ CREATE TABLE `tbl_academic_terms` (
   `semester` varchar(20) NOT NULL,
   `period_start` date DEFAULT NULL,
   `period_end` date DEFAULT NULL,
-  `deadline_date` date DEFAULT NULL,
   `is_active` tinyint(1) DEFAULT '0',
   PRIMARY KEY (`term_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=56 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -40,6 +39,7 @@ CREATE TABLE `tbl_cascaded_quotas` (
   `indicator_id` int NOT NULL,
   `total_target_value` int NOT NULL,
   `assigned_to_role` varchar(50) NOT NULL,
+  `allow_chair_allocation` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`quota_id`),
   KEY `fk_quota_term` (`term_id`),
   KEY `fk_quota_ind` (`indicator_id`),

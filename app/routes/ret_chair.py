@@ -44,9 +44,9 @@ def ret_chair_dashboard():
             for draft in pending_ret_drafts:
                 draft['ipcr_status'] = get_overall_ipcr_status(cursor, draft['emp_id'], term_id)
             pending_ret_count = sum(1 for d in pending_ret_drafts if d['ipcr_status'] in ('waiting_for_ret_chair_review', 'pending_ret_review'))
+            # Read-only monitor: regular faculty with R&E targets, once Program Chair has
+            # approved all their evidence. RET Chair no longer verifies anyone's evidence.
             evidence_faculty_list = get_ret_chair_evidence_faculty(cursor, term_id)
-            pending_evidence_faculty_list = [f for f in evidence_faculty_list if not f.get('is_both_approved')]
-            approved_evidence_faculty_list = [f for f in evidence_faculty_list if f.get('is_both_approved')]
 
         return render_template('ret_chair_dashboard.html',
                                active_term=active_term,
@@ -61,8 +61,6 @@ def ret_chair_dashboard():
                                total_regular_faculty=total_regular_faculty,
                                pending_ret_count=pending_ret_count,
                                evidence_faculty_list=evidence_faculty_list if 'evidence_faculty_list' in locals() else [],
-                               pending_evidence_faculty_list=pending_evidence_faculty_list if 'pending_evidence_faculty_list' in locals() else [],
-                               approved_evidence_faculty_list=approved_evidence_faculty_list if 'approved_evidence_faculty_list' in locals() else [],
                                has_own_ipcr=True)
     finally:
         cursor.close()
@@ -206,37 +204,6 @@ def save_assignments():
         conn.close()
 
     return redirect(url_for('ret_chair.ret_chair_dashboard'))
-
-
-@ret_chair_bp.route('/verify_evidence', methods=['POST'])
-@role_required('RET_CHAIR')
-def ret_chair_verify_evidence():
-    """AJAX — approve or return a Research/Extension evidence file."""
-    data = request.get_json(silent=True) or request.form
-    evidence_id = data.get('evidence_id')
-    status = (data.get('status') or '').strip()
-    comment = data.get('comment') or ''
-    if not evidence_id:
-        return jsonify({'success': False, 'message': 'Missing evidence_id.'}), 400
-
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        from app.models.faculty import set_evidence_verification
-        success, msg = set_evidence_verification(conn, cursor, int(evidence_id), status, comment)
-        if success and status == 'Approved':
-            try:
-                from app.services.notification_service import check_and_trigger_evidence_approved_notification
-                check_and_trigger_evidence_approved_notification(conn, cursor, int(evidence_id), 'RET Chair', request.host_url)
-            except Exception as notif_err:
-                import logging
-                logging.getLogger(__name__).error(f"Error triggering evidence approved notification: {notif_err}")
-        return jsonify({'success': success, 'message': msg})
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
 
 
 @ret_chair_bp.route('/faculty_evidence_details/<int:emp_id>')
@@ -536,6 +503,8 @@ def review_ipcr(emp_id):
                     'original_quantity': item['original_quantity'],
                     'reviewed_quantity': rev_qty,
                     'item_remarks': item['item_remarks'] or '',
+                    'target_duration_value': item.get('target_duration_value'),
+                    'target_duration_unit': item.get('target_duration_unit'),
                 })
                 selected_ids.add(item['indicator_id'])
 

@@ -73,9 +73,9 @@ def save_cascaded_quotas(cursor, connection, term_id, quotas_data):
 
         for quota in quotas_data:
             cursor.execute("""
-                INSERT INTO tbl_cascaded_quotas (term_id, indicator_id, total_target_value, assigned_to_role)
-                VALUES (%s, %s, %s, %s)
-            """, (term_id, quota['indicator_id'], quota['total_target'], quota['assigned_role']))
+                INSERT INTO tbl_cascaded_quotas (term_id, indicator_id, total_target_value, assigned_to_role, allow_chair_allocation)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (term_id, quota['indicator_id'], quota['total_target'], quota['assigned_role'], quota['allow_chair_allocation']))
 
         connection.commit()
         return True, "Quotas cascaded successfully!"
@@ -713,6 +713,221 @@ def get_college_wide_allocations_tracker(cursor, term_id):
     return timed_query(cursor, query, (term_id,), label="get_college_wide_allocations_tracker")
 
 
+# ──────────────────────────────────────────────
+# Draft IPCR Studio (Decision 2/3) — Dean-formulated Chair/RET Chair/Dean IPCRs
+# ──────────────────────────────────────────────
+
+def get_designated_faculty_draft_preview(cursor, term_id, emp_id):
+    """
+    Everything the Dean needs to see for one designated faculty member / chair in the Draft
+    IPCR Studio modal: Core Functions (Teaching Load + their own Instruction share, both
+    read-only previews the Dean does not author) and Strategic Priorities & Support Functions
+    (Departmental/RET Oversight, chair-only, and the College-Wide pool the Dean does author).
+
+    A Program Chair, RET Chair, or Dean's own IPCR is fully Dean-formulated (`is_dean_formulated`
+    True) — see CLAUDE.md's designation/system_role note. A Plain Designated Faculty's is not:
+    they still author custom targets themselves and submit for review (Decision 4), so this is
+    only ever a preview/College-Wide-assignment screen for them, same as before.
+    """
+    from app.models.institution import resolve_teaching_load, teaching_load_description
+    from app.models.scoring import format_duration
+    from app.models.ipcr_description import format_ipcr_target_description
+    from app.models.designated import get_oversight_targets, get_core_instruction_allocation, describe_core_instruction_allocation
+
+    cursor.execute("""
+        SELECT CONCAT(first_name, ' ', last_name), academic_rank, designation, assigned_program, specialization
+        FROM tbl_employee_profiles
+        WHERE emp_id = %s
+    """, (emp_id,))
+    fac_row = cursor.fetchone()
+    if not fac_row:
+        return None
+    faculty_name = fac_row[0]
+    academic_rank = fac_row[1] or ''
+    designation = fac_row[2] or 'Designated Faculty'
+    department = fac_row[3] or fac_row[4] or 'General'
+    is_dean_formulated = designation in ('Program Chair', 'RET Chair', 'Dean')
+
+    tl_hours, tl_dur_value, tl_dur_unit = resolve_teaching_load(cursor, term_id, 'Designated Faculty', academic_rank)
+    teaching_load = {
+        'description': teaching_load_description(tl_hours),
+        'hours': tl_hours,
+        'target_duration_value': tl_dur_value,
+        'target_duration_unit': tl_dur_unit,
+        'target_deadline': format_duration(tl_dur_value, tl_dur_unit),
+    }
+
+    # Distributed by the Program Chair in Phase 1 Target Allocation, not by the Dean here —
+    # shown so the Dean can see whether it's still pending before issuing the rest of the draft.
+    instruction = []
+    for r in get_core_instruction_allocation(cursor, emp_id, term_id):
+        desc, deadline, _ = describe_core_instruction_allocation(r)
+        instruction.append({
+            'indicator_id': r['indicator_id'],
+            'indicator_description': desc,
+            'assigned_quantity': r['assigned_quantity'],
+            'target_deadline': deadline,
+        })
+
+    oversight = []
+    if is_dean_formulated:
+        for r in get_oversight_targets(cursor, emp_id, term_id):
+            dur_value = r.get('target_duration_value') or 6
+            dur_unit = r.get('target_duration_unit') or 'months'
+            # Regenerated against this preview's own dur_value/dur_unit (the 6-month default,
+            # or whatever was already saved) rather than trusting r['target_description'] as-is
+            # -- that field was built by get_oversight_targets against whatever duration a prior
+            # draft happened to have, which can be blank/None the very first time this is
+            # opened, and format_ipcr_target_description must never be skipped in favor of the
+            # bare indicator_description: that's the master indicator's own placeholder/example
+            # number, not this department's actual cascaded quota (r['total_target_value']).
+            oversight.append({
+                'indicator_id': r['indicator_id'],
+                'indicator_description': format_ipcr_target_description(
+                    r['indicator_description'], r['total_target_value'], dur_value, dur_unit),
+                'total_target_value': r['total_target_value'],
+                'target_duration_value': dur_value,
+                'target_duration_unit': dur_unit,
+                'target_deadline': r.get('target_deadline') or format_duration(dur_value, dur_unit),
+            })
+
+    cw_quotas = get_college_wide_cascaded_quotas(cursor, term_id)
+    assigned_list = get_designated_faculty_assignments(cursor, term_id, emp_id)
+    assigned_map = {a['indicator_id']: a for a in assigned_list}
+    allocated_totals = {}
+    for alloc in get_college_wide_allocations_tracker(cursor, term_id):
+        ind_id = alloc['indicator_id']
+        allocated_totals[ind_id] = allocated_totals.get(ind_id, 0) + (alloc.get('proposed_quantity') or 0)
+
+    college_wide = []
+    for q in cw_quotas:
+        ind_id = q['indicator_id']
+        asg = assigned_map.get(ind_id)
+        is_assigned = ind_id in assigned_map
+        qty = asg['assigned_quantity'] if (asg and asg.get('assigned_quantity') is not None) else 1
+        dur_val = asg['target_duration_value'] if (asg and asg.get('target_duration_value') is not None) else 6
+        dur_unit = asg['target_duration_unit'] if (asg and asg.get('target_duration_unit')) else 'months'
+        is_auto_desc = asg.get('is_auto_description') if asg else None
+        is_auto = is_auto_desc is None or is_auto_desc == 1
+        if asg and asg.get('custom_description') and not is_auto:
+            desc = asg['custom_description']
+        else:
+            desc = format_ipcr_target_description(q['indicator_description'], qty, dur_val, dur_unit)
+
+        college_wide.append({
+            'indicator_id': ind_id,
+            'indicator_description': q['indicator_description'],
+            'category_name': q['category_name'],
+            'total_quota': q['total_target_value'],
+            'allocated_total': allocated_totals.get(ind_id, 0),
+            'is_assigned': is_assigned,
+            'assigned_quantity': qty,
+            'custom_description': desc,
+            'target_duration_value': dur_val,
+            'target_duration_unit': dur_unit,
+            'target_deadline': asg.get('target_deadline') if asg else None,
+            'is_auto_description': is_auto,
+        })
+
+    cursor.execute(
+        "SELECT overall_status FROM tbl_ipcr_dean_review WHERE emp_id = %s AND term_id = %s",
+        (emp_id, term_id)
+    )
+    dr_row = cursor.fetchone()
+
+    cursor.execute("""
+        SELECT COUNT(*) FROM tbl_committed_targets ct
+        JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
+        WHERE ct.emp_id = %s AND mi.term_id = %s
+    """, (emp_id, term_id))
+    is_committed = cursor.fetchone()[0] > 0
+
+    return {
+        'emp_id': emp_id,
+        'faculty_name': faculty_name,
+        'academic_rank': academic_rank,
+        'designation': designation,
+        'department': department,
+        'is_dean_formulated': is_dean_formulated,
+        'is_committed': is_committed,
+        'dean_review_status': dr_row[0] if dr_row else None,
+        'teaching_load': teaching_load,
+        'instruction': instruction,
+        'oversight': oversight,
+        'college_wide': college_wide,
+    }
+
+
+def save_and_issue_designated_draft_ipcr(conn, cursor, term_id, emp_id, assignments, dean_id, oversight_durations=None):
+    """
+    The Dean's unified "Save & Issue Draft IPCR" action (Draft IPCR Studio).
+
+    Always persists the College-Wide selections to tbl_draft_allocation, exactly like the
+    classic assignment flow (save_designated_faculty_assignments) — this keeps the modal's
+    reopen/pre-fill and the quota-remaining counter working identically for every designated
+    faculty type.
+
+    For a Program Chair, RET Chair, or Dean — whose entire IPCR is Dean-formulated, see
+    CLAUDE.md's designation/system_role note — additionally assembles their full draft
+    (Teaching Load + Departmental/RET Oversight + these College-Wide picks) straight into
+    tbl_draft_targets via submit_designated_ipcr, then auto-approves it through the same
+    tbl_ipcr_dean_review machinery a manual per-item review uses (get_or_create_dean_review +
+    submit_dean_review_decision), skipping the redundant self-submission/Dean-review round
+    trip. Reusing those two functions rather than duplicating their logic here is deliberate:
+    it's the only way this and a manual Dean review can never drift apart on how a draft is
+    reviewed/approved.
+
+    A Plain Designated Faculty is untouched beyond the tbl_draft_allocation save: they still
+    author their own custom targets and submit for review themselves (Decision 4).
+    """
+    cursor.execute("""
+        SELECT COUNT(*) FROM tbl_committed_targets ct
+        JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
+        WHERE ct.emp_id = %s AND mi.term_id = %s
+    """, (emp_id, term_id))
+    if cursor.fetchone()[0] > 0:
+        return False, "This designated faculty member's IPCR is already locked and committed for this term."
+
+    success, msg = save_designated_faculty_assignments(conn, cursor, term_id, emp_id, assignments, assigned_by=dean_id)
+    if not success:
+        return success, msg
+
+    cursor.execute("SELECT designation FROM tbl_employee_profiles WHERE emp_id = %s", (emp_id,))
+    row = cursor.fetchone()
+    designation = (row[0] if row else '') or ''
+
+    if designation not in ('Program Chair', 'RET Chair', 'Dean'):
+        return True, msg
+
+    from app.models.designated import submit_designated_ipcr
+
+    cw_rows = get_designated_faculty_assignments(cursor, term_id, emp_id)
+    selected_targets = [{
+        'indicator_id': r['indicator_id'],
+        'proposed_quantity': r['assigned_quantity'],
+        'target_description': r.get('custom_description'),
+        'target_deadline': r.get('target_deadline'),
+        'target_duration_value': r.get('target_duration_value'),
+        'target_duration_unit': r.get('target_duration_unit'),
+        'is_auto_description': r.get('is_auto_description') is None or r.get('is_auto_description') == 1,
+    } for r in cw_rows]
+
+    ok, msg2 = submit_designated_ipcr(
+        conn, cursor, emp_id, term_id, selected_targets, [], oversight_durations=oversight_durations
+    )
+    if not ok:
+        return False, msg2
+
+    review_id = get_or_create_dean_review(conn, cursor, emp_id, term_id, dean_id)
+    ok2, msg3 = submit_dean_review_decision(
+        cursor, conn, review_id, 'Approved', 'Dean-formulated IPCR — auto-approved.'
+    )
+    if not ok2:
+        return False, msg3
+
+    return True, "Draft IPCR issued and approved."
+
+
 def get_dean_evidence_faculty(cursor, term_id):
     """
     Returns faculty members submitted to the Dean for final evidence verification,
@@ -749,7 +964,7 @@ def get_dean_evidence_faculty(cursor, term_id):
     approved_list = []
 
     for r in rows:
-        enrich_faculty_verification_status(cursor, r, term_id)
+        enrich_faculty_verification_status(cursor, r, term_id, reviewer_label='Dean')
         # Check if all committed targets for this faculty member are marked 'Dean Approved'
         cursor.execute("""
             SELECT COUNT(*)
