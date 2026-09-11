@@ -2,6 +2,7 @@ services:
   db:
     image: nightingzine/dipcr-db:latest
     container_name: dipcr-db
+    restart: unless-stopped
     command: --log-bin-trust-function-creators=1
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
@@ -56,6 +57,13 @@ services:
       - evidence_data:/app/app/uploads/evidence
     networks:
       - dipcr
+    healthcheck:
+      # Hits the app's /healthz probe, which returns 200 only when the DB is reachable.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/healthz', timeout=5)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
 volumes:
   mysql_data:
