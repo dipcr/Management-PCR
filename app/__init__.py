@@ -159,6 +159,35 @@ def serve_evidence(evidence_id):
     import os
     return send_from_directory(app.config['UPLOAD_FOLDER'], os.path.basename(file_path))
 
+
+@app.route('/healthz')
+def healthz():
+    """
+    Reports "healthy" only when the app can actually reach the database, so a broken
+    DB connection marks the container unhealthy rather than letting it serve
+    error pages.
+    """
+    from app.models.connection import get_db_connection
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT 1")
+            cursor.fetchall()
+        finally:
+            cursor.close()
+        return {"status": "ok"}, 200
+    except Exception:
+        return {"status": "unavailable"}, 503
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.after_request
 def add_header(response):
     response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0'
