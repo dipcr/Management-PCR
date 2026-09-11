@@ -19,7 +19,7 @@ def get_ret_indicators(cursor, term_id):
         -- Pull targets submitted by the faculty
         LEFT JOIN tbl_draft_targets dt ON mi.indicator_id = dt.indicator_id
         
-        WHERE cq.term_id = %s
+        WHERE mi.term_id = %s
           AND cq.assigned_to_role = 'RET / Extension'
         GROUP BY 
             mi.indicator_id, 
@@ -310,7 +310,8 @@ def get_ret_assignment_faculty(cursor, term_id):
             ep.specialization,
             ep.college,
             (SELECT COUNT(*) FROM tbl_ret_assignments ra
-             WHERE ra.emp_id = ep.emp_id AND ra.term_id = %s) AS assignment_count
+             JOIN tbl_master_indicators mi ON mi.indicator_id = ra.indicator_id
+             WHERE ra.emp_id = ep.emp_id AND mi.term_id = %s) AS assignment_count
         FROM tbl_employee_profiles ep
         WHERE ep.designation = 'Regular Faculty'
         ORDER BY ep.specialization, ep.last_name, ep.first_name
@@ -332,7 +333,7 @@ def get_ret_faculty_assignments(cursor, term_id, emp_id):
         FROM tbl_ret_assignments ra
         JOIN tbl_master_indicators mi ON ra.indicator_id = mi.indicator_id
         JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
-        WHERE ra.term_id = %s AND ra.emp_id = %s
+        WHERE mi.term_id = %s AND ra.emp_id = %s
         ORDER BY tc.display_order, mi.indicator_id
     """
     cursor.execute(query, (term_id, emp_id))
@@ -364,7 +365,11 @@ def save_ret_assignments(conn, cursor, term_id, emp_id, assignments, assigned_by
 
         # Replace the full set for this faculty/term
         cursor.execute(
-            "DELETE FROM tbl_ret_assignments WHERE term_id = %s AND emp_id = %s",
+            """
+            DELETE ra FROM tbl_ret_assignments ra
+            JOIN tbl_master_indicators mi ON mi.indicator_id = ra.indicator_id
+            WHERE mi.term_id = %s AND ra.emp_id = %s
+            """,
             (term_id, emp_id)
         )
 
@@ -394,10 +399,10 @@ def save_ret_assignments(conn, cursor, term_id, emp_id, assignments, assigned_by
                     get_indicator_description(cursor, indicator_id), qty, dur_val, dur_unit)
 
             cursor.execute("""
-                INSERT INTO tbl_ret_assignments (term_id, emp_id, indicator_id, target_quantity,
+                INSERT INTO tbl_ret_assignments (emp_id, indicator_id, target_quantity,
                                                 target_description, target_duration_value, target_duration_unit,
                                                 assigned_by, is_auto_description)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE
                     target_quantity = VALUES(target_quantity),
                     target_description = VALUES(target_description),
@@ -405,7 +410,7 @@ def save_ret_assignments(conn, cursor, term_id, emp_id, assignments, assigned_by
                     target_duration_unit = VALUES(target_duration_unit),
                     assigned_by = VALUES(assigned_by),
                     is_auto_description = VALUES(is_auto_description)
-            """, (term_id, emp_id, indicator_id, int(qty), desc, dur_val, dur_unit, assigned_by, is_auto_description))
+            """, (emp_id, indicator_id, int(qty), desc, dur_val, dur_unit, assigned_by, is_auto_description))
             saved += 1
 
         conn.commit()

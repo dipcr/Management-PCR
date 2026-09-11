@@ -103,9 +103,12 @@ def get_claimed_indicator_ids(cursor, term_id):
     """
     from app.models.institution import ROLE_RET, get_departments
 
-    # Department names are read separately rather than joined: tbl_departments was created
-    # with a different collation from tbl_cascaded_quotas, so comparing the two columns
-    # directly raises "Illegal mix of collations". Binding them as parameters sidesteps it.
+    # Department names are read separately rather than joined. The original reason was a
+    # collation mismatch between tbl_departments and tbl_cascaded_quotas, but that was fixed by
+    # MIGRATION_group7.sql -- both columns are utf8mb4_0900_ai_ci now, so a join would work.
+    # What remains is that assigned_to_role is polymorphic: it holds department names alongside
+    # 'College-Wide', 'RET / Extension' and academic ranks, so it cannot carry a foreign key to
+    # tbl_departments without first being split into a discriminator plus a department reference.
     owners = [d['department_name'] for d in get_departments(cursor, active_only=False)]
     owners.append(ROLE_RET)
     if not owners:
@@ -116,11 +119,10 @@ def get_claimed_indicator_ids(cursor, term_id):
         SELECT DISTINCT cq.indicator_id
         FROM tbl_cascaded_quotas cq
         JOIN tbl_master_indicators mi ON cq.indicator_id = mi.indicator_id
-        WHERE cq.term_id = %s
-          AND mi.term_id = %s
+        WHERE mi.term_id = %s
           AND cq.total_target_value > 0
           AND cq.assigned_to_role IN ({placeholders})
-    """, tuple([term_id, term_id] + owners))
+    """, tuple([term_id] + owners))
     return {r[0] for r in cursor.fetchall()}
 
 
@@ -157,7 +159,7 @@ def get_core_instruction_allocation(cursor, emp_id, term_id):
               -- only caller collapsed the result into a Python set; every caller now consumes
               -- full rows, so the duplication is no longer harmless.
               SELECT 1 FROM tbl_cascaded_quotas cq
-              WHERE cq.indicator_id = mi.indicator_id AND cq.term_id = mi.term_id
+              WHERE cq.indicator_id = mi.indicator_id
                 AND cq.assigned_to_role != 'College-Wide'
           )
         ORDER BY mi.indicator_id
@@ -228,8 +230,7 @@ def get_oversight_targets(cursor, emp_id, term_id):
         LEFT JOIN tbl_draft_targets dt
                ON dt.emp_id = %s AND dt.indicator_id = cq.indicator_id
               AND dt.is_admin_function = 1
-        WHERE cq.term_id = %s
-          AND mi.term_id = %s
+        WHERE mi.term_id = %s
           AND cq.assigned_to_role = %s
           AND cq.total_target_value > 0
         ORDER BY tc.display_order, mi.indicator_id
@@ -290,10 +291,10 @@ def get_oversight_indicator_ids(cursor, emp_id, term_id):
         SELECT cq.indicator_id
         FROM tbl_cascaded_quotas cq
         JOIN tbl_master_indicators mi ON cq.indicator_id = mi.indicator_id
-        WHERE cq.term_id = %s AND mi.term_id = %s
+        WHERE mi.term_id = %s
           AND cq.assigned_to_role = %s AND cq.total_target_value > 0
     """
-    rows = timed_query(cursor, query, (term_id, term_id, role), label="get_oversight_indicator_ids")
+    rows = timed_query(cursor, query, (term_id, role), label="get_oversight_indicator_ids")
     return {r['indicator_id'] for r in rows}
 
 

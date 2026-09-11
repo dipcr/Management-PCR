@@ -52,7 +52,11 @@ def faculty_dashboard():
                     ret_menu = full_ret_menu
                     # Research targets directly assigned by the RET Chair — locked on the faculty side
                     cursor.execute(
-                        "SELECT indicator_id FROM tbl_ret_assignments WHERE emp_id = %s AND term_id = %s",
+                        """
+                        SELECT ra.indicator_id FROM tbl_ret_assignments ra
+                        JOIN tbl_master_indicators mi ON mi.indicator_id = ra.indicator_id
+                        WHERE ra.emp_id = %s AND mi.term_id = %s
+                        """,
                         (emp_id, term_id)
                     )
                     ret_assigned_ids = [r[0] for r in cursor.fetchall()]

@@ -140,7 +140,7 @@ def designated_dashboard(conn, cursor):
                 SELECT da.indicator_id FROM tbl_draft_allocation da
                 JOIN tbl_master_indicators mi ON da.indicator_id = mi.indicator_id
                 JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
-                JOIN tbl_cascaded_quotas cq ON mi.indicator_id = cq.indicator_id AND cq.term_id = mi.term_id
+                JOIN tbl_cascaded_quotas cq ON mi.indicator_id = cq.indicator_id
                 WHERE da.emp_id = %s AND mi.term_id = %s 
                   AND tc.slug = 'instruction'
                   AND tc.review_lane = 'CHAIR'
@@ -202,7 +202,7 @@ def designated_dashboard(conn, cursor):
             cursor.execute("""
                 SELECT da.indicator_id, da.assigned_quantity, da.custom_description, da.target_deadline,
                        da.target_duration_value, da.target_duration_unit, tc.slug, tc.review_lane,
-                       (SELECT COUNT(*) FROM tbl_cascaded_quotas cq WHERE cq.indicator_id = mi.indicator_id AND cq.term_id = mi.term_id AND cq.assigned_to_role = 'College-Wide') as is_college_wide
+                       (SELECT COUNT(*) FROM tbl_cascaded_quotas cq WHERE cq.indicator_id = mi.indicator_id AND cq.assigned_to_role = 'College-Wide') as is_college_wide
                 FROM tbl_draft_allocation da
                 JOIN tbl_master_indicators mi ON da.indicator_id = mi.indicator_id
                 JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
@@ -460,10 +460,10 @@ def designated_dashboard(conn, cursor):
                         SELECT COUNT(*) FROM tbl_cascaded_quotas cq
                         JOIN tbl_master_indicators mi ON cq.indicator_id = mi.indicator_id
                         JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
-                        WHERE cq.term_id = %s AND mi.term_id = %s AND tc.slug = 'instruction'
+                        WHERE mi.term_id = %s AND tc.slug = 'instruction'
                           AND tc.review_lane = 'CHAIR' AND cq.assigned_to_role = %s
                           AND cq.total_target_value > 0
-                    """, (term_id, term_id, specialization or ''))
+                    """, (term_id, specialization or ''))
                     requires_instruction = cursor.fetchone()[0] > 0
                     instruction_ready = not requires_instruction
 

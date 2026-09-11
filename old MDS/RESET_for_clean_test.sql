@@ -31,7 +31,6 @@ TRUNCATE TABLE tbl_draft_allocation;
 TRUNCATE TABLE tbl_ret_rule_indicators;
 TRUNCATE TABLE tbl_ret_rules;
 TRUNCATE TABLE tbl_ret_assignments;
-TRUNCATE TABLE tbl_ret_extension_distribution;
 
 -- ── Term-scoped setup, rebuilt in Phase A ────────────────────────────────────
 TRUNCATE TABLE tbl_cascaded_quotas;

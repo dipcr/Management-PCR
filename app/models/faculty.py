@@ -563,7 +563,8 @@ def submit_faculty_ipcr(conn, cursor, emp_id, term_id, selected_research_targets
                     LEFT JOIN tbl_ret_rule_indicators rri ON rri.indicator_id = ra.indicator_id
                     LEFT JOIN tbl_ret_rules r ON rri.rule_id = r.rule_id
                         AND r.academic_rank = %s
-                    WHERE ra.emp_id = %s AND ra.term_id = %s
+                    JOIN tbl_master_indicators ra_mi ON ra_mi.indicator_id = ra.indicator_id
+                    WHERE ra.emp_id = %s AND ra_mi.term_id = %s
                 """, (emp_rank_band, emp_id, active_term_id))
                 for assign_ind_id, assign_qty, a_desc, a_dur_value, a_dur_unit in cursor.fetchall():
                     a_deadline = format_duration(a_dur_value, a_dur_unit)
