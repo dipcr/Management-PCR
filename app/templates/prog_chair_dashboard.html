@@ -181,7 +181,7 @@
                         <tbody>
                             {% set ns_inst = namespace(found=false) %}
                             {% for ind in indicators %}
-                            {% if ind.category_name == 'A. Instructions' %}
+                            {% if 'Instruction' in ind.category_name %}
                             {% set ns_inst.found = true %}
                             <tr data-indicator-text="{{ ind.indicator_description | e }}">
                                 <td class="fw-bold ps-4 small text-secondary">{{ ind.indicator_description | ipcr_preview }}</td>
@@ -283,7 +283,7 @@
                         <tbody>
                             {% set ns_supp = namespace(found=false) %}
                             {% for ind in indicators %}
-                            {% if ind.category_name == 'Support Functions' %}
+                            {% if 'Support' in ind.category_name %}
                             {% set ns_supp.found = true %}
                             <tr data-indicator-text="{{ ind.indicator_description | e }}">
                                 <td class="fw-bold ps-4 small text-secondary">{{ ind.indicator_description | ipcr_preview }}</td>
