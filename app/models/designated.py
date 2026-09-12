@@ -103,9 +103,12 @@ def get_claimed_indicator_ids(cursor, term_id):
     """
     from app.models.institution import ROLE_RET, get_departments
 
-    # Department names are read separately rather than joined: tbl_departments was created
-    # with a different collation from tbl_cascaded_quotas, so comparing the two columns
-    # directly raises "Illegal mix of collations". Binding them as parameters sidesteps it.
+    # Department names are read separately rather than joined. The original reason was a
+    # collation mismatch between tbl_departments and tbl_cascaded_quotas, but that was fixed by
+    # MIGRATION_group7.sql -- both columns are utf8mb4_0900_ai_ci now, so a join would work.
+    # What remains is that assigned_to_role is polymorphic: it holds department names alongside
+    # 'College-Wide', 'RET / Extension' and academic ranks, so it cannot carry a foreign key to
+    # tbl_departments without first being split into a discriminator plus a department reference.
     owners = [d['department_name'] for d in get_departments(cursor, active_only=False)]
     owners.append(ROLE_RET)
     if not owners:
@@ -116,11 +119,10 @@ def get_claimed_indicator_ids(cursor, term_id):
         SELECT DISTINCT cq.indicator_id
         FROM tbl_cascaded_quotas cq
         JOIN tbl_master_indicators mi ON cq.indicator_id = mi.indicator_id
-        WHERE cq.term_id = %s
-          AND mi.term_id = %s
+        WHERE mi.term_id = %s
           AND cq.total_target_value > 0
           AND cq.assigned_to_role IN ({placeholders})
-    """, tuple([term_id, term_id] + owners))
+    """, tuple([term_id] + owners))
     return {r[0] for r in cursor.fetchall()}
 
 
@@ -157,7 +159,7 @@ def get_core_instruction_allocation(cursor, emp_id, term_id):
               -- only caller collapsed the result into a Python set; every caller now consumes
               -- full rows, so the duplication is no longer harmless.
               SELECT 1 FROM tbl_cascaded_quotas cq
-              WHERE cq.indicator_id = mi.indicator_id AND cq.term_id = mi.term_id
+              WHERE cq.indicator_id = mi.indicator_id
                 AND cq.assigned_to_role != 'College-Wide'
           )
         ORDER BY mi.indicator_id
@@ -228,13 +230,12 @@ def get_oversight_targets(cursor, emp_id, term_id):
         LEFT JOIN tbl_draft_targets dt
                ON dt.emp_id = %s AND dt.indicator_id = cq.indicator_id
               AND dt.is_admin_function = 1
-        WHERE cq.term_id = %s
-          AND mi.term_id = %s
+        WHERE mi.term_id = %s
           AND cq.assigned_to_role = %s
           AND cq.total_target_value > 0
         ORDER BY tc.display_order, mi.indicator_id
     """
-    rows = timed_query(cursor, query, (emp_id, term_id, term_id, role),
+    rows = timed_query(cursor, query, (emp_id, term_id, role),
                        label="get_oversight_targets")
 
     from app.models.ipcr_description import format_ipcr_target_description
@@ -290,10 +291,10 @@ def get_oversight_indicator_ids(cursor, emp_id, term_id):
         SELECT cq.indicator_id
         FROM tbl_cascaded_quotas cq
         JOIN tbl_master_indicators mi ON cq.indicator_id = mi.indicator_id
-        WHERE cq.term_id = %s AND mi.term_id = %s
+        WHERE mi.term_id = %s
           AND cq.assigned_to_role = %s AND cq.total_target_value > 0
     """
-    rows = timed_query(cursor, query, (term_id, term_id, role), label="get_oversight_indicator_ids")
+    rows = timed_query(cursor, query, (term_id, role), label="get_oversight_indicator_ids")
     return {r['indicator_id'] for r in rows}
 
 
@@ -834,6 +835,7 @@ def check_designated_evidence_readiness(cursor, emp_id, term_id, dpcr_targets):
         return {
             'all_evidence_ready': False,
             'evidence_submitted': False,
+            'has_returned_evidence': False,
             'has_missing_timeliness': False,
             'targets_missing_timeliness': [],
             'total_targets': 0,
@@ -847,6 +849,7 @@ def check_designated_evidence_readiness(cursor, emp_id, term_id, dpcr_targets):
     targets_with_evidence = 0
     targets_met_qty = 0
     submitted_count = 0
+    has_returned_evidence = False
     targets_missing_timeliness = []
 
     for t in dpcr_targets:
@@ -857,44 +860,45 @@ def check_designated_evidence_readiness(cursor, emp_id, term_id, dpcr_targets):
             # from the missing-timeliness block below: a chair has no way to make a scoped
             # faculty member enter a duration themselves (same rationale as the
             # target-duration edge case documented in the evidence-verification plan).
+            t['has_returned'] = False
             if t.get('evidence_count', 0) > 0:
                 targets_with_evidence += 1
+            if t.get('status') in ('Submitted', 'Pending Verification', 'Verified', 'Submitted to Dean', 'Dean Approved'):
+                submitted_count += 1
         else:
             ev_list = t.get('evidence_list')
             if ev_list is None:
                 ev_list = get_evidence_by_target(cursor, t['target_id'])
                 t['evidence_list'] = ev_list
 
+            t_has_returned = any(e.get('verification_status') in ('Returned', 'Rejected') for e in ev_list)
+            t['has_returned'] = t_has_returned
+            if t_has_returned:
+                has_returned_evidence = True
+
             valid_evs = [e for e in ev_list if e.get('verification_status') not in ('Returned', 'Rejected')]
             if len(valid_evs) > 0:
                 targets_with_evidence += 1
-                # Evidence exists but there's nothing to compute Timeliness from -- would
-                # otherwise resolve to a silently-dropped None instead of a real score. 0 is
-                # a legitimate "completed instantly" value (rate_timeliness treats it as
-                # valid too) -- only a genuinely blank duration counts as missing.
                 if t.get('actual_duration_value') is None:
                     targets_missing_timeliness.append(t.get('indicator_description') or f"target #{t.get('target_id')}")
+
+            if t.get('status') in ('Submitted', 'Pending Verification', 'Verified', 'Submitted to Dean', 'Dean Approved') and not t_has_returned:
+                submitted_count += 1
 
         actual_q = t.get('actual_quantity') or 0
         assigned_q = t.get('assigned_quantity') or t.get('total_target_value') or 0
         if actual_q >= assigned_q and assigned_q > 0:
             targets_met_qty += 1
 
-        if t.get('status') in ('Submitted', 'Pending Verification', 'Verified', 'Submitted to Dean', 'Dean Approved'):
-            submitted_count += 1
-
     has_missing_timeliness = len(targets_missing_timeliness) > 0
 
-    # Neither quantity nor evidence needs to be present to submit -- a target a faculty
-    # member never accomplished at all is still a valid target to report; scoring.py
-    # already handles zero accomplishment gracefully (lowest band, not an error).
-    # targets_with_evidence/targets_met_qty stay informational (progress badges) only.
-    all_ready = (total_targets > 0) and not has_missing_timeliness
-    evidence_submitted = (submitted_count == total_targets) and (total_targets > 0)
+    all_ready = (total_targets > 0) and not has_returned_evidence and not has_missing_timeliness
+    evidence_submitted = (submitted_count == total_targets) and (total_targets > 0) and not has_returned_evidence
 
     return {
         'all_evidence_ready': all_ready,
         'evidence_submitted': evidence_submitted,
+        'has_returned_evidence': has_returned_evidence,
         'has_missing_timeliness': has_missing_timeliness,
         'targets_missing_timeliness': targets_missing_timeliness,
         'total_targets': total_targets,
@@ -915,6 +919,9 @@ def submit_designated_evidences(conn, cursor, emp_id, term_id):
     if readiness.get('has_missing_timeliness'):
         names = ', '.join(readiness['targets_missing_timeliness'])
         return False, f"Provide a completion duration for evidence already uploaded on: {names}."
+
+    if not readiness['all_evidence_ready']:
+        return False, "One or more targets have evidence returned for revision. Please address it before resubmitting."
 
     # Every Designated Faculty member -- plain or a Program Chair/RET Chair/Dean's own
     # IPCR -- has their evidence reviewed by the Dean, not a Program Chair; only Regular

@@ -13,6 +13,7 @@ from app.services.notification_service import (
     send_evidence_package_to_dean_notification,
     check_and_trigger_evidence_approved_notification,
     check_and_trigger_tier2_notification,
+    send_evidence_return_notification,
 )
 
 __all__ = [
@@ -27,4 +28,5 @@ __all__ = [
     'send_evidence_package_to_dean_notification',
     'check_and_trigger_evidence_approved_notification',
     'check_and_trigger_tier2_notification',
+    'send_evidence_return_notification',
 ]

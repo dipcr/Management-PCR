@@ -1,14 +1,17 @@
 def log_audit_action(conn, cursor, actor_id, action_type, details, ip_address):
     query = "INSERT INTO tbl_audit_logs (actor_id, action_type, action_details, ip_address) VALUES (%s, %s, %s, %s)"
-    cursor.execute(query, (str(actor_id), action_type, details, ip_address))
+    cursor.execute(query, (actor_id, action_type, details, ip_address))
     conn.commit()
 
 
 def get_recent_audit_logs(cursor, limit=50):
     from app.models.connection import timed_query
     query = """
-        SELECT log_timestamp, actor_id, action_type, action_details, ip_address 
-        FROM tbl_audit_logs ORDER BY log_timestamp DESC LIMIT %s
+        SELECT a.log_timestamp, a.actor_id, a.action_type, a.action_details, a.ip_address,
+               CONCAT(e.first_name, ' ', e.last_name) AS actor_name
+        FROM tbl_audit_logs a
+        LEFT JOIN tbl_employee_profiles e ON e.emp_id = a.actor_id
+        ORDER BY a.log_timestamp DESC LIMIT %s
     """
     return timed_query(cursor, query, (limit,), label="get_recent_audit_logs")
 

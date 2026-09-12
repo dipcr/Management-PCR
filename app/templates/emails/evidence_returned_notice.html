@@ -1,0 +1,62 @@
+{% extends "emails/base_email.html" %}
+
+{% block title %}Action Required: Evidence File Returned by {{ reviewer_role }}{% endblock %}
+
+{% block content %}
+<span class="badge-status" style="background-color: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5;">Evidence Returned</span>
+
+<h2 style="font-size: 19px; color: #1e293b; margin-top: 0;">Evidence Submission Requires Revision</h2>
+
+<p style="font-size: 14px; line-height: 1.6; color: #475569;">
+    Dear <strong>{{ faculty_name }}</strong>,
+</p>
+
+<p style="font-size: 14px; line-height: 1.6; color: #475569;">
+    An evidence file you submitted for <strong>{{ period_display }}</strong> was reviewed and returned with remarks by the <strong>{{ reviewer_role }}</strong>.
+</p>
+
+<div class="info-card" style="border-left: 4px solid #ef4444;">
+    <div class="info-row">
+        <span class="info-label">Faculty Member:</span>
+        <span class="info-value">{{ faculty_name }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Department / Unit:</span>
+        <span class="info-value">{{ department or 'CICT' }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Academic Term:</span>
+        <span class="info-value">{{ period_display }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Returned By:</span>
+        <span class="info-value" style="font-weight: 600; color: #dc2626;">{{ reviewer_role }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Success Indicator:</span>
+        <span class="info-value" style="font-weight: 600; color: #1e293b;">{{ indicator_description }}</span>
+    </div>
+    {% if file_name %}
+    <div class="info-row">
+        <span class="info-label">Evidence File:</span>
+        <span class="info-value">{{ file_name }} (Qty: {{ quantity }})</span>
+    </div>
+    {% endif %}
+    {% if remarks %}
+    <div class="info-row" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+        <span class="info-label">Reason / Remarks:</span>
+        <span class="info-value" style="text-align: left; color: #b91c1c; background: #fff1f2; padding: 10px 14px; border-radius: 6px; width: 100%; box-sizing: border-box; font-size: 13.5px; line-height: 1.5; font-weight: normal; margin-top: 4px; border: 1px solid #ffe4e6;">
+            <strong>Feedback:</strong> {{ remarks }}
+        </span>
+    </div>
+    {% endif %}
+</div>
+
+<p style="font-size: 14px; line-height: 1.6; color: #475569;">
+    Please log in to your dashboard to view the feedback, remove or replace the returned evidence file for this target, and resubmit your evidences for verification.
+</p>
+
+<div style="text-align: center; margin: 30px 0 10px 0;">
+    <a href="{{ action_url }}" class="btn-action" style="background: #dc2626;">Fix &amp; Resubmit Evidence</a>
+</div>
+{% endblock %}

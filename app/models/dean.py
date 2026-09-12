@@ -5,7 +5,7 @@ def get_existing_cascaded_quotas(cursor, term_id):
         FROM tbl_cascaded_quotas cq
         JOIN tbl_master_indicators mi ON cq.indicator_id = mi.indicator_id
         JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
-        WHERE cq.term_id = %s
+        WHERE mi.term_id = %s
         ORDER BY mi.indicator_id
     """
     return timed_query(cursor, query, (term_id,), label="get_existing_cascaded_quotas")
@@ -69,13 +69,17 @@ def get_pending_final_approvals(cursor, term_id):
 
 def save_cascaded_quotas(cursor, connection, term_id, quotas_data):
     try:
-        cursor.execute("DELETE FROM tbl_cascaded_quotas WHERE term_id = %s", (term_id,))
+        cursor.execute("""
+            DELETE cq FROM tbl_cascaded_quotas cq
+            JOIN tbl_master_indicators mi ON mi.indicator_id = cq.indicator_id
+            WHERE mi.term_id = %s
+        """, (term_id,))
 
         for quota in quotas_data:
             cursor.execute("""
-                INSERT INTO tbl_cascaded_quotas (term_id, indicator_id, total_target_value, assigned_to_role, allow_chair_allocation)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (term_id, quota['indicator_id'], quota['total_target'], quota['assigned_role'], quota['allow_chair_allocation']))
+                INSERT INTO tbl_cascaded_quotas (indicator_id, total_target_value, assigned_to_role, allow_chair_allocation)
+                VALUES (%s, %s, %s, %s)
+            """, (quota['indicator_id'], quota['total_target'], quota['assigned_role'], quota['allow_chair_allocation']))
 
         connection.commit()
         return True, "Quotas cascaded successfully!"
@@ -516,7 +520,7 @@ def get_college_wide_cascaded_quotas(cursor, term_id):
         FROM tbl_cascaded_quotas cq
         JOIN tbl_master_indicators mi ON cq.indicator_id = mi.indicator_id
         JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
-        WHERE cq.term_id = %s AND cq.assigned_to_role = 'College-Wide' AND cq.total_target_value > 0
+        WHERE mi.term_id = %s AND cq.assigned_to_role = 'College-Wide' AND cq.total_target_value > 0
         ORDER BY tc.category_name, mi.indicator_id
     """
     return timed_query(cursor, query, (term_id,), label="get_college_wide_cascaded_quotas")
@@ -539,11 +543,11 @@ def get_designated_faculty_assignments(cursor, term_id, emp_id):
         WHERE mi.term_id = %s AND da.emp_id = %s
           AND da.indicator_id IN (
               SELECT indicator_id FROM tbl_cascaded_quotas
-              WHERE term_id = %s AND assigned_to_role = 'College-Wide' AND total_target_value > 0
+              WHERE assigned_to_role = 'College-Wide' AND total_target_value > 0
           )
         ORDER BY tc.category_name, mi.indicator_id
     """
-    return timed_query(cursor, query, (term_id, emp_id, term_id), label="get_designated_faculty_assignments")
+    return timed_query(cursor, query, (term_id, emp_id), label="get_designated_faculty_assignments")
 
 
 def get_designated_faculty_assignments_batch(cursor, term_id, emp_ids):
@@ -567,10 +571,10 @@ def get_designated_faculty_assignments_batch(cursor, term_id, emp_ids):
         WHERE mi.term_id = %s AND da.emp_id IN ({placeholders})
           AND da.indicator_id IN (
               SELECT indicator_id FROM tbl_cascaded_quotas
-              WHERE term_id = %s AND assigned_to_role = 'College-Wide' AND total_target_value > 0
+              WHERE assigned_to_role = 'College-Wide' AND total_target_value > 0
           )
     """
-    rows = timed_query(cursor, query, [term_id] + emp_ids + [term_id], label="get_designated_faculty_assignments_batch")
+    rows = timed_query(cursor, query, [term_id] + emp_ids, label="get_designated_faculty_assignments_batch")
 
     result = {}
     for row in rows:
@@ -597,7 +601,7 @@ def save_designated_faculty_assignments(conn, cursor, term_id, emp_id, assignmen
             SELECT cq.indicator_id, mi.indicator_description
             FROM tbl_cascaded_quotas cq
             JOIN tbl_master_indicators mi ON cq.indicator_id = mi.indicator_id
-            WHERE cq.term_id = %s AND cq.assigned_to_role = 'College-Wide' AND cq.total_target_value > 0
+            WHERE mi.term_id = %s AND cq.assigned_to_role = 'College-Wide' AND cq.total_target_value > 0
         """, (term_id,))
         cw_rows = cursor.fetchall()
         allowed_cw_ids = {r[0] for r in cw_rows}
@@ -704,9 +708,10 @@ def get_college_wide_allocations_tracker(cursor, term_id):
           AND ep.designation NOT IN ('Admin')
           AND ep.leave_status = 'Active'
           AND dt.indicator_id IN (
-              SELECT indicator_id 
-              FROM tbl_cascaded_quotas 
-              WHERE term_id = %s AND assigned_to_role = 'College-Wide' AND total_target_value > 0
+              SELECT cq.indicator_id
+              FROM tbl_cascaded_quotas cq
+              JOIN tbl_master_indicators mi ON mi.indicator_id = cq.indicator_id
+              WHERE mi.term_id = %s AND cq.assigned_to_role = 'College-Wide' AND cq.total_target_value > 0
           )
         ORDER BY ep.last_name, ep.first_name
     """

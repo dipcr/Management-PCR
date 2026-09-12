@@ -10,17 +10,19 @@ CREATE TABLE `tbl_academic_terms` (
   `period_end` date DEFAULT NULL,
   `is_active` tinyint(1) DEFAULT '0',
   PRIMARY KEY (`term_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=56 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=59 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `tbl_audit_logs` (
   `log_id` int NOT NULL AUTO_INCREMENT,
   `log_timestamp` datetime DEFAULT CURRENT_TIMESTAMP,
-  `actor_id` varchar(50) DEFAULT NULL,
+  `actor_id` int DEFAULT NULL,
   `action_type` varchar(100) NOT NULL,
   `action_details` text NOT NULL,
   `ip_address` varchar(45) DEFAULT NULL,
-  PRIMARY KEY (`log_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=159 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  PRIMARY KEY (`log_id`),
+  KEY `fk_audit_actor` (`actor_id`),
+  CONSTRAINT `fk_audit_actor` FOREIGN KEY (`actor_id`) REFERENCES `tbl_employee_profiles` (`emp_id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=165 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `tbl_auth_credentials` (
   `emp_id` int NOT NULL,
@@ -35,17 +37,14 @@ CREATE TABLE `tbl_auth_credentials` (
 
 CREATE TABLE `tbl_cascaded_quotas` (
   `quota_id` int NOT NULL AUTO_INCREMENT,
-  `term_id` int NOT NULL,
   `indicator_id` int NOT NULL,
   `total_target_value` int NOT NULL,
   `assigned_to_role` varchar(50) NOT NULL,
   `allow_chair_allocation` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`quota_id`),
-  KEY `fk_quota_term` (`term_id`),
   KEY `fk_quota_ind` (`indicator_id`),
-  CONSTRAINT `fk_quota_ind` FOREIGN KEY (`indicator_id`) REFERENCES `tbl_master_indicators` (`indicator_id`),
-  CONSTRAINT `fk_quota_term` FOREIGN KEY (`term_id`) REFERENCES `tbl_academic_terms` (`term_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=523 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  CONSTRAINT `fk_quota_ind` FOREIGN KEY (`indicator_id`) REFERENCES `tbl_master_indicators` (`indicator_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=554 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `tbl_committed_targets` (
   `target_id` int NOT NULL AUTO_INCREMENT,
@@ -69,7 +68,7 @@ CREATE TABLE `tbl_committed_targets` (
   KEY `fk_target_ind` (`indicator_id`),
   CONSTRAINT `fk_target_emp` FOREIGN KEY (`emp_id`) REFERENCES `tbl_employee_profiles` (`emp_id`),
   CONSTRAINT `fk_target_ind` FOREIGN KEY (`indicator_id`) REFERENCES `tbl_master_indicators` (`indicator_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=656 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=709 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `tbl_criteria_weights` (
   `weight_id` int NOT NULL AUTO_INCREMENT,
@@ -83,7 +82,7 @@ CREATE TABLE `tbl_criteria_weights` (
   KEY `fk_w_ipcr_cat` (`ipcr_category_id`),
   CONSTRAINT `fk_w_ipcr_cat` FOREIGN KEY (`ipcr_category_id`) REFERENCES `tbl_ipcr_categories` (`ipcr_category_id`),
   CONSTRAINT `fk_w_term` FOREIGN KEY (`term_id`) REFERENCES `tbl_academic_terms` (`term_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=238 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=256 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `tbl_departments` (
   `department_id` int NOT NULL AUTO_INCREMENT,
@@ -110,7 +109,7 @@ CREATE TABLE `tbl_draft_allocation` (
   KEY `fk_draftalloc_ind` (`indicator_id`),
   CONSTRAINT `fk_draftalloc_emp` FOREIGN KEY (`emp_id`) REFERENCES `tbl_employee_profiles` (`emp_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_draftalloc_ind` FOREIGN KEY (`indicator_id`) REFERENCES `tbl_master_indicators` (`indicator_id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=2033 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2158 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `tbl_draft_targets` (
   `draft_id` int NOT NULL AUTO_INCREMENT,
@@ -129,7 +128,7 @@ CREATE TABLE `tbl_draft_targets` (
   KEY `fk_drafttarget_ind` (`indicator_id`),
   CONSTRAINT `fk_drafttarget_emp` FOREIGN KEY (`emp_id`) REFERENCES `tbl_employee_profiles` (`emp_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_drafttarget_ind` FOREIGN KEY (`indicator_id`) REFERENCES `tbl_master_indicators` (`indicator_id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=3041 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3292 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `tbl_employee_profiles` (
   `emp_id` int NOT NULL AUTO_INCREMENT,
@@ -157,7 +156,7 @@ CREATE TABLE `tbl_evidence_repo` (
   PRIMARY KEY (`evidence_id`),
   KEY `fk_evid_target` (`target_id`),
   CONSTRAINT `fk_evid_target` FOREIGN KEY (`target_id`) REFERENCES `tbl_committed_targets` (`target_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=346 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=377 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `tbl_final_score_breakdown` (
   `breakdown_id` int NOT NULL AUTO_INCREMENT,
@@ -169,7 +168,7 @@ CREATE TABLE `tbl_final_score_breakdown` (
   PRIMARY KEY (`breakdown_id`),
   KEY `fk_b_score` (`score_id`),
   CONSTRAINT `fk_b_score` FOREIGN KEY (`score_id`) REFERENCES `tbl_final_scores` (`score_id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=117 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=135 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `tbl_final_scores` (
   `score_id` int NOT NULL AUTO_INCREMENT,
@@ -183,7 +182,7 @@ CREATE TABLE `tbl_final_scores` (
   KEY `fk_score_term` (`term_id`),
   CONSTRAINT `fk_score_emp` FOREIGN KEY (`emp_id`) REFERENCES `tbl_employee_profiles` (`emp_id`),
   CONSTRAINT `fk_score_term` FOREIGN KEY (`term_id`) REFERENCES `tbl_academic_terms` (`term_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=39 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=46 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `tbl_institution_settings` (
   `setting_key` varchar(60) NOT NULL,
@@ -207,7 +206,7 @@ CREATE TABLE `tbl_ipcr_approval_notifications` (
   KEY `fk_notif_term` (`term_id`),
   CONSTRAINT `fk_notif_emp` FOREIGN KEY (`emp_id`) REFERENCES `tbl_employee_profiles` (`emp_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_notif_term` FOREIGN KEY (`term_id`) REFERENCES `tbl_academic_terms` (`term_id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=17 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `tbl_ipcr_categories` (
   `ipcr_category_id` int NOT NULL AUTO_INCREMENT,
@@ -244,7 +243,7 @@ CREATE TABLE `tbl_ipcr_chair_review` (
   CONSTRAINT `fk_chair_review_chair` FOREIGN KEY (`chair_emp_id`) REFERENCES `tbl_employee_profiles` (`emp_id`),
   CONSTRAINT `fk_chair_review_emp` FOREIGN KEY (`emp_id`) REFERENCES `tbl_employee_profiles` (`emp_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_chair_review_term` FOREIGN KEY (`term_id`) REFERENCES `tbl_academic_terms` (`term_id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=95 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=100 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `tbl_ipcr_chair_review_items` (
   `item_id` int NOT NULL AUTO_INCREMENT,
@@ -261,7 +260,7 @@ CREATE TABLE `tbl_ipcr_chair_review_items` (
   CONSTRAINT `fk_chair_item_draft` FOREIGN KEY (`draft_id`) REFERENCES `tbl_draft_targets` (`draft_id`) ON DELETE SET NULL,
   CONSTRAINT `fk_chair_item_ind` FOREIGN KEY (`indicator_id`) REFERENCES `tbl_master_indicators` (`indicator_id`) ON DELETE CASCADE,
   CONSTRAINT `tbl_ipcr_chair_review_items_ibfk_1` FOREIGN KEY (`review_id`) REFERENCES `tbl_ipcr_chair_review` (`review_id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=684 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=725 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `tbl_ipcr_dean_review` (
   `review_id` int NOT NULL AUTO_INCREMENT,
@@ -278,7 +277,7 @@ CREATE TABLE `tbl_ipcr_dean_review` (
   CONSTRAINT `fk_dean_review_dean` FOREIGN KEY (`dean_id`) REFERENCES `tbl_employee_profiles` (`emp_id`),
   CONSTRAINT `fk_dean_review_emp` FOREIGN KEY (`emp_id`) REFERENCES `tbl_employee_profiles` (`emp_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_dean_review_term` FOREIGN KEY (`term_id`) REFERENCES `tbl_academic_terms` (`term_id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=66 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=73 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `tbl_ipcr_dean_review_items` (
   `item_id` int NOT NULL AUTO_INCREMENT,
@@ -295,7 +294,7 @@ CREATE TABLE `tbl_ipcr_dean_review_items` (
   CONSTRAINT `fk_dean_item_draft` FOREIGN KEY (`draft_id`) REFERENCES `tbl_draft_targets` (`draft_id`) ON DELETE SET NULL,
   CONSTRAINT `fk_dean_item_ind` FOREIGN KEY (`indicator_id`) REFERENCES `tbl_master_indicators` (`indicator_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_dean_item_review` FOREIGN KEY (`review_id`) REFERENCES `tbl_ipcr_dean_review` (`review_id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=511 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=560 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `tbl_ipcr_ret_review` (
   `review_id` int NOT NULL AUTO_INCREMENT,
@@ -313,7 +312,7 @@ CREATE TABLE `tbl_ipcr_ret_review` (
   CONSTRAINT `fk_ret_review_chair` FOREIGN KEY (`ret_chair_emp_id`) REFERENCES `tbl_employee_profiles` (`emp_id`),
   CONSTRAINT `fk_ret_review_emp` FOREIGN KEY (`emp_id`) REFERENCES `tbl_employee_profiles` (`emp_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_ret_review_term` FOREIGN KEY (`term_id`) REFERENCES `tbl_academic_terms` (`term_id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=70 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=75 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `tbl_ipcr_ret_review_items` (
   `item_id` int NOT NULL AUTO_INCREMENT,
@@ -331,7 +330,7 @@ CREATE TABLE `tbl_ipcr_ret_review_items` (
   CONSTRAINT `fk_ret_item_draft` FOREIGN KEY (`draft_id`) REFERENCES `tbl_draft_targets` (`draft_id`) ON DELETE SET NULL,
   CONSTRAINT `fk_ret_item_ind` FOREIGN KEY (`indicator_id`) REFERENCES `tbl_master_indicators` (`indicator_id`) ON DELETE CASCADE,
   CONSTRAINT `tbl_ipcr_ret_review_items_ibfk_1` FOREIGN KEY (`review_id`) REFERENCES `tbl_ipcr_ret_review` (`review_id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=116 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=125 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `tbl_ipcr_signatories` (
   `signatory_id` int NOT NULL AUTO_INCREMENT,
@@ -356,11 +355,10 @@ CREATE TABLE `tbl_master_indicators` (
   KEY `fk_master_ind_term` (`term_id`),
   CONSTRAINT `fk_master_cat` FOREIGN KEY (`category_id`) REFERENCES `tbl_target_categories` (`category_id`),
   CONSTRAINT `fk_master_ind_term` FOREIGN KEY (`term_id`) REFERENCES `tbl_academic_terms` (`term_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=499 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=529 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `tbl_ret_assignments` (
   `assignment_id` int NOT NULL AUTO_INCREMENT,
-  `term_id` int NOT NULL,
   `emp_id` int NOT NULL,
   `indicator_id` int NOT NULL,
   `target_quantity` int NOT NULL DEFAULT '1',
@@ -372,32 +370,13 @@ CREATE TABLE `tbl_ret_assignments` (
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`assignment_id`),
-  UNIQUE KEY `uk_assign` (`term_id`,`emp_id`,`indicator_id`),
-  KEY `fk_ra_emp` (`emp_id`),
+  UNIQUE KEY `uk_assign` (`emp_id`,`indicator_id`),
   KEY `fk_ra_ind` (`indicator_id`),
+  KEY `fk_ra_assigned_by` (`assigned_by`),
+  CONSTRAINT `fk_ra_assigned_by` FOREIGN KEY (`assigned_by`) REFERENCES `tbl_employee_profiles` (`emp_id`) ON DELETE SET NULL,
   CONSTRAINT `fk_ra_emp` FOREIGN KEY (`emp_id`) REFERENCES `tbl_employee_profiles` (`emp_id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_ra_ind` FOREIGN KEY (`indicator_id`) REFERENCES `tbl_master_indicators` (`indicator_id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_ra_term` FOREIGN KEY (`term_id`) REFERENCES `tbl_academic_terms` (`term_id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=20 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
-CREATE TABLE `tbl_ret_extension_distribution` (
-  `dist_id` int NOT NULL AUTO_INCREMENT,
-  `term_id` int NOT NULL,
-  `indicator_id` int NOT NULL,
-  `target_quantity` int NOT NULL DEFAULT '1',
-  `target_description` text,
-  `target_duration_value` int DEFAULT NULL,
-  `target_duration_unit` enum('days','weeks','months','semesters') DEFAULT NULL,
-  `distributed_by` int DEFAULT NULL,
-  `is_auto_description` tinyint(1) NOT NULL DEFAULT '1',
-  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`dist_id`),
-  UNIQUE KEY `uk_ext_dist` (`term_id`,`indicator_id`),
-  KEY `fk_red_ind` (`indicator_id`),
-  CONSTRAINT `fk_red_ind` FOREIGN KEY (`indicator_id`) REFERENCES `tbl_master_indicators` (`indicator_id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_red_term` FOREIGN KEY (`term_id`) REFERENCES `tbl_academic_terms` (`term_id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=38 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  CONSTRAINT `fk_ra_ind` FOREIGN KEY (`indicator_id`) REFERENCES `tbl_master_indicators` (`indicator_id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=23 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `tbl_ret_rule_indicators` (
   `rule_indicator_id` int NOT NULL AUTO_INCREMENT,
@@ -413,7 +392,7 @@ CREATE TABLE `tbl_ret_rule_indicators` (
   KEY `indicator_id` (`indicator_id`),
   CONSTRAINT `tbl_ret_rule_indicators_ibfk_1` FOREIGN KEY (`rule_id`) REFERENCES `tbl_ret_rules` (`rule_id`) ON DELETE CASCADE,
   CONSTRAINT `tbl_ret_rule_indicators_ibfk_2` FOREIGN KEY (`indicator_id`) REFERENCES `tbl_master_indicators` (`indicator_id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=107 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=115 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `tbl_ret_rules` (
   `rule_id` int NOT NULL AUTO_INCREMENT,
@@ -421,7 +400,7 @@ CREATE TABLE `tbl_ret_rules` (
   `required_selections` int NOT NULL,
   `is_locked` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`rule_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=52 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=56 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `tbl_system_access` (
   `emp_id` int NOT NULL,
@@ -455,7 +434,7 @@ CREATE TABLE `tbl_teaching_load_config` (
   PRIMARY KEY (`config_id`),
   UNIQUE KEY `uq_teaching_load` (`term_id`,`designation_type`,`rank_band`),
   CONSTRAINT `fk_tl_term` FOREIGN KEY (`term_id`) REFERENCES `tbl_academic_terms` (`term_id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=116 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=124 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 -- Procedures
 DELIMITER $$
 CREATE PROCEDURE `get_user_by_email`(IN p_email VARCHAR(255))

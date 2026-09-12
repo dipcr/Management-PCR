@@ -1,33 +1,32 @@
 -- MIGRATION_group19.sql
--- Add tbl_cascaded_quotas.allow_chair_allocation: gates whether a College-Wide
--- quota cascades down to Program Chairs for per-faculty distribution, or stays
--- Silent / Dean Only.
+-- Give tbl_audit_logs a real relationship to the person who acted.
 --
--- Context: previously every College-Wide Support quota automatically appeared
--- on every Program Chair's Target Allocation table, including quotas that were
--- meant as Dean/institutional-only duties. Chairs had to remember to leave
--- those at 0 -- one accidental "Auto Divide All" click would push an
--- institutional duty onto every regular faculty member's IPCR.
+-- tbl_audit_logs.actor_id was the only *_id column in the whole schema that is neither a
+-- primary key nor a foreign key. It is declared varchar(50) but holds what is really an
+-- emp_id, so the audit trail had no relationship to tbl_employee_profiles and the table
+-- floated unconnected in the ERD.
 --
--- Defaults to 0 (Silent) so nothing cascades to chairs unless the Dean
--- explicitly flips it on. There is no active-term data to backfill for this
--- column yet (no quotas have been cascaded for the current active term), so a
--- plain DEFAULT 0 is safe -- no separate backfill UPDATE needed.
+-- Verified against the live ipcr_db before writing this file:
+--   * 163 rows, all 163 numeric, 0 NULL
+--   * 0 orphans -- every actor_id already matches an existing tbl_employee_profiles.emp_id
 --
--- Changed alongside this migration (see the same commit):
---   app/models/dean.py       - save_cascaded_quotas() inserts the new column
---   app/routes/dean.py       - cascade_quotas() reads the per-indicator toggle
---                               from the form; College-Wide defaults to 0,
---                               department/RET rows default to 1 (unused by
---                               the Chair filter, kept for column consistency)
---   app/templates/dean_dashboard.html - Cascade to Chairs / Silent toggle on
---                               the College-Wide column, read-only badge once
---                               quotas are locked
---   app/models/prog_chair.py - get_chair_indicators() only pulls in a
---                               College-Wide row when allow_chair_allocation = 1
---   db/schema.sql             - allow_chair_allocation column definition
+-- ON DELETE SET NULL, not CASCADE: an audit trail has to survive the deletion of the person
+-- it refers to. Cascading would erase the log entry along with the employee, which defeats
+-- the point of keeping one. That is also why the column stays nullable.
 --
--- Run AFTER MIGRATION_group18.sql.
+-- Note this does NOT affect the "circular connections" finding -- it adds a relationship
+-- rather than removing one. It addresses the separate criticism of isolated tables, taking
+-- them from 4 to 3 (tbl_departments, tbl_institution_settings and tbl_ipcr_signatories
+-- remain; see the plan for why tbl_departments is deferred).
+--
+-- Run AFTER MIGRATION_group18.sql, with a DDL-privileged account -- run_migration.py
+-- authenticates as app_user, which holds no DDL rights.
 
-ALTER TABLE `tbl_cascaded_quotas`
-ADD COLUMN `allow_chair_allocation` TINYINT(1) NOT NULL DEFAULT 0;
+USE ipcr_db;
+
+ALTER TABLE `tbl_audit_logs`
+  MODIFY COLUMN `actor_id` INT NULL;
+
+ALTER TABLE `tbl_audit_logs`
+  ADD CONSTRAINT `fk_audit_actor` FOREIGN KEY (`actor_id`)
+    REFERENCES `tbl_employee_profiles` (`emp_id`) ON DELETE SET NULL;

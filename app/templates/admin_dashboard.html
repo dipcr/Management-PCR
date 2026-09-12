@@ -1612,7 +1612,7 @@ function openAddIndicator(categoryName, targetTypes) {
                         <tr>
                             <td class="text-nowrap small text-muted">{{ log['log_timestamp'].strftime('%b %d, %Y %H:%M')
                                 if log['log_timestamp'] else '—' }}</td>
-                            <td class="small fw-semibold">{{ log['actor_id'] or '—' }}</td>
+                            <td class="small fw-semibold">{{ log['actor_name'] or log['actor_id'] or '—' }}</td>
                             <td>
                                 {% if 'Lock' in log['action_type'] %}
                                 <span class="badge bg-danger bg-opacity-75">{{ log['action_type'] }}</span>

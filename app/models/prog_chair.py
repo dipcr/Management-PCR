@@ -39,10 +39,10 @@ def get_chair_indicators(cursor, term_id, specialization):
         FROM tbl_master_indicators mi
         JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
         LEFT JOIN tbl_cascaded_quotas dept_cq
-            ON dept_cq.indicator_id = mi.indicator_id AND dept_cq.term_id = mi.term_id
+            ON dept_cq.indicator_id = mi.indicator_id
            AND dept_cq.assigned_to_role = %s
         LEFT JOIN tbl_cascaded_quotas cw_cq
-            ON cw_cq.indicator_id = mi.indicator_id AND cw_cq.term_id = mi.term_id
+            ON cw_cq.indicator_id = mi.indicator_id
            AND cw_cq.assigned_to_role = 'College-Wide'
            AND cw_cq.allow_chair_allocation = 1
            AND tc.slug = %s
@@ -792,12 +792,12 @@ def get_department_accomplishment_summary(cursor, specialization, term_id):
                   SELECT 1 FROM tbl_employee_profiles dep
                   WHERE dep.emp_id = chair_dt.emp_id AND dep.specialization = %s AND dep.designation = 'Program Chair'
               )
-        WHERE cq.term_id = %s AND mi.term_id = %s
+        WHERE mi.term_id = %s
           AND cq.assigned_to_role = %s AND cq.total_target_value > 0
         ORDER BY mi.indicator_id
     """
     rows = timed_query(cursor, query,
-                       (specialization, specialization, specialization, term_id, term_id, specialization),
+                       (specialization, specialization, specialization, term_id, specialization),
                        label="get_department_accomplishment_summary")
 
     from app.models.ipcr_description import format_ipcr_target_description

@@ -52,7 +52,11 @@ def faculty_dashboard():
                     ret_menu = full_ret_menu
                     # Research targets directly assigned by the RET Chair — locked on the faculty side
                     cursor.execute(
-                        "SELECT indicator_id FROM tbl_ret_assignments WHERE emp_id = %s AND term_id = %s",
+                        """
+                        SELECT ra.indicator_id FROM tbl_ret_assignments ra
+                        JOIN tbl_master_indicators mi ON mi.indicator_id = ra.indicator_id
+                        WHERE ra.emp_id = %s AND mi.term_id = %s
+                        """,
                         (emp_id, term_id)
                     )
                     ret_assigned_ids = [r[0] for r in cursor.fetchall()]
@@ -365,22 +369,49 @@ def faculty_upload_evidence():
         flash("Unsupported file format. Allowed format: .pdf", "danger")
         return redirect(url_for('faculty.faculty_dashboard'))
 
-    # Save the file
-    upload_dir = current_app.config['UPLOAD_FOLDER']
-    if not os.path.exists(upload_dir):
-        os.makedirs(upload_dir, exist_ok=True)
-
-    unique_filename = f"{uuid.uuid4().hex}_{secure_filename(filename)}"
-    file_path = os.path.join(upload_dir, unique_filename)
-    file.save(file_path)
-
-    relative_path = unique_filename
-
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
+        try:
+            target_id_int = int(target_id)
+        except (ValueError, TypeError):
+            if is_ajax:
+                return jsonify({'success': False, 'message': 'Invalid target ID.'}), 400
+            flash("Invalid target ID.", "danger")
+            return redirect(url_for('faculty.faculty_dashboard'))
+
+        cursor.execute("SELECT emp_id, status FROM tbl_committed_targets WHERE target_id = %s", (target_id_int,))
+        target_row = cursor.fetchone()
+        if not target_row or target_row[0] != emp_id:
+            if is_ajax:
+                return jsonify({'success': False, 'message': 'Target not found or access denied.'}), 404
+            flash("Target not found.", "danger")
+            return redirect(url_for('faculty.faculty_dashboard'))
+
+        if target_row[1] in ('Submitted', 'Pending Verification', 'Verified', 'Submitted to Dean', 'Dean Approved'):
+            cursor.execute("""
+                SELECT COUNT(*) FROM tbl_evidence_repo
+                WHERE target_id = %s AND verification_status IN ('Returned', 'Rejected')
+            """, (target_id_int,))
+            if cursor.fetchone()[0] == 0:
+                if is_ajax:
+                    return jsonify({'success': False, 'message': 'This target is currently locked for verification.'}), 400
+                flash("This target is currently locked for verification.", "danger")
+                return redirect(url_for('faculty.faculty_dashboard'))
+
+        # Save the file
+        upload_dir = current_app.config['UPLOAD_FOLDER']
+        if not os.path.exists(upload_dir):
+            os.makedirs(upload_dir, exist_ok=True)
+
+        unique_filename = f"{uuid.uuid4().hex}_{secure_filename(filename)}"
+        file_path = os.path.join(upload_dir, unique_filename)
+        file.save(file_path)
+
+        relative_path = unique_filename
+
         from app.models.faculty import upload_evidence_item
-        upload_evidence_item(cursor, int(target_id), relative_path, qty_val)
+        upload_evidence_item(cursor, target_id_int, relative_path, qty_val)
         conn.commit()
         if is_ajax:
             return jsonify({'success': True, 'message': 'Evidence uploaded successfully!'})
