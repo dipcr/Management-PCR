@@ -1735,11 +1735,11 @@ function openAddIndicator(categoryName, targetTypes) {
                             <label class="form-label small fw-bold" for="specialization_input">Specialization</label>
                             <select class="form-select" name="specialization" id="specialization_input">
                                 <option value="">None</option>
-                                <option value="WST Program">Web Systems and Technologies (WST)</option>
-                                <option value="DST Program">Database Systems Technology (DST)</option>
-                                <option value="NST Program">Network Systems Technology (NST)</option>
-                                <option value="BSDS Program">Bachelor of Science in Data Science (BSDS)</option>
+                                {% for dept in departments %}
+                                <option value="{{ dept.department_name }}">{{ dept.department_name }}{% if dept.department_code %} ({{ dept.department_code }}){% endif %}</option>
+                                {% endfor %}
                             </select>
+                            <div class="form-text small">Must exactly match a department under Institution Setup — this list is drawn from there.</div>
                         </div>
                     </div>
                     <div class="row mb-3">
