@@ -147,8 +147,8 @@ Images are published to GitHub Container Registry:
 
 ```bash
 # Build
-docker build -t  username/dipcr-db:latest .
-docker build -t username/dipcr-db:latest /db
+docker build -t  username/dipcr-web:latest .
+docker build -t username/dipcr-db:latest ./db
 
 # Push # requires login for docker registry
 docker login
