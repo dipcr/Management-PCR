@@ -786,7 +786,20 @@
                                         {% if sub.letter %}{{ sub.letter }}. {% endif %}{{ sub.label }}
                                     </td>
                                     {% endif %}
+                                    {% set target_has_returned = target.evidence_list and (target.evidence_list | selectattr('verification_status', 'in', ['Returned', 'Rejected']) | list | length > 0) %}
                                     <td class="py-3">
+                                        {% if target_has_returned %}
+                                        <div class="mb-2">
+                                            <span class="badge bg-danger text-white border border-danger-subtle px-2 py-1" style="font-size:0.72rem;">
+                                                <i class="ti ti-arrow-back-up me-1" aria-hidden="true"></i>Evidence Returned
+                                            </span>
+                                            {% for ev in target.evidence_list if ev.verification_status in ['Returned', 'Rejected'] and ev.supervisor_comment %}
+                                            <div class="text-danger small mt-1 p-2 rounded text-start" style="font-size: 0.78rem; background-color: #fef2f2; border: 1px solid #fee2e2;">
+                                                <i class="ti ti-message-circle me-1" aria-hidden="true"></i><strong>Remark:</strong> {{ ev.supervisor_comment }}
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                        {% endif %}
                                         {% if target.is_custom %}
                                         <span class="badge bg-warning text-dark border mb-1">Custom</span>
                                         {% endif %}
@@ -811,9 +824,12 @@
                                     <td class="text-center fw-semibold text-primary">{{ target.rating.e if target.rating and target.rating.e is not none else '—' }}</td>
                                     <td class="text-center fw-semibold text-primary">{{ target.rating.t if target.rating and target.rating.t is not none else '—' }}</td>
                                     <td class="text-center fw-bold" style="background-color: var(--c-surface-alt, #eef1f4);">{{ target.rating.average if target.rating and target.rating.average is not none else '—' }}</td>
+                                    {% set target_approved_count = (target.evidence_list | selectattr('verification_status', 'equalto', 'Approved') | list | length) if target.evidence_list else 0 %}
+                                    {% set target_is_approved = (target.evidence_list and target.evidence_list | length > 0) and (target_approved_count == target.evidence_list | length) and not target_has_returned %}
+                                    {% set target_is_submitted = (target.status in ['Submitted', 'Pending Verification', 'Verified', 'Submitted to Dean', 'Dean Approved']) and not target_has_returned %}
                                     <td class="text-center pe-4 py-3">
                                         <button type="button"
-                                            class="btn {% if has_final_ipcr or target.is_oversight_cascade %}btn-outline-secondary{% elif evidence_readiness and evidence_readiness.evidence_submitted %}btn-secondary{% else %}btn-primary{% endif %} btn-sm px-3 py-2 fw-bold shadow-sm transition-all hover-shadow"
+                                            class="btn {% if target.is_oversight_cascade or has_final_ipcr %}btn-outline-secondary{% elif target_has_returned %}btn-danger{% elif target_is_approved %}btn-success-subtle text-success border border-success-subtle{% elif target_is_submitted or (evidence_readiness and evidence_readiness.evidence_submitted) %}btn-secondary{% else %}btn-primary{% endif %} btn-sm px-3 py-2 fw-bold shadow-sm transition-all hover-shadow"
                                             data-target-id="{{ target.target_id }}"
                                             data-indicator-id="{{ target.indicator_id }}"
                                             data-desc="{{ target.indicator_description | ipcr_preview }}"
@@ -825,7 +841,11 @@
                                             <i class="ti ti-link me-1" aria-hidden="true"></i>View Linked Evidence
                                             {% elif has_final_ipcr %}
                                             <i class="ti ti-eye me-1" aria-hidden="true"></i>View (Approved)
-                                            {% elif evidence_readiness and evidence_readiness.evidence_submitted %}
+                                            {% elif target_has_returned %}
+                                            <i class="ti ti-arrow-back-up me-1" aria-hidden="true"></i>Fix / Replace Evidence
+                                            {% elif target_is_approved %}
+                                            <i class="ti ti-circle-check me-1" aria-hidden="true"></i>View (Approved)
+                                            {% elif target_is_submitted or (evidence_readiness and evidence_readiness.evidence_submitted) %}
                                             <i class="ti ti-eye me-1" aria-hidden="true"></i>View Evidences
                                             {% else %}
                                             <i class="ti ti-folder-plus me-1" aria-hidden="true"></i>Add/View Evidence
@@ -1665,7 +1685,8 @@
             completionStatus: {{ (target.completion_status or 'COMPLETED') | tojson }},
             efficiencyType: {{ (target.efficiency_type or '') | tojson }},
             efficiencyRating: {{ target.efficiency_rating_E if target.efficiency_rating_E else 'null' }},
-            printRemarks: {{ (target.print_remarks or '') | tojson }}
+            printRemarks: {{ (target.print_remarks or '') | tojson }},
+            hasReturned: {{ 'true' if (target.evidence_list and target.evidence_list | selectattr('verification_status', 'in', ['Returned', 'Rejected']) | list | length > 0) else 'false' }}
         },{% endif %}{% endfor %}
     };
 
@@ -1756,8 +1777,10 @@
         const accomplishmentSection = document.getElementById('accomplishmentDetailsSection');
         if (!form) return;
 
+        const targetMeta = TARGET_META[String(currentTargetId)] || {};
+        const targetHasReturned = !!targetMeta.hasReturned;
         const isOversight = !!window.currentIsOversight;
-        const isLocked = HAS_FINAL_IPCR || EVIDENCE_SUBMITTED || isOversight;
+        const isLocked = HAS_FINAL_IPCR || isOversight || (EVIDENCE_SUBMITTED && !targetHasReturned);
 
         form.querySelectorAll('input, button, select, textarea').forEach(el => {
             el.disabled = isLocked;
@@ -1785,9 +1808,9 @@
             } else if (HAS_FINAL_IPCR) {
                 notice.className = 'alert alert-success border-0 small mb-0';
                 notice.innerHTML = '<i class="ti ti-shield-lock me-2"></i>Your evidence submission has been fully verified and approved by the Dean. Evidence gathering is now locked.';
-            } else if (EVIDENCE_SUBMITTED) {
+            } else if (EVIDENCE_SUBMITTED && !targetHasReturned) {
                 notice.className = 'alert alert-secondary border-0 small mb-0';
-                notice.innerHTML = '<i class="ti ti-lock me-2"></i>Your evidences have been submitted for verification. Uploading is locked — you can still view your files below.';
+                notice.innerHTML = '<i class="ti ti-lock me-2"></i>Your evidences have been submitted for verification. This target is locked — you can view your files below.';
             }
         }
         form.style.display = isLocked ? 'none' : '';
@@ -1854,6 +1877,8 @@
             .then(data => {
                 submissionsContainer.innerHTML = '';
                 let totalQty = 0;
+                let hasReturned = false;
+                const targetMeta = TARGET_META[String(currentTargetId)] || {};
                 if (data.success && data.is_oversight) {
                     // Files here belong to scoped faculty's own committed targets, not this
                     // row -- no delete action, and the badge is per-file, not per-item
@@ -1890,7 +1915,9 @@
                 if (data.success) {
                     if (data.evidence_list.length > 0) {
                         data.evidence_list.forEach(ev => {
-                            if (ev.verification_status !== 'Returned' && ev.verification_status !== 'Rejected') {
+                            if (ev.verification_status === 'Returned' || ev.verification_status === 'Rejected') {
+                                hasReturned = true;
+                            } else {
                                 totalQty += (parseInt(ev.actual_qty_Q, 10) || 0);
                             }
                             const parts = ev.file_path.split('/');
@@ -1907,7 +1934,8 @@
                             }
 
                             let actionHtml = '';
-                            if (ev.verification_status !== 'Approved' && !HAS_FINAL_IPCR) {
+                            const canDelete = (ev.verification_status !== 'Approved') && !HAS_FINAL_IPCR && (!EVIDENCE_SUBMITTED || hasReturned || targetMeta.hasReturned);
+                            if (canDelete) {
                                 actionHtml = `
                                     <button type="button" onclick="deleteEvidence(${ev.evidence_id})" class="btn btn-link text-danger border-0 align-middle" style="padding: 0.5rem;" title="Delete evidence file" aria-label="Delete evidence file">
                                         <i class="ti ti-trash"></i>
@@ -1921,12 +1949,12 @@
                             itemDiv.innerHTML = `
                                 <div class="d-flex align-items-center gap-2 overflow-hidden text-start">
                                     <i class="ti ti-file-upload text-primary fs-4"></i>
-                                    <div class="text-start text-truncate" style="max-width: 250px;">
+                                    <div class="text-start text-truncate" style="max-width: 260px;">
                                         <a href="/static/${ev.file_path}" target="_blank" class="small fw-semibold text-decoration-none text-dark" title="View/Download">${cleanName}</a>
                                         <div class="text-muted" style="font-size: 0.75rem;">
                                             Qty: ${ev.actual_qty_Q}
                                         </div>
-                                        ${ev.supervisor_comment ? `<div class="text-danger small mt-1" style="font-size: 0.72rem;"><strong>Remark:</strong> ${ev.supervisor_comment}</div>` : ''}
+                                        ${ev.supervisor_comment ? `<div class="alert alert-danger py-1 px-2 mt-1 mb-0 small text-start" style="font-size: 0.74rem;"><i class="ti ti-message-circle me-1" aria-hidden="true"></i><strong>Feedback:</strong> ${escapeHtml(ev.supervisor_comment)}</div>` : ''}
                                     </div>
                                 </div>
                                 <div class="d-flex align-items-center gap-2">
@@ -1941,19 +1969,19 @@
                     }
                     document.getElementById('evidenceActualQty').textContent = totalQty;
                     const meta = TARGET_META[String(currentTargetId)];
-                    if (meta && totalQty === 0) {
-                        // Nothing supports the previously-reported duration/status/efficiency
-                        // once a target is back down to zero accomplished (e.g. its only
-                        // evidence was just deleted) -- clear the stale values here too so
-                        // the open modal matches what the server just cleared.
-                        meta.actualDurationValue = null;
-                        meta.completionStatus = 'COMPLETED';
-                        meta.efficiencyRating = null;
-                        const durationInput = document.getElementById('evidenceCompletedIn');
-                        if (durationInput) durationInput.value = '';
-                        const effSelect = document.getElementById('evidenceEfficiency');
-                        if (effSelect) effSelect.value = '';
+                    if (meta) {
+                        meta.hasReturned = hasReturned;
+                        if (totalQty === 0) {
+                            meta.actualDurationValue = null;
+                            meta.completionStatus = 'COMPLETED';
+                            meta.efficiencyRating = null;
+                            const durationInput = document.getElementById('evidenceCompletedIn');
+                            if (durationInput) durationInput.value = '';
+                            const effSelect = document.getElementById('evidenceEfficiency');
+                            if (effSelect) effSelect.value = '';
+                        }
                     }
+                    applyEvidenceLock();
                 } else {
                     submissionsContainer.innerHTML = `<div class="text-center text-danger py-3 small">Error: ${data.message || 'Failed to load submissions'}</div>`;
                 }

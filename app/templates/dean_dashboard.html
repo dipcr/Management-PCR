@@ -2158,6 +2158,20 @@
                 actions.classList.add('d-none');
                 actions.style.setProperty('display', 'none', 'important');
             }
+            if (status === 'Returned' && comment) {
+                const itemContainer = document.getElementById('designated-evidence-item-' + evidenceId);
+                if (itemContainer && !itemContainer.querySelector('.alert-warning')) {
+                    const alertDiv = document.createElement('div');
+                    alertDiv.className = 'alert alert-warning py-2 px-3 small mb-2';
+                    alertDiv.innerHTML = `<i class="ti ti-message me-1"></i><strong>Reason:</strong> ${escapeHtml(comment)}`;
+                    const headerRow = itemContainer.querySelector('.d-flex.justify-content-between');
+                    if (headerRow) {
+                        headerRow.insertAdjacentElement('afterend', alertDiv);
+                    } else {
+                        itemContainer.prepend(alertDiv);
+                    }
+                }
+            }
 
             let targetIdFound = null;
             for (const tid in DESIGNATED_EVIDENCE_BY_TARGET) {

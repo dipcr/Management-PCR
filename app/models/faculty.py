@@ -795,7 +795,7 @@ def save_accomplishment_details(conn, cursor, emp_id, target_id, actual_duration
     from app.models.scoring import COMPLETION_STATUSES
     try:
         cursor.execute("""
-            SELECT ct.emp_id, ct.indicator_id, ct.is_admin_function, mi.term_id
+            SELECT ct.emp_id, ct.indicator_id, ct.is_admin_function, mi.term_id, ct.status
             FROM tbl_committed_targets ct
             JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
             WHERE ct.target_id = %s
@@ -805,6 +805,16 @@ def save_accomplishment_details(conn, cursor, emp_id, target_id, actual_duration
             return False, "Target not found."
         if row[0] != emp_id:
             return False, "You can only update your own targets."
+
+        target_status = row[4]
+        if target_status in ('Submitted', 'Pending Verification', 'Verified', 'Submitted to Dean', 'Dean Approved'):
+            cursor.execute("""
+                SELECT COUNT(*) FROM tbl_evidence_repo
+                WHERE target_id = %s AND verification_status IN ('Returned', 'Rejected')
+            """, (target_id,))
+            has_ret = cursor.fetchone()[0] > 0
+            if not has_ret:
+                return False, "This target is submitted and locked for verification."
 
         if row[2]:
             from app.models.designated import get_oversight_indicator_ids
@@ -889,9 +899,10 @@ def delete_evidence_item(cursor, evidence_id, emp_id):
     emp_id is required and checked against the owner of the target the evidence hangs off.
     Without it, anyone could delete anyone else's evidence by posting an arbitrary
     evidence_id — the id is the only thing the request carries.
+    Approved evidence files are protected and can never be deleted.
     """
     cursor.execute("""
-        SELECT er.target_id, ct.emp_id
+        SELECT er.target_id, ct.emp_id, er.verification_status
         FROM tbl_evidence_repo er
         JOIN tbl_committed_targets ct ON er.target_id = ct.target_id
         WHERE er.evidence_id = %s
@@ -899,8 +910,10 @@ def delete_evidence_item(cursor, evidence_id, emp_id):
     row = cursor.fetchone()
     if not row:
         return False
-    target_id, owner_emp_id = row
+    target_id, owner_emp_id, ver_status = row
     if owner_emp_id != emp_id:
+        return False
+    if ver_status == 'Approved':
         return False
 
     # Delete evidence item

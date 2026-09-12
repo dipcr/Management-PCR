@@ -1137,3 +1137,75 @@ def check_and_trigger_tier2_notification(conn, cursor, emp_id: int, term_id: int
 
 # Alias for backward compatibility
 check_and_trigger_tier1_notification = check_and_trigger_evidence_approved_notification
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 8. Evidence Phase: Return Evidence Notification
+# ─────────────────────────────────────────────────────────────────────────────
+
+def send_evidence_return_notification(conn, cursor, evidence_id: int, reviewer_role: str, comment: str = "", base_url: str = None) -> tuple[bool, str]:
+    """
+    Sends notification to faculty when an evidence file is returned by a verifier (Dean or Program Chair).
+    """
+    try:
+        cursor.execute("""
+            SELECT er.file_path, er.actual_qty_Q, er.supervisor_comment,
+                   ct.emp_id, mi.term_id,
+                   COALESCE(ct.target_description, mi.indicator_description) as indicator_description
+            FROM tbl_evidence_repo er
+            JOIN tbl_committed_targets ct ON er.target_id = ct.target_id
+            JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
+            WHERE er.evidence_id = %s
+        """, (evidence_id,))
+        row = cursor.fetchone()
+        if not row:
+            return False, f"Evidence #{evidence_id} not found."
+
+        file_path, actual_qty, stored_comment, emp_id, term_id, indicator_desc = row
+        remarks = (comment or stored_comment or '').strip()
+
+        fac = _get_faculty_profile(cursor, emp_id)
+        if not fac or not fac.get('email'):
+            return False, f"Faculty #{emp_id} or email not found."
+
+        term = _get_term_info(cursor, term_id)
+        resolved_base_url = _get_base_url(base_url)
+        is_regular = (fac.get('designation') == 'Regular Faculty' or not fac.get('designation'))
+        action_url = f"{resolved_base_url}/faculty" if is_regular else f"{resolved_base_url}/designated"
+
+        # Clean file name from UUID prefix
+        raw_name = file_path.split('/')[-1].split('\\')[-1]
+        clean_file_name = raw_name[33:] if len(raw_name) > 33 else raw_name
+
+        html_body = render_template('emails/evidence_returned_notice.html',
+            faculty_name=fac['full_name'],
+            department=fac.get('department', 'CICT'),
+            period_display=term['period_display'],
+            reviewer_role=reviewer_role,
+            indicator_description=indicator_desc,
+            file_name=clean_file_name,
+            quantity=actual_qty,
+            remarks=remarks,
+            action_url=action_url
+        )
+        text_body = (
+            f"Dear {fac['full_name']},\n\n"
+            f"An evidence file you submitted for {term['period_display']} was returned by the {reviewer_role}.\n\n"
+            f"Target: {indicator_desc}\n"
+            f"File: {clean_file_name} (Qty: {actual_qty})\n"
+            f"Remarks: {remarks or 'None'}\n\n"
+            f"Please review and resubmit at: {action_url}\n"
+        )
+        send_async_email(
+            subject=f"[D-IPCR] Action Required: Evidence Returned by {reviewer_role} - {term['period_display']}",
+            recipients=[fac['email']],
+            html_body=html_body,
+            text_body=text_body
+        )
+        logger.info(f"[EVIDENCE RETURN NOTIFICATION SENT] evidence_id={evidence_id}, emp_id={emp_id}, reviewer={reviewer_role}")
+        return True, "Evidence return notification sent to faculty."
+
+    except Exception as e:
+        logger.error(f"Error in send_evidence_return_notification: {e}")
+        return False, str(e)
+

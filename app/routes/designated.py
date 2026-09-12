@@ -883,7 +883,7 @@ def designated_upload_evidence():
     cursor_check = conn_check.cursor()
     try:
         cursor_check.execute("""
-            SELECT ct.emp_id, ct.indicator_id, ct.is_admin_function, mi.term_id
+            SELECT ct.emp_id, ct.indicator_id, ct.is_admin_function, mi.term_id, ct.status
             FROM tbl_committed_targets ct
             JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
             WHERE ct.target_id = %s
@@ -895,6 +895,18 @@ def designated_upload_evidence():
                 return jsonify({'success': False, 'message': msg}), 404
             flash(msg, "danger")
             return redirect(url_for('designated.designated_dashboard'))
+
+        if row[4] in ('Submitted', 'Pending Verification', 'Verified', 'Submitted to Dean', 'Dean Approved'):
+            cursor_check.execute("""
+                SELECT COUNT(*) FROM tbl_evidence_repo
+                WHERE target_id = %s AND verification_status IN ('Returned', 'Rejected')
+            """, (target_id_int,))
+            if cursor_check.fetchone()[0] == 0:
+                msg = "This target is currently locked for verification."
+                if is_ajax:
+                    return jsonify({'success': False, 'message': msg}), 400
+                flash(msg, "danger")
+                return redirect(url_for('designated.designated_dashboard'))
 
         # A Departmental Oversight row has no upload slot of its own -- its evidence is
         # linked automatically from the scoped faculty who did the real work (see

@@ -196,6 +196,13 @@ def prog_chair_verify_evidence():
             except Exception as notif_err:
                 import logging
                 logging.getLogger(__name__).error(f"Error triggering evidence approved notification: {notif_err}")
+        elif success and status == 'Returned':
+            try:
+                from app.services.notification_service import send_evidence_return_notification
+                send_evidence_return_notification(conn, cursor, int(evidence_id), 'Program Chair', comment, request.host_url)
+            except Exception as notif_err:
+                import logging
+                logging.getLogger(__name__).error(f"Error triggering evidence return notification: {notif_err}")
         return jsonify({'success': success, 'message': msg})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
