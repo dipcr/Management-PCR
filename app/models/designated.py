@@ -235,7 +235,7 @@ def get_oversight_targets(cursor, emp_id, term_id):
           AND cq.total_target_value > 0
         ORDER BY tc.display_order, mi.indicator_id
     """
-    rows = timed_query(cursor, query, (emp_id, term_id, term_id, role),
+    rows = timed_query(cursor, query, (emp_id, term_id, role),
                        label="get_oversight_targets")
 
     from app.models.ipcr_description import format_ipcr_target_description
