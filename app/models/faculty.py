@@ -107,7 +107,7 @@ def get_faculty_assigned_targets(cursor, emp_id, term_id):
     tl_desc = teaching_load_description(tl_hours)
 
     has_teaching_load = any(
-        t.get('category_name') == 'A. Instructions' and 'Teaching Load' in str(t.get('indicator_description', ''))
+        'Instruction' in (t.get('category_name') or '') and 'Teaching Load' in str(t.get('indicator_description', ''))
         for t in targets
     )
     if not has_teaching_load:
@@ -135,7 +135,7 @@ def get_faculty_assigned_targets(cursor, emp_id, term_id):
             'status': 'Draft',
             'indicator_description': tl_desc,
             'target_deadline': format_duration(tl_dur_value, tl_dur_unit),
-            'category_name': 'A. Instructions',
+            'category_name': 'Instruction',
             'chair_item_remarks': None,
             'chair_reviewed_quantity': None,
             'is_mandatory': True
@@ -143,7 +143,7 @@ def get_faculty_assigned_targets(cursor, emp_id, term_id):
         targets.insert(0, mandatory_target)
     else:
         for t in targets:
-            if t.get('category_name') == 'A. Instructions' and 'Teaching Load' in str(t.get('indicator_description', '')):
+            if 'Instruction' in (t.get('category_name') or '') and 'Teaching Load' in str(t.get('indicator_description', '')):
                 t['is_mandatory'] = True
                 if not t.get('assigned_quantity'):
                     t['assigned_quantity'] = tl_hours

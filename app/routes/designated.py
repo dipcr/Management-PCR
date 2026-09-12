@@ -323,7 +323,7 @@ def designated_dashboard(conn, cursor):
 
             # Ensure mandatory default Teaching Load target (10 hours) is present if not already added
             has_teaching_load = any(
-                t.get('category_name') == 'A. Instructions' and 'Teaching Load' in str(t.get('indicator_description', ''))
+                'Instruction' in (t.get('category_name') or '') and 'Teaching Load' in str(t.get('indicator_description', ''))
                 for t in dpcr_targets
             )
             if not has_teaching_load:
