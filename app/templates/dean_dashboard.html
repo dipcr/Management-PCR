@@ -2770,7 +2770,7 @@
                 let badgeHtml = '';
                 if (item.is_custom == 1) {
                     badgeHtml = '<span class="badge bg-warning text-dark border mb-1">Custom</span>';
-                } else if (item.category_name && item.category_name.includes('Instruction')) {
+                } else if (item.slug === 'instruction') {
                     badgeHtml = '<span class="badge bg-light text-dark border mb-1">Instruction</span>';
                 } else {
                     badgeHtml = '<span class="badge bg-light text-dark border mb-1">Support</span>';

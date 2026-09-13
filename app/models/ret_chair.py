@@ -7,9 +7,10 @@ def get_ret_indicators(cursor, term_id):
     query = """
         SELECT 
             mi.indicator_id, 
-            mi.indicator_description, 
-            mi.efficiency_type, 
-            tc.category_name, 
+            mi.indicator_description,
+            mi.efficiency_type,
+            tc.category_name,
+            tc.slug,
             cq.total_target_value AS dean_quota,
             COALESCE(SUM(dt.proposed_quantity), 0) AS total_distributed
         FROM tbl_cascaded_quotas cq
@@ -21,11 +22,12 @@ def get_ret_indicators(cursor, term_id):
         
         WHERE mi.term_id = %s
           AND cq.assigned_to_role = 'RET / Extension'
-        GROUP BY 
-            mi.indicator_id, 
-            mi.indicator_description, 
-            mi.efficiency_type, 
-            tc.category_name, 
+        GROUP BY
+            mi.indicator_id,
+            mi.indicator_description,
+            mi.efficiency_type,
+            tc.category_name,
+            tc.slug,
             cq.total_target_value
         ORDER BY tc.category_name, mi.indicator_id
     """

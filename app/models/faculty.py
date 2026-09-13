@@ -39,7 +39,7 @@ def get_faculty_assigned_targets(cursor, emp_id, term_id):
                    COALESCE(dt.target_duration_value, da.target_duration_value) as target_duration_value,
                    COALESCE(dt.target_duration_unit, da.target_duration_unit) as target_duration_unit,
                    COALESCE(dt.target_deadline, da.target_deadline) as target_deadline,
-                   tc.category_name,
+                   tc.category_name, tc.slug,
                    ri.item_remarks as chair_item_remarks,
                    ri.reviewed_quantity as chair_reviewed_quantity,
                    rri.item_remarks as ret_item_remarks,
@@ -68,7 +68,7 @@ def get_faculty_assigned_targets(cursor, emp_id, term_id):
                    MAX(da.target_duration_value) as target_duration_value,
                    MAX(da.target_duration_unit) as target_duration_unit,
                    MAX(da.target_deadline) as target_deadline,
-                   tc.category_name,
+                   tc.category_name, tc.slug,
                    NULL as chair_item_remarks, NULL as chair_reviewed_quantity
             FROM tbl_draft_allocation da
             JOIN tbl_master_indicators mi ON da.indicator_id = mi.indicator_id
@@ -77,7 +77,7 @@ def get_faculty_assigned_targets(cursor, emp_id, term_id):
             WHERE ep.specialization = (SELECT specialization FROM tbl_employee_profiles WHERE emp_id = %s)
               AND ep.designation = 'Regular Faculty'
               AND mi.term_id = %s
-            GROUP BY da.indicator_id, mi.indicator_description, tc.category_name
+            GROUP BY da.indicator_id, mi.indicator_description, tc.category_name, tc.slug
             ORDER BY tc.category_name, da.indicator_id
         """
     targets = timed_query(cursor, query, (emp_id, term_id), label="get_faculty_assigned_targets_load")
@@ -107,13 +107,14 @@ def get_faculty_assigned_targets(cursor, emp_id, term_id):
     tl_desc = teaching_load_description(tl_hours)
 
     has_teaching_load = any(
-        t.get('category_name') == 'A. Instructions' and 'Teaching Load' in str(t.get('indicator_description', ''))
+        t.get('slug') == 'instruction' and 'Teaching Load' in str(t.get('indicator_description', ''))
         for t in targets
     )
+    cursor.execute("SELECT category_id, category_name FROM tbl_target_categories WHERE slug = 'instruction'")
+    cat_row = cursor.fetchone()
+    cat_id = cat_row[0] if cat_row else 1
+    cat_name = cat_row[1] if cat_row else 'A. Instructions'
     if not has_teaching_load:
-        cursor.execute("SELECT category_id FROM tbl_target_categories WHERE slug = 'instruction'")
-        cat_row = cursor.fetchone()
-        cat_id = cat_row[0] if cat_row else 1
         cursor.execute("""
             SELECT indicator_id FROM tbl_master_indicators
             WHERE indicator_description = %s AND term_id = %s
@@ -135,7 +136,8 @@ def get_faculty_assigned_targets(cursor, emp_id, term_id):
             'status': 'Draft',
             'indicator_description': tl_desc,
             'target_deadline': format_duration(tl_dur_value, tl_dur_unit),
-            'category_name': 'A. Instructions',
+            'category_name': cat_name,
+            'slug': 'instruction',
             'chair_item_remarks': None,
             'chair_reviewed_quantity': None,
             'is_mandatory': True
@@ -143,7 +145,7 @@ def get_faculty_assigned_targets(cursor, emp_id, term_id):
         targets.insert(0, mandatory_target)
     else:
         for t in targets:
-            if t.get('category_name') == 'A. Instructions' and 'Teaching Load' in str(t.get('indicator_description', '')):
+            if t.get('slug') == 'instruction' and 'Teaching Load' in str(t.get('indicator_description', '')):
                 t['is_mandatory'] = True
                 if not t.get('assigned_quantity'):
                     t['assigned_quantity'] = tl_hours
