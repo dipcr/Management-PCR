@@ -15,7 +15,7 @@ def get_designated_selectable_indicators(cursor, term_id, exclude_claimed=True, 
 
     if is_ret:
         query = """
-            SELECT mi.indicator_id, mi.indicator_description, tc.category_name
+            SELECT mi.indicator_id, mi.indicator_description, tc.category_name, tc.slug
             FROM tbl_master_indicators mi
             JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
             WHERE mi.term_id = %s
@@ -35,7 +35,7 @@ def get_designated_selectable_indicators(cursor, term_id, exclude_claimed=True, 
         return rows
 
     query = """
-        SELECT mi.indicator_id, mi.indicator_description, tc.category_name
+        SELECT mi.indicator_id, mi.indicator_description, tc.category_name, tc.slug
         FROM tbl_master_indicators mi
         JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
         WHERE mi.term_id = %s

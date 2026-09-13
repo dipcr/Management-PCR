@@ -181,7 +181,7 @@
                         <tbody>
                             {% set ns_inst = namespace(found=false) %}
                             {% for ind in indicators %}
-                            {% if 'Instruction' in ind.category_name %}
+                            {% if ind.slug == 'instruction' %}
                             {% set ns_inst.found = true %}
                             <tr data-indicator-text="{{ ind.indicator_description | e }}">
                                 <td class="fw-bold ps-4 small text-secondary">{{ ind.indicator_description | ipcr_preview }}</td>
@@ -283,7 +283,7 @@
                         <tbody>
                             {% set ns_supp = namespace(found=false) %}
                             {% for ind in indicators %}
-                            {% if 'Support' in ind.category_name %}
+                            {% if ind.slug == 'support' %}
                             {% set ns_supp.found = true %}
                             <tr data-indicator-text="{{ ind.indicator_description | e }}">
                                 <td class="fw-bold ps-4 small text-secondary">{{ ind.indicator_description | ipcr_preview }}</td>
@@ -1119,17 +1119,21 @@
             if (data.items.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No targets found.</td></tr>';
             } else {
-                // Sort items by category rank
+                // Sort items by category rank -- keyed on the resolved header text (the
+                // same function used to render the group banners below), not the raw
+                // category_name, so an item lands in the same bucket its header groups
+                // it into even when the category's stored name doesn't match these
+                // literals exactly (e.g. "Instruction" instead of "A. Instructions").
                 const catOrder = {
-                    'A. Instructions': 1,
+                    'Strategic Priorities': 1,
                     'Custom Target Items': 2,
-                    'A. Research': 3,
-                    'B. Extension Services / Training / Advisory': 4,
+                    'Research': 3,
+                    'Extension Services / Training / Advisory': 4,
                     'Support Functions': 5
                 };
                 data.items.sort((a, b) => {
-                    const rankA = catOrder[a.category_name] || 6;
-                    const rankB = catOrder[b.category_name] || 6;
+                    const rankA = catOrder[getHeaderCategoryName(a.category_name)] || 6;
+                    const rankB = catOrder[getHeaderCategoryName(b.category_name)] || 6;
                     if (rankA !== rankB) return rankA - rankB;
                     return a.item_id - b.item_id;
                 });
@@ -1221,17 +1225,18 @@
             if (data.items.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No targets found.</td></tr>';
             } else {
-                // Sort items by category rank: Instructions (1), Custom (2), Research (3), Extension (4), Support Functions (5), others (6)
+                // Sort items by category rank -- keyed on the resolved header text (see
+                // the loader above for why raw category_name isn't safe to key off of).
                 const catOrder = {
-                    'A. Instructions': 1,
+                    'Strategic Priorities': 1,
                     'Custom Target Items': 2,
-                    'A. Research': 3,
-                    'B. Extension Services / Training / Advisory': 4,
+                    'Research': 3,
+                    'Extension Services / Training / Advisory': 4,
                     'Support Functions': 5
                 };
                 data.items.sort((a, b) => {
-                    const rankA = catOrder[a.category_name] || 6;
-                    const rankB = catOrder[b.category_name] || 6;
+                    const rankA = catOrder[getHeaderCategoryName(a.category_name)] || 6;
+                    const rankB = catOrder[getHeaderCategoryName(b.category_name)] || 6;
                     if (rankA !== rankB) return rankA - rankB;
                     return a.item_id - b.item_id;
                 }); let lastCategory = null;

@@ -207,6 +207,7 @@ def get_dean_review_items(cursor, review_id):
             dri.item_remarks,
             mi.indicator_description,
             tc.category_name,
+            tc.slug,
             mi.efficiency_type,
             mi.is_custom,
             COALESCE(dt.target_description, da.custom_description, mi.indicator_description) as target_description,

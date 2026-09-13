@@ -323,7 +323,7 @@ def designated_dashboard(conn, cursor):
 
             # Ensure mandatory default Teaching Load target (10 hours) is present if not already added
             has_teaching_load = any(
-                'Instruction' in (t.get('category_name') or '') and 'Teaching Load' in str(t.get('indicator_description', ''))
+                t.get('slug') == 'instruction' and 'Teaching Load' in str(t.get('indicator_description', ''))
                 for t in dpcr_targets
             )
             if not has_teaching_load:
@@ -334,9 +334,10 @@ def designated_dashboard(conn, cursor):
                     cursor, term_id, 'Designated Faculty', tl_rank_row[0] if tl_rank_row else None)
                 tl_desc = teaching_load_description(tl_hours)
 
-                cursor.execute("SELECT category_id FROM tbl_target_categories WHERE slug = 'instruction'")
+                cursor.execute("SELECT category_id, category_name FROM tbl_target_categories WHERE slug = 'instruction'")
                 cat_row = cursor.fetchone()
                 cat_id = cat_row[0] if cat_row else 1
+                cat_name = cat_row[1] if cat_row else 'A. Instructions'
                 cursor.execute("""
                     SELECT indicator_id FROM tbl_master_indicators
                     WHERE indicator_description = %s AND term_id = %s
@@ -361,7 +362,8 @@ def designated_dashboard(conn, cursor):
                     'target_deadline': format_duration(tl_dur_value, tl_dur_unit),
                     'target_duration_value': tl_dur_value,
                     'target_duration_unit': tl_dur_unit,
-                    'category_name': 'A. Instructions',
+                    'category_name': cat_name,
+                    'slug': 'instruction',
                     'is_custom': False,
                     'is_selected': True,
                     'is_mandatory': True,

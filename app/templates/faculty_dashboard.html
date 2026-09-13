@@ -313,7 +313,7 @@
                                 <tbody>
                                     {% set ns_inst = namespace(has_core=false) %}
                                     {% for target in assigned_targets %}
-                                    {% if 'Instruction' in target.category_name %}
+                                    {% if target.slug == 'instruction' %}
                                     {% set ns_inst.has_core = true %}
                                     <tr>
                                         <td class="ps-4 py-3">
@@ -370,7 +370,7 @@
                                 <tbody>
                                     {% set ns_supp = namespace(has_core=false) %}
                                     {% for target in assigned_targets %}
-                                    {% if target.category_name == 'Support Functions' %}
+                                    {% if target.slug == 'support' %}
                                     {% set ns_supp.has_core = true %}
                                     <tr>
                                         <td class="ps-4 py-3">
