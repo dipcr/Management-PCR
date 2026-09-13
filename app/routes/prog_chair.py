@@ -498,11 +498,11 @@ def review_ipcr(emp_id):
                 LEFT JOIN tbl_ipcr_chair_review cr ON cr.emp_id = dt.emp_id AND cr.term_id = mi.term_id
                 LEFT JOIN tbl_ipcr_chair_review_items ri ON ri.review_id = cr.review_id AND ri.draft_id = dt.draft_id
                 LEFT JOIN tbl_ipcr_ret_review rr ON rr.emp_id = dt.emp_id AND rr.term_id = mi.term_id
-                LEFT JOIN tbl_ipcr_ret_review_items rri ON rri.review_id = rr.review_id AND rri.indicator_id = dt.indicator_id
+                LEFT JOIN tbl_ipcr_ret_review_items rri ON rri.review_id = rr.review_id AND rri.draft_id = dt.draft_id
                 WHERE dt.emp_id = %s AND mi.term_id = %s
                   AND (
                       ((tc.review_lane = 'CHAIR' AND tc.is_core = 1) AND dt.proposed_quantity > 0)
-                      OR (tc.review_lane = 'RET' AND rri.reviewed_quantity > 0)
+                      OR (tc.review_lane = 'RET' AND COALESCE(rri.reviewed_quantity, dt.proposed_quantity) > 0)
                   )
             """, (emp_id, term_id))
             rows = cursor.fetchall()
