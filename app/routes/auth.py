@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, session, url_for, flash
 from app.auth import hash_pass, verify_pass, validate_password_policy
-from app.models import get_db_connection, get_user_by_email, register_user, record_last_login
+from app.models import get_db_connection, get_user_by_email, register_user, record_last_login, log_audit_action
 from app.decorators import role_required
 import mysql.connector, time
 
@@ -55,6 +55,14 @@ def authenticate():
 
     # Normalize role for matching
     role = role.upper() if role else ""
+
+    if verification == "PENDING":
+        flash("Your account claim is pending administrator approval.", "warning")
+        return redirect(url_for('auth.login'))
+
+    if verification == "REJECTED":
+        flash("Your account claim was denied. Please contact the administrator.", "danger")
+        return redirect(url_for('auth.login'))
 
     if verification != "APPROVED":
         flash("Account not approved. Please contact the administrator.", "danger")
@@ -115,11 +123,18 @@ def register():
             conn = get_db_connection()
             cursor = conn.cursor()
 
-            register_user(conn, cursor, employee_id_number, email, hashed_pw)
+            emp_id = register_user(conn, cursor, employee_id_number, email, hashed_pw)
 
-            flash("Account claimed successfully! You have been auto-approved and may now log in.", "success")
+            log_audit_action(conn, cursor, emp_id, 'Account Claim Requested',
+                             f"Claim submitted for employee {employee_id_number} ({email}).",
+                             request.remote_addr)
+
+            flash("Your account claim has been submitted. An administrator must approve it before you can sign in.", "success")
             return redirect(url_for('auth.login'))
 
+        except ValueError as e:
+            flash(str(e), "danger")
+            return redirect(url_for('auth.register'))
         except mysql.connector.Error as e:
             flash(str(e), "danger")
             return redirect(url_for('auth.register'))
