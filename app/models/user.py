@@ -35,13 +35,97 @@ def record_last_login(emp_id):
             conn.close()
 
 
+def system_role_for_designation(designation):
+    return {
+        'Admin': 'Admin',
+        'Dean': 'DEAN',
+        'Program Chair': 'PROGRAM_CHAIR',
+        'RET Chair': 'RET_CHAIR',
+        'Designated Faculty': 'DESIGNATED_FACULTY',
+    }.get(designation, 'FACULTY')
+
+
 def register_user(conn, cursor, employee_id_number, email, password_hash):
-    try:
-        cursor.callproc('register_user', (employee_id_number, email, password_hash))
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        raise e
+    """
+    Submit an account-claim request.
+
+    Replaces the old `register_user` stored procedure, which inserted the credential
+    directly as 'APPROVED' (auto-approval). A claim now lands as 'PENDING' and only
+    becomes usable once an Admin approves it -- see approve_account_claim() /
+    deny_account_claim(). Raises ValueError with a user-facing message for the cases the
+    old procedure signalled via SIGNAL SQLSTATE '45000'. Returns the claimant's emp_id.
+    """
+    cursor.execute(
+        "SELECT emp_id, designation FROM tbl_employee_profiles WHERE employee_id_number = %s",
+        (employee_id_number,))
+    row = cursor.fetchone()
+    if not row:
+        raise ValueError("Employee ID Number is not recognized by HR. Please contact the administrator.")
+    emp_id, designation = row
+
+    cursor.execute("SELECT COUNT(*) FROM tbl_auth_credentials WHERE emp_id = %s", (emp_id,))
+    if cursor.fetchone()[0] > 0:
+        raise ValueError("This employee account has already been claimed, or its claim is already pending approval.")
+
+    cursor.execute("SELECT COUNT(*) FROM tbl_auth_credentials WHERE corporate_email = %s", (email,))
+    if cursor.fetchone()[0] > 0:
+        raise ValueError("This corporate email is already registered to another account.")
+
+    role = system_role_for_designation(designation)
+
+    cursor.execute("""
+        INSERT INTO tbl_auth_credentials (emp_id, corporate_email, password_hash, verification_status)
+        VALUES (%s, %s, %s, 'PENDING')
+    """, (emp_id, email, password_hash))
+
+    cursor.execute("""
+        INSERT INTO tbl_system_access (emp_id, system_role, account_status)
+        VALUES (%s, %s, 'Pending')
+        ON DUPLICATE KEY UPDATE system_role = %s, account_status = 'Pending'
+    """, (emp_id, role, role))
+
+    conn.commit()
+    return emp_id
+
+
+def get_pending_account_claims(cursor):
+    """Pending account-claim requests awaiting Admin approval."""
+    from app.models.connection import timed_query
+    query = """
+        SELECT ac.emp_id, ac.corporate_email, ac.verification_status,
+               ep.employee_id_number, ep.first_name, ep.last_name, ep.designation,
+               sa.system_role
+        FROM tbl_auth_credentials ac
+        JOIN tbl_employee_profiles ep ON ep.emp_id = ac.emp_id
+        LEFT JOIN tbl_system_access sa ON sa.emp_id = ac.emp_id
+        WHERE ac.verification_status = 'PENDING'
+        ORDER BY ep.last_name, ep.first_name
+    """
+    return timed_query(cursor, query, label="get_pending_account_claims")
+
+
+def approve_account_claim(conn, cursor, emp_id):
+    """Approve a pending claim: credential -> APPROVED, access -> Active. Returns True if a row changed."""
+    cursor.execute(
+        "UPDATE tbl_auth_credentials SET verification_status = 'APPROVED' WHERE emp_id = %s",
+        (emp_id,))
+    if cursor.rowcount == 0:
+        return False
+    cursor.execute(
+        "UPDATE tbl_system_access SET account_status = 'Active' WHERE emp_id = %s",
+        (emp_id,))
+    conn.commit()
+    return True
+
+
+def deny_account_claim(conn, cursor, emp_id):
+    """Deny a pending claim by deleting the credential row, freeing the ID/email to claim
+    again. The denial is recorded in the audit log by the caller. Returns True if removed."""
+    cursor.execute("DELETE FROM tbl_auth_credentials WHERE emp_id = %s", (emp_id,))
+    if cursor.rowcount == 0:
+        return False
+    conn.commit()
+    return True
 
 
 def get_all_profiles(cursor):

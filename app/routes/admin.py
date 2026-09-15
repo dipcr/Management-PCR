@@ -44,6 +44,7 @@ def admin_dashboard():
         audit_logs = get_recent_audit_logs(cursor)
         security_users = get_all_users_for_security(cursor)
         kpis = get_admin_kpis(cursor)
+        pending_claims = get_pending_account_claims(cursor)
         return render_template('admin_dashboard.html', profiles=profiles, terms=terms, active_term=active_term,
                                indicators=indicators, criteria=criteria,
                                category_scopes=category_scopes,
@@ -57,7 +58,8 @@ def admin_dashboard():
                                teaching_load_mode=teaching_load_mode,
                                rank_bands=RANK_BANDS, general_band=GENERAL_BAND,
                                designation_types=DESIGNATION_TYPES, audit_logs=audit_logs,
-                               security_users=security_users, kpis=kpis)
+                               security_users=security_users, kpis=kpis,
+                               pending_claims=pending_claims)
     finally:
         cursor.close()
         conn.close()
@@ -186,10 +188,76 @@ def save_faculty():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        cursor.execute(
+            "SELECT emp_id FROM tbl_employee_profiles WHERE employee_id_number = %s",
+            (data['employee_id_number'],))
+        existed = cursor.fetchone() is not None
         save_single_profile(conn, cursor, data)
+        cursor.execute(
+            "SELECT emp_id FROM tbl_employee_profiles WHERE employee_id_number = %s",
+            (data['employee_id_number'],))
+        row = cursor.fetchone()
+        emp_id = row[0] if row else None
+        log_audit_action(conn, cursor, session.get('user_id'),
+                         'Profile Updated' if existed else 'Profile Created',
+                         f"{'Updated' if existed else 'Created'} profile {data['employee_id_number']} "
+                         f"({data['first_name']} {data['last_name']}, designation: {data['designation'] or '-'}).",
+                         request.remote_addr)
         flash("Faculty profile saved successfully.", "success")
     except Exception as e:
         flash(f"Error saving profile: {str(e)}", "danger")
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+    return redirect(url_for('admin.admin_dashboard'))
+
+
+@admin_bp.route('/account_claims/approve', methods=['POST'])
+@role_required('ADMIN')
+def approve_claim():
+    emp_id = request.form.get('emp_id')
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        if approve_account_claim(conn, cursor, emp_id):
+            log_audit_action(conn, cursor, session.get('user_id'), 'Account Claim Approved',
+                             f"Approved account claim for emp_id {emp_id}.", request.remote_addr)
+            flash("Account claim approved. The user may now sign in.", "success")
+        else:
+            flash("No pending claim found for that account.", "danger")
+    except Exception as e:
+        flash(f"Error approving claim: {str(e)}", "danger")
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+    return redirect(url_for('admin.admin_dashboard'))
+
+
+@admin_bp.route('/account_claims/deny', methods=['POST'])
+@role_required('ADMIN')
+def deny_claim():
+    emp_id = request.form.get('emp_id')
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        if deny_account_claim(conn, cursor, emp_id):
+            log_audit_action(conn, cursor, session.get('user_id'), 'Account Claim Denied',
+                             f"Denied and removed account claim for emp_id {emp_id}.", request.remote_addr)
+            flash("Account claim denied and removed. The person may claim again.", "success")
+        else:
+            flash("No pending claim found for that account.", "danger")
+    except Exception as e:
+        flash(f"Error denying claim: {str(e)}", "danger")
     finally:
         if cursor:
             cursor.close()
