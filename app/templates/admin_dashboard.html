@@ -34,6 +34,12 @@
 </button>
 
 <div class="nav-label">System</div>
+<button class="nav-item" data-section="nav-claims" onclick="showSection('nav-claims')">
+    <i class="ti ti-user-plus"></i>
+    <span class="nav-text">Account Claims
+        {% if pending_claims %}<span class="badge bg-danger ms-1">{{ pending_claims|length }}</span>{% endif %}
+    </span>
+</button>
 <button class="nav-item" data-section="nav-security" onclick="showSection('nav-security')">
     <i class="ti ti-shield-lock text-danger"></i>
     <span class="nav-text text-danger">System Security</span>
@@ -1631,6 +1637,70 @@ function openAddIndicator(categoryName, targetTypes) {
                         <tr>
                             <td colspan="5" class="text-center text-muted py-4">No audit log entries yet.
                             </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="nav-claims" class="dashboard-section">
+    <div class="page-header">
+        <h2><i class="ti ti-user-plus me-2"></i>Account Claims</h2>
+        <p>Approve or deny employees who have requested to claim their pre-registered profile.</p>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white border-0 pt-4 pb-2">
+            <h5 role="heading" aria-level="3" class="fw-bold text-dark mb-0">
+                <i class="ti ti-inbox me-2 text-primary"></i>Pending Claims
+                {% if pending_claims %}<span class="badge bg-danger ms-1">{{ pending_claims|length }}</span>{% endif %}
+            </h5>
+            <p class="text-muted small mb-0">A claim is only usable after it is approved. Denying removes the
+                request so the person may claim again.</p>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Employee ID</th>
+                            <th>Name</th>
+                            <th>Designation</th>
+                            <th>Corporate Email</th>
+                            <th>System Role</th>
+                            <th class="text-center">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in pending_claims %}
+                        <tr>
+                            <td class="text-muted small">{{ c['employee_id_number'] }}</td>
+                            <td class="fw-semibold">{{ c['last_name'] }}, {{ c['first_name'] }}</td>
+                            <td>{{ c['designation'] or '—' }}</td>
+                            <td class="small">{{ c['corporate_email'] }}</td>
+                            <td><span class="badge bg-primary bg-opacity-10 text-primary">{{ c['system_role'] or '—' }}</span>
+                            </td>
+                            <td>
+                                <div class="d-flex gap-1 justify-content-center">
+                                    <form method="POST" action="{{ url_for('admin.approve_claim') }}" class="d-inline"
+                                        onsubmit="return confirm('Approve this account claim? They will be able to log in.')">
+                                        <input type="hidden" name="emp_id" value="{{ c['emp_id'] }}">
+                                        <button type="submit" class="btn btn-success btn-sm"><i class="ti ti-check me-1"></i>Approve</button>
+                                    </form>
+                                    <form method="POST" action="{{ url_for('admin.deny_claim') }}" class="d-inline"
+                                        onsubmit="return confirm('Deny this claim? The request is removed and they may claim again.')">
+                                        <input type="hidden" name="emp_id" value="{{ c['emp_id'] }}">
+                                        <button type="submit" class="btn btn-outline-danger btn-sm"><i class="ti ti-x me-1"></i>Deny</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">No pending account claims.</td>
                         </tr>
                         {% endfor %}
                     </tbody>
