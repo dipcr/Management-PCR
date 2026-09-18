@@ -188,7 +188,8 @@ def designated_dashboard(conn, cursor):
             from app.models.criteria import resolve_designation_type, DESIGNATION_DESIGNATED
             checklist_designation_type = resolve_designation_type(designation) or DESIGNATION_DESIGNATED
             evidence_sections = build_evidence_checklist_sections(
-                cursor, dpcr_targets, checklist_designation_type, term_id, academic_rank)
+                cursor, dpcr_targets, checklist_designation_type, term_id, academic_rank,
+                job_title=designation)
 
         elif can_edit:
             # Load standard selectable indicators and exclude 21 hours regular teaching load targets

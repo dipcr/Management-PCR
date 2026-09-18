@@ -327,7 +327,7 @@ def compute_ipcr_score(cursor, emp_id, term_id):
     from app.models.criteria import (get_applicable_weights, get_type_to_category,
                                      get_ipcr_categories, resolve_designation_type,
                                      get_category_id, DESIGNATION_REGULAR,
-                                     SLUG_ADMINISTRATIVE)
+                                     SLUG_ADMINISTRATIVE, SLUG_SUPPORT, SLUG_INSTRUCTION)
 
     cursor.execute(
         "SELECT designation, academic_rank FROM tbl_employee_profiles WHERE emp_id = %s",
@@ -361,16 +361,30 @@ def compute_ipcr_score(cursor, emp_id, term_id):
     # can sit under Core Functions as their personal teaching work at the same time. The
     # administrative category is the one holding the Administrative Functions target type.
     admin_category_id = None
+    support_type_id = None
+    dean_core_category_id = None
     if designation != DESIGNATION_REGULAR:
         admin_type_id = get_category_id(cursor, SLUG_ADMINISTRATIVE)
         if admin_type_id:
             admin_category_id = type_to_category.get(admin_type_id)
+        # Mirrors app/models/ipcr_form.py's build_ipcr_sections: the Dean's own real IPCR scores
+        # college-wide Support-Functions oversight (professional meetings, faculty advisers,
+        # client satisfaction surveys, etc.) under Core Functions, not Strategic
+        # Priorities/Support Functions like every other designated faculty member's oversight.
+        # Scoped strictly to job_title == 'Dean' -- see that module for why.
+        support_type_id = get_category_id(cursor, SLUG_SUPPORT)
+        instruction_type_id = get_category_id(cursor, SLUG_INSTRUCTION)
+        if instruction_type_id:
+            dean_core_category_id = type_to_category.get(instruction_type_id)
 
     # Average each category's per-target ratings. Targets whose type isn't mapped to any
     # category (e.g. ad-hoc custom items) are excluded from the weighted summary.
     by_category = {}
     for t in targets:
-        if t.get('is_admin_function') and admin_category_id:
+        if (job_title == 'Dean' and t.get('is_admin_function')
+                and t.get('category_id') == support_type_id and dean_core_category_id):
+            cat_id = dean_core_category_id
+        elif t.get('is_admin_function') and admin_category_id:
             cat_id = admin_category_id
         else:
             cat_id = type_to_category.get(t.get('category_id'))

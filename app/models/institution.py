@@ -20,6 +20,11 @@ ROLE_RET = 'RET / Extension'
 ROLE_COLLEGE_WIDE = 'College-Wide'
 SPECIAL_CASCADE_ROLES = [ROLE_RET, ROLE_COLLEGE_WIDE]
 
+# Not a real assigned_to_role value and never written to the database -- purely an in-memory
+# marker so get_oversight_targets/get_oversight_indicator_ids/get_oversight_evidence can
+# recognize "the Dean's oversight spans every department" without a second parallel code path.
+ROLE_DEAN_ALL_DEPARTMENTS = '__DEAN_ALL_DEPARTMENTS__'
+
 
 # ─────────────────────────────────────────────
 # Departments

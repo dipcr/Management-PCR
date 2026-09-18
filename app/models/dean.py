@@ -727,8 +727,10 @@ def get_designated_faculty_draft_preview(cursor, term_id, emp_id):
     """
     Everything the Dean needs to see for one designated faculty member / chair in the Draft
     IPCR Studio modal: Core Functions (Teaching Load + their own Instruction share, both
-    read-only previews the Dean does not author) and Strategic Priorities & Support Functions
-    (Departmental/RET Oversight, chair-only, and the College-Wide pool the Dean does author).
+    read-only previews the Dean does not author, plus -- for the Dean's own IPCR only -- any
+    Support-slug oversight total, see `oversight_core` below) and Strategic Priorities & Support
+    Functions (Departmental/RET Oversight, chair-only, and the College-Wide pool the Dean does
+    author).
 
     A Program Chair, RET Chair, or Dean's own IPCR is fully Dean-formulated (`is_dean_formulated`
     True) — see CLAUDE.md's designation/system_role note. A Plain Designated Faculty's is not:
@@ -795,9 +797,31 @@ def get_designated_faculty_draft_preview(cursor, term_id, emp_id):
                 'target_duration_value': dur_value,
                 'target_duration_unit': dur_unit,
                 'target_deadline': r.get('target_deadline') or format_duration(dur_value, dur_unit),
+                'slug': r.get('slug'),
             })
 
     cw_quotas = get_college_wide_cascaded_quotas(cursor, term_id)
+    if designation == 'Dean':
+        # The Dean's oversight sum (built above) deliberately includes College-Wide rows too,
+        # unlike a chair's (whose oversight is scoped to one department and never touches
+        # College-Wide) -- without this filter the same indicator would show up twice: once as
+        # a fixed oversight total, once as a redundant checkbox in the free-pick pool below.
+        oversight_ids = {r['indicator_id'] for r in oversight}
+        cw_quotas = [q for q in cw_quotas if q['indicator_id'] not in oversight_ids]
+
+    # For the Dean specifically, a Support-slug oversight total is issued straight into Core
+    # Functions (see app/models/ipcr_form.py's build_ipcr_sections and
+    # app/models/scoring.py's compute_ipcr_score) -- not Strategic Priorities/Support Functions
+    # like every other oversight row. Split the preview the same way so the Draft IPCR Studio
+    # modal shows each row under the heading it will actually print/score under, instead of
+    # grouping every oversight row under "Strategic Priorities & Support Functions" regardless
+    # of where it will really land. Left as one list for Program Chair/RET Chair, whose
+    # Support-slug oversight is unaffected by that split.
+    oversight_core = []
+    if designation == 'Dean':
+        from app.models.criteria import SLUG_SUPPORT
+        oversight_core = [r for r in oversight if r.get('slug') == SLUG_SUPPORT]
+        oversight = [r for r in oversight if r.get('slug') != SLUG_SUPPORT]
     assigned_list = get_designated_faculty_assignments(cursor, term_id, emp_id)
     assigned_map = {a['indicator_id']: a for a in assigned_list}
     allocated_totals = {}
@@ -860,6 +884,7 @@ def get_designated_faculty_draft_preview(cursor, term_id, emp_id):
         'teaching_load': teaching_load,
         'instruction': instruction,
         'oversight': oversight,
+        'oversight_core': oversight_core,
         'college_wide': college_wide,
     }
 

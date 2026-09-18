@@ -692,11 +692,20 @@ def dean_designated_evidence_details(emp_id):
         faculty_name = f"{fac_row[0]} {fac_row[1]}"
 
         from app.models.faculty import get_faculty_committed_targets, get_evidence_by_target
+        from app.models.designated import get_oversight_evidence
         targets = get_faculty_committed_targets(cursor, emp_id, term_id)
 
         for t in targets:
             t['is_core'] = not bool(t.get('is_admin_function'))
-            t['evidence_list'] = get_evidence_by_target(cursor, t['target_id'])
+            if t.get('is_oversight_cascade'):
+                # A Departmental Oversight row was never itself the target of a real upload --
+                # the evidence proving its (already-aggregated) quantity lives on the scoped
+                # faculty's own committed targets for the same indicator. Show that real,
+                # already-verified evidence instead of an always-empty per-target lookup.
+                agg = get_oversight_evidence(cursor, emp_id, term_id, t['indicator_id'])
+                t['evidence_list'] = agg['evidence_breakdown']
+            else:
+                t['evidence_list'] = get_evidence_by_target(cursor, t['target_id'])
 
         return jsonify({
             'success': True,
