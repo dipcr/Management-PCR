@@ -947,6 +947,46 @@
         }
     });
 
+    // Shared by renderDesignatedCoreFunctions and renderDesignatedOversight: a Departmental/RET
+    // Oversight row's fixed-quantity, editable-deadline markup, plus the hidden
+    // oversight_indicator_ids[] input the save handler reads. Registering the hidden input here
+    // (rather than each caller resetting the shared container) is what lets the SAME oversight
+    // list get split across two visually different sections -- Core Functions and Strategic
+    // Priorities & Support Functions -- while still submitting as one flat set of fields inside
+    // the one <form> wrapping the whole modal.
+    function renderOversightRow(it) {
+        document.getElementById('designatedOversightHiddenInputs').innerHTML +=
+            '<input type="hidden" name="oversight_indicator_ids[]" value="' + it.indicator_id + '">';
+
+        const units = ['days', 'weeks', 'months', 'semesters'];
+        let unitOptions = '';
+        units.forEach(u => {
+            unitOptions += '<option value="' + u + '" ' + (it.target_duration_unit === u ? 'selected' : '') + '>' + u + '</option>';
+        });
+        return (
+          '<div class="list-group-item py-3">' +
+            '<div class="d-flex align-items-start gap-2 flex-wrap">' +
+              '<span class="badge bg-warning-subtle text-warning border small flex-shrink-0">Oversight</span>' +
+              '<span class="flex-grow-1 fw-semibold small text-dark dean-assign-desc-text">' + escapeHtml(window.renderIndicatorPreview(it.indicator_description)) + '</span>' +
+              '<span class="badge bg-light text-dark border small flex-shrink-0">Qty: ' + it.total_target_value + ' (locked)</span>' +
+            '</div>' +
+            '<div class="row g-2 mt-2 ps-4">' +
+              '<div class="col-md-6">' +
+                '<div class="d-flex gap-1">' +
+                  '<span class="text-muted small align-self-center">Duration:</span>' +
+                  '<input type="number" min="1" class="form-control form-control-sm text-center" ' +
+                         'name="oversight_dur_value_' + it.indicator_id + '" value="' + (it.target_duration_value || 6) + '" ' +
+                         'aria-label="Duration value for ' + escapeHtml(it.indicator_description) + '">' +
+                  '<select class="form-select form-select-sm" name="oversight_dur_unit_' + it.indicator_id + '">' +
+                    unitOptions +
+                  '</select>' +
+                '</div>' +
+              '</div>' +
+            '</div>' +
+          '</div>'
+        );
+    }
+
     function renderDesignatedCoreFunctions(data) {
         const tl = data.teaching_load || {};
         let html = '<div class="list-group mb-2">';
@@ -975,44 +1015,27 @@
                 '<span class="badge bg-secondary-subtle text-secondary border">Pending Chair distribution</span>' +
               '</div>';
         }
+
+        // Dean-only: a Support-slug oversight total (e.g. summed professional
+        // meetings/advisers/client surveys) is issued straight into Core Functions -- see
+        // get_designated_faculty_draft_preview's oversight_core split -- so the preview shows
+        // it where it will actually print/score, not grouped in with Strategic
+        // Priorities/Support below.
+        if (data.oversight_core && data.oversight_core.length) {
+            data.oversight_core.forEach(it => {
+                html += renderOversightRow(it);
+            });
+        }
+
         html += '</div>';
         document.getElementById('designatedAssignCoreBody').innerHTML = html;
     }
 
     function renderDesignatedOversight(data) {
-        const hidden = document.getElementById('designatedOversightHiddenInputs');
-        hidden.innerHTML = '';
         if (!data.oversight || !data.oversight.length) return '';
-
-        const units = ['days', 'weeks', 'months', 'semesters'];
         let html = '<div class="list-group mb-2">';
         data.oversight.forEach(it => {
-            hidden.innerHTML += '<input type="hidden" name="oversight_indicator_ids[]" value="' + it.indicator_id + '">';
-            let unitOptions = '';
-            units.forEach(u => {
-                unitOptions += '<option value="' + u + '" ' + (it.target_duration_unit === u ? 'selected' : '') + '>' + u + '</option>';
-            });
-            html +=
-              '<div class="list-group-item py-3">' +
-                '<div class="d-flex align-items-start gap-2 flex-wrap">' +
-                  '<span class="badge bg-warning-subtle text-warning border small flex-shrink-0">Oversight</span>' +
-                  '<span class="flex-grow-1 fw-semibold small text-dark dean-assign-desc-text">' + escapeHtml(window.renderIndicatorPreview(it.indicator_description)) + '</span>' +
-                  '<span class="badge bg-light text-dark border small flex-shrink-0">Qty: ' + it.total_target_value + ' (locked)</span>' +
-                '</div>' +
-                '<div class="row g-2 mt-2 ps-4">' +
-                  '<div class="col-md-6">' +
-                    '<div class="d-flex gap-1">' +
-                      '<span class="text-muted small align-self-center">Duration:</span>' +
-                      '<input type="number" min="1" class="form-control form-control-sm text-center" ' +
-                             'name="oversight_dur_value_' + it.indicator_id + '" value="' + (it.target_duration_value || 6) + '" ' +
-                             'aria-label="Duration value for ' + escapeHtml(it.indicator_description) + '">' +
-                      '<select class="form-select form-select-sm" name="oversight_dur_unit_' + it.indicator_id + '">' +
-                        unitOptions +
-                      '</select>' +
-                    '</div>' +
-                  '</div>' +
-                '</div>' +
-              '</div>';
+            html += renderOversightRow(it);
         });
         html += '</div>';
         return html;
@@ -1053,6 +1076,10 @@
                 saveBtn.disabled = true;
             }
 
+            // Cleared once, up front: renderDesignatedCoreFunctions and renderDesignatedOversight
+            // both append to this container (via renderOversightRow) as they run, since an
+            // oversight row can now land in either section.
+            document.getElementById('designatedOversightHiddenInputs').innerHTML = '';
             renderDesignatedCoreFunctions(data);
             const oversightHtml = renderDesignatedOversight(data);
 
@@ -1879,6 +1906,10 @@
     // before it reaches the Dean.
     // ─────────────────────────────────────────────
     const DESIGNATED_EVIDENCE_BY_TARGET = {};
+    // A Departmental Oversight row's evidence_list is linked from other employees' own
+    // committed targets (see dean.py's dean_designated_evidence_details) -- keyed separately so
+    // the viewer knows to render it read-only instead of the normal upload/approve/return UI.
+    const DESIGNATED_EVIDENCE_IS_OVERSIGHT = {};
     let designatedEvidenceVerificationChanged = false;
 
     window.openDesignatedEvidenceVerificationModal = function(empId, facultyName) {
@@ -1936,12 +1967,16 @@
                     group.items.forEach(t => {
                         const tr = document.createElement('tr');
                         DESIGNATED_EVIDENCE_BY_TARGET[t.target_id] = t.evidence_list || [];
+                        DESIGNATED_EVIDENCE_IS_OVERSIGHT[t.target_id] = !!t.is_oversight_cascade;
 
                         let evHtml;
                         if (t.evidence_list && t.evidence_list.length > 0) {
+                            const evLabel = t.is_oversight_cascade
+                                ? `<i class="ti ti-link me-1"></i>View Linked Evidence (${t.evidence_list.length})`
+                                : `<i class="ti ti-folder-open me-1"></i>View Uploaded Evidence (${t.evidence_list.length})`;
                             evHtml = `<button type="button" class="btn btn-outline-primary btn-sm px-3 fw-semibold shadow-xs"
                                 onclick="openDesignatedEvidenceViewerFor(${t.target_id})">
-                                <i class="ti ti-folder-open me-1"></i>View Uploaded Evidence (${t.evidence_list.length})
+                                ${evLabel}
                             </button>`;
                         } else {
                             evHtml = '<span class="badge bg-light text-muted border">No evidence uploaded</span>';
@@ -2012,8 +2047,71 @@
     };
 
     window.openDesignatedEvidenceViewerFor = function(targetId) {
-        openDesignatedEvidenceViewer(DESIGNATED_EVIDENCE_BY_TARGET[targetId] || []);
+        const list = DESIGNATED_EVIDENCE_BY_TARGET[targetId] || [];
+        if (DESIGNATED_EVIDENCE_IS_OVERSIGHT[targetId]) {
+            openDesignatedOversightEvidenceViewer(list);
+        } else {
+            openDesignatedEvidenceViewer(list);
+        }
     };
+
+    // Read-only counterpart to openDesignatedEvidenceViewer, for a Departmental Oversight row's
+    // linked evidence: these evidence_ids belong to OTHER employees' own committed targets (the
+    // scoped faculty who did the real work), not to the person being reviewed here. There is no
+    // ownership check in /dean/verify_evidence tying an evidence_id to a specific reviewee, so
+    // this deliberately renders no Approve/Return/comment action at all -- only which faculty
+    // member contributed what, and its already-set verification status.
+    function openDesignatedOversightEvidenceViewer(evidenceList) {
+        const body = document.getElementById('designatedEvidenceViewerBody');
+        if (!evidenceList || evidenceList.length === 0) {
+            body.innerHTML = '<div class="text-center py-5 text-muted">No evidence files available.</div>';
+        } else {
+            let html = '';
+            evidenceList.forEach((ev) => {
+                const fileUrl = `/evidence_uploads/${ev.evidence_id}`;
+                const fileName = escapeHtml(ev.file_path.split('/').pop().replace(/^[0-9a-f]{32}_/, ''));
+                const ext = ev.file_path.split('.').pop().toLowerCase();
+                const isImage = ext.match(/^(jpg|jpeg|png|gif|webp)$/i);
+                const isPdf = ext === 'pdf';
+
+                let previewHtml;
+                if (isImage) {
+                    previewHtml = `<div class="evidence-portrait-container">
+                            <img src="${fileUrl}" alt="${fileName}" class="evidence-portrait-img" loading="lazy">
+                        </div>`;
+                } else if (isPdf) {
+                    previewHtml = `<div class="evidence-portrait-container">
+                            <embed src="${fileUrl}" type="application/pdf" class="evidence-pdf-embed">
+                        </div>`;
+                } else {
+                    previewHtml = `<div class="evidence-portrait-container text-center py-4">
+                            <i class="ti ti-file-download fs-1 text-light mb-2 d-block"></i>
+                            <a href="${fileUrl}" target="_blank" class="btn btn-sm btn-outline-light">
+                                <i class="ti ti-download me-1"></i>View / Download File
+                            </a>
+                        </div>`;
+                }
+
+                html += `
+                    <div class="evidence-item mb-3 p-3 border rounded-3 bg-white shadow-sm">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div class="text-truncate me-2">
+                                <span class="fw-semibold small text-dark">${escapeHtml(ev.faculty_name || 'Unknown')}</span>
+                                <span class="ms-2 badge bg-light text-dark border">${escapeHtml(ev.verification_status || 'Pending')}</span>
+                            </div>
+                            <div class="small text-muted flex-shrink-0">
+                                <span><i class="ti ti-circle-check me-1"></i>Qty: ${ev.actual_qty_Q}</span>
+                            </div>
+                        </div>
+                        <div class="small text-muted mb-2">${fileName}</div>
+                        ${previewHtml}
+                    </div>
+                `;
+            });
+            body.innerHTML = html;
+        }
+        new bootstrap.Modal(document.getElementById('designatedEvidenceViewerModal')).show();
+    }
 
     function openDesignatedEvidenceViewer(evidenceList) {
         const body = document.getElementById('designatedEvidenceViewerBody');

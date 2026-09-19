@@ -241,6 +241,14 @@ oversight row's evidence via the chair's own (permanently empty) `target_id` —
 cosmetic only; confirmed not to block approval, per the fix above). Flagging in case the Dean's
 screen should eventually show the same linked breakdown the chair's own dashboard now does.
 
+**Closed (later pass):** the actual function is `dean_designated_evidence_details()`
+(`app/routes/dean.py`), not `get_dean_faculty_evidence_details` as named above. It now branches on
+`is_oversight_cascade` and substitutes `get_oversight_evidence()`'s `evidence_breakdown` for
+oversight rows, same as this plan's chair-side fix. Rendered via a new, deliberately read-only
+`openDesignatedOversightEvidenceViewer()` in `dean_dashboard.html` (no Approve/Return/comment
+action — those evidence_ids belong to other employees' own committed targets, and
+`/dean/verify_evidence` has no check tying an evidence_id to a specific reviewee).
+
 ### Post-implementation recheck (2026-09-07): four fixes, one confirmed extension
 
 A full recheck pass over the diff surfaced and fixed four issues, none of which showed up in

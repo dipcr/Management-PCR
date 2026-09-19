@@ -559,7 +559,10 @@ Run after B and C so there are cascades and allocations to pick up.
       other target.
 - [ ] **RET Chair**: pre-filled with everything cascaded to **RET / Extension**, full quantity,
       same locked-quantity / editable-deadline behaviour.
-- [ ] **Dean**: **no auto-selected targets at all** — the section starts empty.
+- [ ] **Dean**: pre-filled with the **college-wide total** of every Instruction-type indicator
+      cascaded to any department/RET (summed across all of them — cascade `15/15/15/6/0` across
+      WST/DST/NST/BSDS/RET → the Dean reads **51**), badged and locked the same way a chair's
+      single-department oversight row is.
 - [ ] All of them can still add from the selectable pool.
 
 ### J4. Claimed targets are not selectable
@@ -574,10 +577,19 @@ Run after B and C so there are cascades and allocations to pick up.
 - [ ] A chair may hold one indicator **twice** — the oversight copy (full quota, Strategic
       Priorities/Support) and their own allocated teaching work (Core Functions). Submit and
       confirm **exactly one row of each** appears — not two of either.
-- [ ] In Summary of Ratings the oversight copy sits under **Strategic Priorities/Support
-      (75%)** and the personal copy under **Core Functions (25%)**.
-- [ ] Dean's **IPCR Draft Approval** modal shows the same split — the oversight copy under
-      Strategic Priorities, not duplicated into Core Functions.
+- [ ] For **Program Chair/RET Chair**, in Summary of Ratings the oversight copy sits under
+      **Strategic Priorities/Support (75%)** and the personal copy under **Core Functions
+      (25%)**, regardless of the oversight indicator's own type (Instruction or Support).
+- [ ] For the **Dean specifically**, an Instruction-type oversight total (e.g. the summed
+      report-of-grades) sits under **Strategic Priorities/Support (75%)** as before, but a
+      Support-type oversight total (e.g. summed professional meetings/faculty advisers/client
+      satisfaction surveys) sits under **Core Functions (25%)** instead — this is intentional
+      and matches the Dean's real filled-out IPCR; Program Chair/RET Chair behavior for the
+      same Support-type indicators is unchanged.
+- [ ] Dean's **IPCR Draft Approval** modal shows the same split — for a chair, the oversight
+      copy under Strategic Priorities, not duplicated into Core Functions; for the Dean's own
+      draft, Instruction-type oversight under Strategic Priorities and Support-type oversight
+      under Core Functions.
 - [ ] In that modal, with nothing touched, **Approve IPCR is enabled** (not permanently
       disabled by a false "quantities were modified" detection).
 - [ ] Edit a quantity in the modal → Approve correctly becomes disabled ("must return to

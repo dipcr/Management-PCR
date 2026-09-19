@@ -14,7 +14,8 @@ import re
 
 from app.models.criteria import (get_ipcr_categories, get_type_to_category, get_category_id,
                                  get_applicable_weights, resolve_designation_type,
-                                 DESIGNATION_REGULAR, SLUG_ADMINISTRATIVE)
+                                 DESIGNATION_REGULAR, SLUG_ADMINISTRATIVE, SLUG_SUPPORT,
+                                 SLUG_INSTRUCTION)
 from app.models.institution import get_institution_settings, resolve_signatories
 from app.models.scoring import compute_ipcr_score
 
@@ -80,7 +81,8 @@ def _target_type_meta(cursor):
     return {row[0]: (_strip_leading_letter(row[1]), row[2] or 0) for row in cursor.fetchall()}
 
 
-def build_ipcr_sections(cursor, targets, designation_type, term_id, academic_rank=None):
+def build_ipcr_sections(cursor, targets, designation_type, term_id, academic_rank=None,
+                        job_title=None):
     """
     Group committed targets into the printed IPCR's numbered category -> lettered
     target-type sections, in the order the paper form numbers them (Strategic
@@ -93,6 +95,9 @@ def build_ipcr_sections(cursor, targets, designation_type, term_id, academic_ran
     average -- there is nowhere for them to weigh in. Callers that must keep every
     target visible regardless of scoring (the Evidence Gathering checklist) should use
     build_evidence_checklist_sections instead.
+
+    job_title: the employee's raw designation ('Dean', 'Program Chair', ...), not the
+    designation_type weight table. Only consulted for one special case -- see below.
     """
     categories = get_ipcr_categories(cursor, designation_type)
     weights = get_applicable_weights(cursor, term_id, designation_type, academic_rank)
@@ -103,6 +108,17 @@ def build_ipcr_sections(cursor, targets, designation_type, term_id, academic_ran
     admin_category_id = type_to_category.get(admin_type_id) if admin_type_id else None
     admin_type_name = type_meta.get(admin_type_id, ('Administrative Functions', 0))[0]
 
+    # The Dean's own real filled-out IPCR puts their college-wide Support-Functions oversight
+    # (professional meetings, faculty advisers, client satisfaction surveys, etc.) under Core
+    # Functions, alongside Instruction -- not under Strategic Priorities/Support Functions like
+    # every other designated faculty member's oversight. Resolved off the same
+    # type_to_category mapping used everywhere else (never a hardcoded category id), and scoped
+    # strictly to the Dean: Program Chair/RET Chair oversight of the same slug is untested
+    # against a real Chair IPCR and TEST_SCRIPT.md currently asserts the opposite for them.
+    support_type_id = get_category_id(cursor, SLUG_SUPPORT)
+    instruction_type_id = get_category_id(cursor, SLUG_INSTRUCTION)
+    dean_core_category_id = type_to_category.get(instruction_type_id) if instruction_type_id else None
+
     # Group targets into category -> target type, matching how they are scored: an
     # administrative row belongs to the admin category whatever its own type says, and
     # prints as a single "Administrative Function" subsection — on the real DPCR, a
@@ -111,7 +127,13 @@ def build_ipcr_sections(cursor, targets, designation_type, term_id, academic_ran
     # type (Instruction/Support/etc.), which only matters for their Core Functions work.
     grouped = {}
     for t in targets:
-        if t.get('is_admin_function') and admin_category_id:
+        if (job_title == 'Dean' and t.get('is_admin_function')
+                and t.get('category_id') == support_type_id and dean_core_category_id):
+            cat_id = dean_core_category_id
+            type_id = t.get('category_id')
+            meta = type_meta.get(type_id)
+            type_label = meta[0] if meta else _strip_leading_letter(t.get('category_name')) or 'Support Functions'
+        elif t.get('is_admin_function') and admin_category_id:
             cat_id = admin_category_id
             type_id, type_label = admin_type_id, admin_type_name
         else:
@@ -150,7 +172,8 @@ def build_ipcr_sections(cursor, targets, designation_type, term_id, academic_ran
     return sections
 
 
-def build_evidence_checklist_sections(cursor, targets, designation_type, term_id, academic_rank=None):
+def build_evidence_checklist_sections(cursor, targets, designation_type, term_id,
+                                      academic_rank=None, job_title=None):
     """
     Same category -> target-type grouping as build_ipcr_sections, but for the Evidence
     Gathering checklist rather than the printed form: every committed target still owes
@@ -158,7 +181,8 @@ def build_evidence_checklist_sections(cursor, targets, designation_type, term_id
     build_ipcr_sections (nothing maps its type to a weighted category) is appended here
     under a catch-all "Other" section instead of silently losing its evidence button.
     """
-    sections = build_ipcr_sections(cursor, targets, designation_type, term_id, academic_rank)
+    sections = build_ipcr_sections(cursor, targets, designation_type, term_id, academic_rank,
+                                   job_title=job_title)
     covered_ids = {t['target_id'] for sec in sections for sub in sec['subsections'] for t in sub['targets']}
     leftover = [t for t in targets if t.get('target_id') not in covered_ids]
     if leftover:
@@ -213,7 +237,8 @@ def build_ipcr_form(cursor, emp_id, term_id, force_final=False):
     from app.models.faculty import get_faculty_committed_targets
     targets = get_faculty_committed_targets(cursor, emp_id, term_id)
 
-    sections = build_ipcr_sections(cursor, targets, designation_type, term_id, academic_rank)
+    sections = build_ipcr_sections(cursor, targets, designation_type, term_id, academic_rank,
+                                   job_title=designation)
 
     full_name = f"{first_name} {last_name}".strip().upper()
     period = format_rating_period(period_start, period_end)

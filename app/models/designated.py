@@ -74,10 +74,11 @@ def get_oversight_cascade_role(cursor, emp_id):
     Which cascade bucket this person is accountable for overseeing, or None.
 
     A Program Chair oversees everything the Dean cascaded to their department; the RET Chair
-    oversees the RET / Extension bucket. Other designated faculty (and the Dean, pending a
-    decision on what the Dean's own oversight set should be) oversee nothing.
+    oversees the RET / Extension bucket. The Dean oversees every department's (and RET's)
+    cascaded quota at once -- the college-wide total, not one department's share. Other
+    designated faculty oversee nothing.
     """
-    from app.models.institution import ROLE_RET
+    from app.models.institution import ROLE_RET, ROLE_DEAN_ALL_DEPARTMENTS
     cursor.execute(
         "SELECT designation, specialization FROM tbl_employee_profiles WHERE emp_id = %s",
         (emp_id,))
@@ -88,6 +89,8 @@ def get_oversight_cascade_role(cursor, emp_id):
 
     if designation == 'RET Chair':
         return ROLE_RET
+    if designation == 'Dean':
+        return ROLE_DEAN_ALL_DEPARTMENTS
     if designation == 'Program Chair' and specialization:
         return specialization
     return None
@@ -206,37 +209,78 @@ def get_oversight_targets(cursor, emp_id, term_id):
     separate row with the flag clear, rating under Core Functions.
     """
     from app.models.connection import timed_query
+    from app.models.institution import ROLE_DEAN_ALL_DEPARTMENTS
     role = get_oversight_cascade_role(cursor, emp_id)
     if not role:
         return []
 
-    query = """
-        SELECT cq.indicator_id,
-               cq.total_target_value,
-               mi.indicator_description,
-               mi.efficiency_type,
-               tc.category_name,
-               tc.slug,
-               dt.draft_id,
-               dt.proposed_quantity,
-               dt.target_description,
-               dt.target_deadline,
-               dt.target_duration_value,
-               dt.target_duration_unit,
-               dt.review_status
-        FROM tbl_cascaded_quotas cq
-        JOIN tbl_master_indicators mi ON cq.indicator_id = mi.indicator_id
-        JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
-        LEFT JOIN tbl_draft_targets dt
-               ON dt.emp_id = %s AND dt.indicator_id = cq.indicator_id
-              AND dt.is_admin_function = 1
-        WHERE mi.term_id = %s
-          AND cq.assigned_to_role = %s
-          AND cq.total_target_value > 0
-        ORDER BY tc.display_order, mi.indicator_id
-    """
-    rows = timed_query(cursor, query, (emp_id, term_id, role),
-                       label="get_oversight_targets")
+    if role == ROLE_DEAN_ALL_DEPARTMENTS:
+        # The Dean answers for the college-wide total, not one department's share: sum every
+        # cascaded_quotas row for the indicator regardless of which department/RET/College-Wide
+        # bucket it landed in. An indicator is only ever cascaded as one College-Wide row OR as
+        # N per-department/RET rows in the same term, never both, so an unconditional SUM
+        # reproduces the department-split total (e.g. 15+15+15+6+0 = 51 report of grades)
+        # exactly as well as it reproduces a single College-Wide row's own value.
+        query = """
+            SELECT cq.indicator_id,
+                   SUM(cq.total_target_value) AS total_target_value,
+                   mi.indicator_description,
+                   mi.efficiency_type,
+                   tc.category_name,
+                   tc.slug,
+                   dt.draft_id,
+                   dt.proposed_quantity,
+                   dt.target_description,
+                   dt.target_deadline,
+                   dt.target_duration_value,
+                   dt.target_duration_unit,
+                   dt.review_status
+            FROM tbl_cascaded_quotas cq
+            JOIN tbl_master_indicators mi ON cq.indicator_id = mi.indicator_id
+            JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
+            LEFT JOIN tbl_draft_targets dt
+                   ON dt.emp_id = %s AND dt.indicator_id = cq.indicator_id
+                  AND dt.is_admin_function = 1
+            WHERE mi.term_id = %s
+              AND tc.slug IN ('instruction', 'support')
+              AND cq.total_target_value > 0
+            GROUP BY cq.indicator_id, mi.indicator_description, mi.efficiency_type,
+                     tc.category_name, tc.slug, tc.display_order,
+                     dt.draft_id, dt.proposed_quantity, dt.target_description,
+                     dt.target_deadline, dt.target_duration_value, dt.target_duration_unit,
+                     dt.review_status
+            ORDER BY tc.display_order, mi.indicator_id
+        """
+        rows = timed_query(cursor, query, (emp_id, term_id),
+                           label="get_oversight_targets_dean")
+    else:
+        query = """
+            SELECT cq.indicator_id,
+                   cq.total_target_value,
+                   mi.indicator_description,
+                   mi.efficiency_type,
+                   tc.category_name,
+                   tc.slug,
+                   dt.draft_id,
+                   dt.proposed_quantity,
+                   dt.target_description,
+                   dt.target_deadline,
+                   dt.target_duration_value,
+                   dt.target_duration_unit,
+                   dt.review_status
+            FROM tbl_cascaded_quotas cq
+            JOIN tbl_master_indicators mi ON cq.indicator_id = mi.indicator_id
+            JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
+            LEFT JOIN tbl_draft_targets dt
+                   ON dt.emp_id = %s AND dt.indicator_id = cq.indicator_id
+                  AND dt.is_admin_function = 1
+            WHERE mi.term_id = %s
+              AND cq.assigned_to_role = %s
+              AND cq.total_target_value > 0
+            ORDER BY tc.display_order, mi.indicator_id
+        """
+        rows = timed_query(cursor, query, (emp_id, term_id, role),
+                           label="get_oversight_targets")
 
     from app.models.ipcr_description import format_ipcr_target_description
 
@@ -284,17 +328,30 @@ def get_oversight_indicator_ids(cursor, emp_id, term_id):
     routes/designated.py (to badge draft rows) so both stay in sync off one query.
     """
     from app.models.connection import timed_query
+    from app.models.institution import ROLE_DEAN_ALL_DEPARTMENTS
     role = get_oversight_cascade_role(cursor, emp_id)
     if not role:
         return set()
-    query = """
-        SELECT cq.indicator_id
-        FROM tbl_cascaded_quotas cq
-        JOIN tbl_master_indicators mi ON cq.indicator_id = mi.indicator_id
-        WHERE mi.term_id = %s
-          AND cq.assigned_to_role = %s AND cq.total_target_value > 0
-    """
-    rows = timed_query(cursor, query, (term_id, role), label="get_oversight_indicator_ids")
+
+    if role == ROLE_DEAN_ALL_DEPARTMENTS:
+        query = """
+            SELECT cq.indicator_id
+            FROM tbl_cascaded_quotas cq
+            JOIN tbl_master_indicators mi ON cq.indicator_id = mi.indicator_id
+            JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
+            WHERE mi.term_id = %s
+              AND tc.slug IN ('instruction', 'support') AND cq.total_target_value > 0
+        """
+        rows = timed_query(cursor, query, (term_id,), label="get_oversight_indicator_ids_dean")
+    else:
+        query = """
+            SELECT cq.indicator_id
+            FROM tbl_cascaded_quotas cq
+            JOIN tbl_master_indicators mi ON cq.indicator_id = mi.indicator_id
+            WHERE mi.term_id = %s
+              AND cq.assigned_to_role = %s AND cq.total_target_value > 0
+        """
+        rows = timed_query(cursor, query, (term_id, role), label="get_oversight_indicator_ids")
     return {r['indicator_id'] for r in rows}
 
 
@@ -315,7 +372,7 @@ def get_oversight_evidence(cursor, emp_id, term_id, indicator_id):
     ROLE_RET, which has no specialization -- college-wide instead.
     """
     from app.models.connection import timed_query
-    from app.models.institution import ROLE_RET
+    from app.models.institution import ROLE_RET, ROLE_DEAN_ALL_DEPARTMENTS
 
     empty = {
         'total_actual_quantity': 0,
@@ -331,7 +388,10 @@ def get_oversight_evidence(cursor, emp_id, term_id, indicator_id):
 
     params = [indicator_id, term_id]
     scope_clause = ""
-    if role != ROLE_RET:
+    # The RET Chair's role has no specialization to filter on -- college-wide instead. Neither
+    # does the Dean's: their oversight spans every department at once, so there is no single
+    # specialization value to match against.
+    if role not in (ROLE_RET, ROLE_DEAN_ALL_DEPARTMENTS):
         scope_clause = "AND ep.specialization = %s"
         params.append(role)
 
