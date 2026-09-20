@@ -60,10 +60,6 @@ def authenticate():
         flash("Your account claim is pending administrator approval.", "warning")
         return redirect(url_for('auth.login'))
 
-    if verification == "REJECTED":
-        flash("Your account claim was denied. Please contact the administrator.", "danger")
-        return redirect(url_for('auth.login'))
-
     if verification != "APPROVED":
         flash("Account not approved. Please contact the administrator.", "danger")
         return redirect(url_for('auth.login'))

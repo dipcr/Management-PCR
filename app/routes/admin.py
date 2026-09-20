@@ -227,6 +227,8 @@ def approve_claim():
         if approve_account_claim(conn, cursor, emp_id):
             log_audit_action(conn, cursor, session.get('user_id'), 'Account Claim Approved',
                              f"Approved account claim for emp_id {emp_id}.", request.remote_addr)
+            from app.services.notification_service import send_account_claim_decision_notification
+            send_account_claim_decision_notification(cursor, emp_id, approved=True)
             flash("Account claim approved. The user may now sign in.", "success")
         else:
             flash("No pending claim found for that account.", "danger")
@@ -250,9 +252,13 @@ def deny_claim():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        from app.services.notification_service import _get_faculty_profile, send_account_claim_decision_notification
+        # Fetched before deny_account_claim deletes the credential row -- the email lives there.
+        fac = _get_faculty_profile(cursor, emp_id)
         if deny_account_claim(conn, cursor, emp_id):
             log_audit_action(conn, cursor, session.get('user_id'), 'Account Claim Denied',
                              f"Denied and removed account claim for emp_id {emp_id}.", request.remote_addr)
+            send_account_claim_decision_notification(cursor, emp_id, approved=False, fac_override=fac)
             flash("Account claim denied and removed. The person may claim again.", "success")
         else:
             flash("No pending claim found for that account.", "danger")
@@ -877,4 +883,25 @@ def admin_lock_account():
         flash(f"Account #{emp_id} has been locked.", "warning")
     except Exception as e:
         flash(f"Error locking account: {str(e)}", "danger")
+    return redirect(url_for('admin.admin_dashboard') + '#nav-security')
+
+
+@admin_bp.route('/security/unlock_account', methods=['POST'])
+@role_required('ADMIN')
+def admin_unlock_account():
+    emp_id = request.form.get('emp_id')
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            emergency_unlock_account(conn, cursor, emp_id)
+            log_audit_action(conn, cursor, session.get('user_id'), 'Emergency Account Unlock',
+                             f"Force unlocked account for emp_id: {emp_id}",
+                             request.remote_addr)
+        finally:
+            cursor.close()
+            conn.close()
+        flash(f"Account #{emp_id} has been unlocked.", "success")
+    except Exception as e:
+        flash(f"Error unlocking account: {str(e)}", "danger")
     return redirect(url_for('admin.admin_dashboard') + '#nav-security')

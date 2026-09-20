@@ -225,16 +225,6 @@ def cascade_quotas():
     return redirect(url_for('dean.dean_dashboard'))
 
 
-
-
-@dean_bp.route('/validate_quotas', methods=['POST'])
-@role_required('DEAN')
-def validate_quotas():
-    """AJAX endpoint to validate quotas before submission"""
-    data = request.get_json()
-    return jsonify({'valid': True, 'message': 'Quotas validated'})
-
-
 @dean_bp.route('/review_draft_fetch/<int:emp_id>')
 @role_required('DEAN')
 def review_draft_fetch(emp_id):

@@ -70,6 +70,14 @@ def get_pending_final_approvals(cursor, term_id):
 def save_cascaded_quotas(cursor, connection, term_id, quotas_data):
     try:
         cursor.execute("""
+            SELECT COUNT(*) FROM tbl_cascaded_quotas cq
+            JOIN tbl_master_indicators mi ON mi.indicator_id = cq.indicator_id
+            WHERE mi.term_id = %s
+        """, (term_id,))
+        if cursor.fetchone()[0] > 0:
+            return False, "Institutional quotas have already been cascaded and locked for this term."
+
+        cursor.execute("""
             DELETE cq FROM tbl_cascaded_quotas cq
             JOIN tbl_master_indicators mi ON mi.indicator_id = cq.indicator_id
             WHERE mi.term_id = %s
@@ -229,7 +237,7 @@ def get_dean_review_items(cursor, review_id):
     items = timed_query(cursor, query, (review_id,), label="get_dean_review_items")
     from app.models.scoring import format_duration
     for item in items:
-        if item.get('category_name') == 'Custom Target Items':
+        if item.get('is_custom'):
             item['category_name'] = 'Support Functions'
         if not item.get('target_deadline'):
             # A hardcoded '1 Semester' default here would silently mask a real data gap

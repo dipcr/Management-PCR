@@ -94,7 +94,7 @@ graph TD
 * **Actions**:
   * **Mandatory Default Target Injection**: System automatically enforces the default `21 hours of Teaching Load` (category `A. Instructions`).
   * **Target Assembly**: Loads Program Chair cascaded targets from `tbl_draft_allocation` into `tbl_draft_targets`.
-  * **RET Selection**: If RET-eligible (`is_faculty_ret_eligible`), faculty selects Research/Extension targets from the RET menu.
+  * **RET Selection**: If RET-eligible (`is_faculty_ret_eligible`), faculty selects Research targets from the RET menu. Extension is not self-selected — it is force-distributed to every eligible faculty member by the RET Chair, with no selection UI.
 * **Verifications & Error Trapping**:
   * **Locking Guard**: Re-submission is rejected if targets are already committed in `tbl_committed_targets` or approved.
   * **Status Routing**:
@@ -134,10 +134,10 @@ graph TD
     * **Reject/Return**: Header set to `'Rejected'`. Standard targets in `tbl_draft_targets` marked `'Returned'` for faculty re-submission.
 
 #### 5.3 Stage 3 Verification: Dean Review (Designated Faculty DPCR & Final IPCR Scores)
-* **Routes**: `/dean/batch_approve` ([dean.py](file:///c:/Users/ACER/Documents/Management-PCR/Management-PCR/app/routes/dean.py#L159-L188), [dean.py (model)](file:///c:/Users/ACER/Documents/Management-PCR/Management-PCR/app/models/dean.py#L87-L99))
+* **Routes**: `/dean/approve_package`, `/dean/return_to_faculty/<emp_id>` ([dean.py](file:///c:/Users/ACER/Documents/Management-PCR/Management-PCR/app/routes/dean.py#L750-L836))
 * **Actions**:
-  * Dean reviews designated faculty DPCR drafts (`tbl_ipcr_dean_review`). Approved items commit directly to `tbl_committed_targets`.
-  * At term end, Dean performs batch final score approvals (`/dean/batch_approve`) on `tbl_final_scores`.
+  * Dean reviews designated faculty DPCR drafts (`tbl_ipcr_dean_review`). Approval only flips `overall_status` — it does not commit anything itself; the designated faculty member's own subsequent "Lock My IPCR" action is what copies approved targets into `tbl_committed_targets` (`lock_and_commit_designated_ipcr`).
+  * A batch final-score approval action on `tbl_final_scores` is not currently reachable from any route — `update_dean_approval_status` ([dean.py model](file:///c:/Users/ACER/Documents/Management-PCR/Management-PCR/app/models/dean.py#L99)) exists but nothing calls it. Final score approval today happens per-record, not in a term-end batch.
 
 ---
 
@@ -160,7 +160,7 @@ graph TD
 #### 7.1 PDF File Upload & Validation
 * **Routes**: `/faculty/upload_evidence` ([faculty.py](file:///c:/Users/ACER/Documents/Management-PCR/Management-PCR/app/routes/faculty.py#L238-L304), [faculty.py (model)](file:///c:/Users/ACER/Documents/Management-PCR/Management-PCR/app/models/faculty.py#L450-L520))
 * **Actions**:
-  * Faculty uploads PDF evidence files per committed target in `tbl_target_evidence`.
+  * Faculty uploads PDF evidence files per committed target in `tbl_evidence_repo`.
 * **Verifications & Error Trapping**:
   * **File Extension Whitelist**: Strictly enforces `.pdf` extensions (`ext in {'pdf'}`). Flash error returned on invalid extension.
   * **File Obfuscation**: Generates a random UUID prefix (`uuid.uuid4().hex_secure_filename`) to prevent file overwriting or path traversal attacks.
@@ -182,7 +182,7 @@ graph TD
 | **Role-Based Access Control** | `@role_required(role)` decorator ([decorators.py](file:///c:/Users/ACER/Documents/Management-PCR/Management-PCR/app/decorators.py#L3-L14)) | Rejects unauthorized role access with `403 Unauthorised` or redirects to login. |
 | **Password Policy** | `validate_password_policy` ([auth.py](file:///c:/Users/ACER/Documents/Management-PCR/Management-PCR/app/auth.py#L13-L26)) | Rejects weak passwords without uppercase, lowercase, numbers, special characters, or $<8$ chars. |
 | **Brute-Force / Timing Guard** | `time.sleep(0.5)` on authentication failure ([auth.py](file:///c:/Users/ACER/Documents/Management-PCR/Management-PCR/app/routes/auth.py#L35-L64)) | Delays response time to mitigate brute-force and timing attacks. |
-| **Sequential Approval Guard** | `get_overall_ipcr_status` ([prog_chair.py](file:///c:/Users/ACER/Documents/Management-PCR/Management-PCR/app/routes/prog_chair.py#L247-L249)) | Blocks Program Chair review until RET Chair approves RET targets (`403 Forbidden`). |
+| **Sequential Approval Guard** | `get_overall_ipcr_status` ([connection.py](file:///c:/Users/ACER/Documents/Management-PCR/Management-PCR/app/models/connection.py#L48)) | Blocks Program Chair review until RET Chair approves RET targets (`403 Forbidden`). |
 | **Locking Pre-requisite Check** | `lock_and_commit_ipcr` ([prog_chair.py (model)](file:///c:/Users/ACER/Documents/Management-PCR/Management-PCR/app/models/prog_chair.py#L529-L536)) | Rejects locking if `tbl_ipcr_chair_review` header status is not `'Approved'`. |
 | **Upload Format Restriction** | `.pdf` extension check ([faculty.py](file:///c:/Users/ACER/Documents/Management-PCR/Management-PCR/app/routes/faculty.py#L261-L266)) | Flash error on unsupported formats (only `.pdf` allowed). |
 | **File Overwrite Protection** | `uuid.uuid4().hex` filename generation ([faculty.py](file:///c:/Users/ACER/Documents/Management-PCR/Management-PCR/app/routes/faculty.py#L273)) | Prevents file collisions or malicious file overwrite attempts. |

@@ -139,10 +139,12 @@ def get_assigned_quantity(cursor, term_id, indicator_id, faculty_ids):
     return res[0][0] if res else 0
 
 
-def save_chair_allocations_batch(conn, cursor, term_id, allocations, faculty_ids):
+def save_chair_allocations_batch(conn, cursor, term_id, allocations, faculty_ids, specialization=None):
     try:
         if not faculty_ids:
             return False, "No active faculty found for this specialization."
+
+        quota_warnings = []
 
         for item in allocations:
             # Newer callers pass a structured duration (value + unit) alongside the label,
@@ -212,6 +214,30 @@ def save_chair_allocations_batch(conn, cursor, term_id, allocations, faculty_ids
                     )
                 continue
 
+            # Non-fatal capacity check: flag (don't block) when the total about to be
+            # distributed exceeds what the Dean actually cascaded for this indicator — a
+            # chair may have a legitimate reason for the totals not to match exactly.
+            if specialization and target_emp_ids:
+                cursor.execute("""
+                    SELECT COALESCE(dept_cq.total_target_value, cw_cq.total_target_value)
+                    FROM tbl_master_indicators mi
+                    LEFT JOIN tbl_cascaded_quotas dept_cq
+                        ON dept_cq.indicator_id = mi.indicator_id AND dept_cq.assigned_to_role = %s
+                    LEFT JOIN tbl_cascaded_quotas cw_cq
+                        ON cw_cq.indicator_id = mi.indicator_id AND cw_cq.assigned_to_role = 'College-Wide'
+                       AND cw_cq.allow_chair_allocation = 1
+                    WHERE mi.indicator_id = %s
+                """, (specialization, indicator_id))
+                quota_row = cursor.fetchone()
+                dept_quota = quota_row[0] if quota_row else None
+                if dept_quota is not None:
+                    total_distributed = assigned_quantity * len(target_emp_ids)
+                    if total_distributed > dept_quota:
+                        quota_warnings.append(
+                            f"Distributed total ({total_distributed}) exceeds the Dean's cascaded "
+                            f"quota ({dept_quota}) for '{indicator_description}'."
+                        )
+
             for emp_id in target_emp_ids:
                 # Check if an allocation record already exists in the draft staging table
                 check_query = """
@@ -241,7 +267,10 @@ def save_chair_allocations_batch(conn, cursor, term_id, allocations, faculty_ids
                                                   target_deadline, duration_value, duration_unit, is_auto_description))
 
         conn.commit()
-        return True, "Targets distributed successfully to all faculty draft worklists."
+        msg = "Targets distributed successfully to all faculty draft worklists."
+        if quota_warnings:
+            msg += " Warning: " + " ".join(quota_warnings)
+        return True, msg
     except Exception as e:
         conn.rollback()
         return False, str(e)

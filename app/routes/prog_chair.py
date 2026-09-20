@@ -335,7 +335,7 @@ def assign_chair_target():
             return redirect(url_for('prog_chair.prog_chair_dashboard'))
 
         success, msg = save_chair_allocations_batch(
-            conn, cursor, int(term_id), allocations, faculty_ids
+            conn, cursor, int(term_id), allocations, faculty_ids, specialization
         )
         flash(msg, "success" if success else "danger")
     except Exception as e:
@@ -549,9 +549,8 @@ def review_ipcr(emp_id):
         })
 
     except Exception as e:
-        import traceback
-        with open("error_log.txt", "w") as f:
-            traceback.print_exc(file=f)
+        import logging
+        logging.getLogger(__name__).error(f"Error in review_ipcr: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
     finally:
         cursor.close()

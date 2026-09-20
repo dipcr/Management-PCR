@@ -112,7 +112,7 @@ def get_overall_ipcr_status(cursor, emp_id, term_id):
     if not has_research_targets:
         # No Research targets -> bypass RET review, straight to Program Chair
         if chair_row and chair_row[0] == 'Rejected':
-            return 'draft'
+            return 'rejected_by_program_chair'
         return 'waiting_for_program_chair_review'
 
     cursor.execute("""
@@ -120,17 +120,17 @@ def get_overall_ipcr_status(cursor, emp_id, term_id):
         WHERE emp_id = %s AND term_id = %s
     """, (emp_id, term_id))
     ret_row = cursor.fetchone()
-    
+
     if ret_row:
         ret_status = ret_row[0]
         if ret_status == 'Rejected':
-            return 'draft'
+            return 'rejected_by_ret_chair'
         elif ret_status == 'Approved':
             # RET has approved
             if chair_row:
                 chair_status = chair_row[0]
                 if chair_status == 'Rejected':
-                    return 'draft'
+                    return 'rejected_by_program_chair'
                 elif chair_status == 'Approved':
                     return 'approved_by_program_chair'
             return 'waiting_for_program_chair_review'

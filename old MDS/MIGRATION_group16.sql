@@ -39,6 +39,13 @@ ALTER TABLE tbl_ipcr_approval_notifications MODIFY COLUMN tier varchar(30) NOT N
 -- but dropping it destroys data whose meaning is recorded nowhere. Ask the team
 -- first. It is added to db/schema.sql so a fresh Docker build at least matches.
 --
+-- Correction (2026-09-20): the "referenced NOWHERE" claim above is no longer
+-- accurate -- the auto-generated-vs-customized description feature built after
+-- this migration (see MIGRATION_group11.sql) made heavy use of this column across
+-- dean.py, designated.py, faculty.py, prog_chair.py, ret_chair.py and scoring.py.
+-- Left as-is below as a historical record of what was true when this file was
+-- written; do not treat this file as current documentation of the column's usage.
+--
 -- tbl_ret_rules.is_locked is also unread by code, but its values map exactly onto
 -- the research (0) / extension (1) split -- it is the category discriminator that
 -- tbl_ret_rules is otherwise missing, and the deferred RET normalization needs it.

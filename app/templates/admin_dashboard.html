@@ -1574,6 +1574,14 @@ function openAddIndicator(categoryName, targetTypes) {
                                         <i class="ti ti-lock me-1"></i>Lock Account
                                     </button>
                                 </form>
+                                <form method="POST" action="{{ url_for('admin.admin_unlock_account') }}" class="d-inline"
+                                    onsubmit="return confirm('Unlock this account? The user will be able to log in again.')">
+                                    <input type="hidden" name="emp_id" value="{{ u['emp_id'] }}">
+                                    <button type="submit" class="btn btn-success btn-sm" {% if
+                                        u['account_status']!='Locked' %}disabled{% endif %}>
+                                        <i class="ti ti-lock-open me-1"></i>Unlock Account
+                                    </button>
+                                </form>
                             </td>
                         </tr>
                         {% else %}

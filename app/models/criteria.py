@@ -24,7 +24,6 @@ SLUG_INSTRUCTION = 'instruction'
 SLUG_RESEARCH = 'research'
 SLUG_EXTENSION = 'extension'
 SLUG_SUPPORT = 'support'
-SLUG_CUSTOM = 'custom'
 
 
 def get_category_by_slug(cursor, slug):

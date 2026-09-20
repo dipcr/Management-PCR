@@ -32,6 +32,14 @@ def emergency_lock_account(conn, cursor, emp_id):
     conn.commit()
 
 
+def emergency_unlock_account(conn, cursor, emp_id):
+    cursor.execute(
+        "UPDATE tbl_system_access SET account_status = 'Active' WHERE emp_id = %s",
+        (emp_id,)
+    )
+    conn.commit()
+
+
 def get_all_users_for_security(cursor):
     from app.models.connection import timed_query
     query = """

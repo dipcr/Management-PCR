@@ -103,6 +103,16 @@ Run each file in `old MDS/`. Order matters — later ones assume the earlier sch
 | 5 | `MIGRATION_group8.sql` | Rating period, institution settings, signatories, remarks |
 | 6 | `MIGRATION_group9.sql` | `target_description`/`target_duration_value`/`target_duration_unit` on `tbl_ret_assignments` |
 | 7 | `MIGRATION_group10.sql` | `tbl_ipcr_approval_notifications` — tracks Tier 1/2 email dispatches for idempotency |
+| 8 | `MIGRATION_group11.sql` | `is_auto_description` tracking (auto-mirrored vs. customized target text) across drafts, allocations, RET tables, committed targets |
+| 9 | `MIGRATION_group12.sql` | Widens `tbl_ipcr_categories.designation_type` to add a `'Master Indicators'` scope for Admin dashboard grouping |
+| 10 | `MIGRATION_group13.sql` | RET Menu lock flag — moves Extension config into `tbl_ret_rules`/`tbl_ret_rule_indicators`, replacing the old one-time-lock table |
+| 11 | `MIGRATION_group14.sql` | Drops four dead, zero-reference, zero-row tables |
+| 12 | `MIGRATION_group15.sql` | Repairs orphaned review-item rows and adds the FKs (draft_id, indicator_id) that prevent recurrence |
+| 13 | `MIGRATION_group16.sql` | Column cleanup; drops `tbl_draft_targets.manager_feedback` (zero references, zero non-empty values) |
+| 14 | `MIGRATION_group17.sql` | Drops `tbl_co_authors` — co-author claiming removed from scope |
+| 15 | `MIGRATION_group18.sql` | Drops `tbl_ret_extension_distribution` and redundant direct `term_id` FKs to `tbl_academic_terms` (term now resolved via indicator) |
+| 16 | `MIGRATION_group19.sql` | Gives `tbl_audit_logs.actor_id` a real FK to `tbl_employee_profiles` |
+| 17 | `MIGRATION_group20.sql` | Gives `tbl_ret_assignments.assigned_by` a real FK |
 
 > `MIGRATION_update_emails.sql` is **not** part of this sequence — it's a one-off data fixup that
 > overwrites specific seeded test accounts' emails with particular addresses, not a schema
@@ -140,6 +150,14 @@ never passed as an argument, and must satisfy the same policy the registration f
 
 The script refuses if an Admin already exists — pass `--force` only if you deliberately
 want a second one.
+
+> There's a second, automatic bootstrap path used by Docker: `app/setup.py:bootstrap_admin()` runs
+> unconditionally at the top of every `run.py`/`wsgi.py` startup. If `ADMIN_EMAIL` and
+> `ADMIN_PASSWORD` are both set in the environment, no Admin exists yet, and the password passes
+> the same policy check as registration, it silently creates the first Admin from those two env
+> vars — see `docker-compose.yml`. It's a no-op otherwise (missing vars, or an Admin already
+> exists), but if you set those two vars in a local `.env` for some other reason, don't be
+> surprised by an Admin account you didn't explicitly create.
 
 ### 2.4 Add everyone else
 
