@@ -659,6 +659,54 @@ def send_designated_target_decision_notification(conn, cursor, emp_id: int, term
         return False, str(e)
 
 
+def send_account_claim_decision_notification(cursor, emp_id: int, approved: bool, base_url: str = None, fac_override: dict = None) -> tuple[bool, str]:
+    """
+    Notifies a claimant that their account claim was approved or denied by an Admin.
+
+    fac_override lets the caller pass an already-looked-up profile dict (from
+    _get_faculty_profile) instead of this function looking it up itself. Required for a
+    denial: deny_account_claim() deletes the tbl_auth_credentials row the email lives on, so
+    the caller must fetch the profile *before* calling deny_account_claim() and pass it here
+    afterward -- looking it up fresh at that point would find nothing.
+    """
+    try:
+        fac = fac_override if fac_override is not None else _get_faculty_profile(cursor, emp_id)
+        # _get_faculty_profile() falls back to a hardcoded placeholder address when no real
+        # profile/email is found rather than returning an empty email -- checking truthiness
+        # alone would never catch that case and could send this notification to that address
+        # instead of failing. Explicitly reject the known sentinel too.
+        if not fac or not fac['email'] or fac['email'] == 'casptonetest@gmail.com':
+            return False, f"Claimant #{emp_id} or email not found."
+
+        resolved_base_url = _get_base_url(base_url)
+        action_url = f"{resolved_base_url}/" if approved else f"{resolved_base_url}/register"
+
+        html_body = render_template('emails/account_claim_decision.html',
+            faculty_name=fac['full_name'],
+            approved=approved,
+            action_url=action_url
+        )
+        text_body = (
+            f"Dear {fac['full_name']},\n\n"
+            + (f"Your D-IPCR account claim has been approved. You may now sign in.\n\n"
+               if approved else
+               f"Your D-IPCR account claim has been denied. You may register again if this was a mistake.\n\n")
+            + f"Visit: {action_url}\n"
+        )
+        send_async_email(
+            subject=f"[D-IPCR] Account Claim {'Approved' if approved else 'Denied'}",
+            recipients=[fac['email']],
+            html_body=html_body,
+            text_body=text_body
+        )
+        logger.info(f"[ACCOUNT CLAIM DECISION NOTIFICATION] Sent to {fac['email']} for emp_id={emp_id}, approved={approved}")
+        return True, "Account claim decision notification sent."
+
+    except Exception as e:
+        logger.error(f"Error in send_account_claim_decision_notification: {e}")
+        return False, str(e)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 6. Accomplishment & Evidence Phase Notifications
 # ─────────────────────────────────────────────────────────────────────────────

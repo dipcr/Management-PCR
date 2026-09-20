@@ -13,62 +13,124 @@ def get_existing_cascaded_quotas(cursor, term_id):
 
 def get_dean_dashboard_kpis(cursor, term_id):
     """
-    Consolidated KPI query — replaces 3 separate round-trips
-    (get_overall_completion + get_pending_approvals_count + get_top_performing_department)
-    into a single query.
+    Consolidated KPI query — replaces 2 separate round-trips
+    (get_overall_completion + get_not_started_count) into a single query.
+
+    "Top Performing Dept" (ranked by average final score) used to be the third KPI here, but it
+    reads as 'N/A Program' for most of the term -- there's nothing to rank until faculty start
+    getting Dean-approved final scores near the end of the cycle. "Not Yet Started" (Regular
+    Faculty with zero draft targets this term) is useful the whole term, and is exactly the kind
+    of straggler this KPI row should be surfacing early rather than a stat that's only
+    meaningful in the last few weeks.
+
+    The "Awaiting Final Approval" KPI used to be computed here too (a college-wide count of
+    tbl_final_scores.dean_approval_status = 'Pending'), but that read from a different signal
+    than the Final Verification panel's own pending count (tbl_committed_targets.status), so the
+    two could disagree. The dashboard route now just uses len(pending_dean_evidence_list) --
+    the same list Final Verification renders -- for that KPI instead.
     """
     query = """
         SELECT
             COALESCE(
                 ROUND(
-                    (SUM(CASE WHEN ts.status = 'Approved' THEN 1 ELSE 0 END) 
+                    (SUM(CASE WHEN ts.status = 'Approved' THEN 1 ELSE 0 END)
                      / NULLIF(COUNT(*), 0)) * 100
                 ), 0
             ) AS completion_rate,
-            (SELECT COUNT(*) FROM tbl_final_scores fs2
-             WHERE fs2.term_id = %s AND fs2.dean_approval_status = 'Pending') AS pending_count,
-            COALESCE(
-                (SELECT ep2.assigned_program
-                 FROM tbl_final_scores fs3
-                 JOIN tbl_employee_profiles ep2 ON fs3.emp_id = ep2.emp_id
-                 WHERE fs3.term_id = %s AND fs3.dean_approval_status = 'Approved'
-                 GROUP BY ep2.assigned_program
-                 ORDER BY AVG(fs3.final_score) DESC
-                 LIMIT 1),
-                'N/A'
-            ) AS top_dept
+            (SELECT COUNT(*) FROM tbl_employee_profiles ep2
+             WHERE ep2.designation = 'Regular Faculty' AND ep2.leave_status = 'Active'
+               AND NOT EXISTS (
+                    SELECT 1 FROM tbl_draft_targets dt
+                    JOIN tbl_master_indicators mi2 ON dt.indicator_id = mi2.indicator_id
+                    WHERE dt.emp_id = ep2.emp_id AND mi2.term_id = %s
+               )) AS not_started_count
         FROM tbl_committed_targets ts
         JOIN tbl_master_indicators mi ON ts.indicator_id = mi.indicator_id
         WHERE mi.term_id = %s
     """
     from app.models.connection import timed_query
-    result = timed_query(cursor, query, (term_id, term_id, term_id), label="dean_dashboard_kpis")
+    result = timed_query(cursor, query, (term_id, term_id), label="dean_dashboard_kpis")
     if result:
-        return result[0]['completion_rate'], result[0]['pending_count'], result[0]['top_dept']
-    return 0, 0, "N/A"
+        return result[0]['completion_rate'], result[0]['not_started_count']
+    return 0, 0
 
 
-def get_pending_final_approvals(cursor, term_id):
+def get_department_ipcr_completion(cursor, term_id):
+    """
+    Per-department (and college-wide) pipeline funnel for Regular Faculty, for the active term:
+    Total | In Progress | Awaiting Your (Dean's) Approval | Completed.
+
+    "Awaiting Your Approval" and "Completed" are read off tbl_committed_targets.status -- the
+    same signal get_dean_evidence_faculty() uses to build the Final Verification panel (a
+    faculty member is "Completed" once every committed target for the term is 'Dean Approved',
+    "Awaiting" once at least one target has reached 'Submitted to Dean'/'Dean Approved' but not
+    all of them are 'Dean Approved' yet) -- not tbl_final_scores.dean_approval_status. Both
+    columns used to read that second table, which could drift out of sync with the Final
+    Verification panel's own pending list; reading the same committed-targets signal here keeps
+    this tracker and that panel always in agreement. "In Progress" is simply everyone else:
+    total_faculty - completed_count - awaiting_approval_count. That covers every earlier stage
+    (no draft yet, mid-review, locked and gathering evidence, evidence submitted but not yet
+    reviewed) without needing a separate query per stage.
+
+    Scoped to Regular Faculty only -- Designated Faculty (including chairs/Dean) go through the
+    separate tbl_ipcr_dean_review draft-approval pipeline before final scoring, so mixing them
+    into "In Progress" here would conflate two different pipelines.
+
+    Keyed by department_name to match get_departments()'s tbl_departments rows -- a department
+    with zero Regular Faculty simply won't appear in the returned dict; callers should default
+    to 0/0/0/0 for those when building a display table.
+    """
     from app.models.connection import timed_query
     query = """
-        SELECT 
-            fs.score_id,
-            ep.emp_id,
-            CONCAT(ep.first_name, ' ', ep.last_name) as faculty_name,
-            ep.assigned_program as department,
-            fs.final_score,
-            fs.adjectival_rating,
-            fs.dean_approval_status
-        FROM tbl_final_scores fs
-        JOIN tbl_employee_profiles ep ON fs.emp_id = ep.emp_id
-        WHERE fs.term_id = %s AND fs.dean_approval_status = 'Pending'
-        ORDER BY ep.last_name ASC
+        SELECT
+            ep.specialization AS department,
+            COUNT(DISTINCT ep.emp_id) AS total_faculty,
+            SUM(CASE WHEN fac_status.reached_dean = 1 AND fac_status.not_dean_approved_count = 0
+                     THEN 1 ELSE 0 END) AS completed_count,
+            SUM(CASE WHEN fac_status.reached_dean = 1 AND fac_status.not_dean_approved_count > 0
+                     THEN 1 ELSE 0 END) AS awaiting_approval_count
+        FROM tbl_employee_profiles ep
+        LEFT JOIN (
+            SELECT ct.emp_id,
+                   MAX(CASE WHEN ct.status IN ('Submitted to Dean', 'Dean Approved') THEN 1 ELSE 0 END) AS reached_dean,
+                   SUM(CASE WHEN ct.status != 'Dean Approved' THEN 1 ELSE 0 END) AS not_dean_approved_count
+            FROM tbl_committed_targets ct
+            JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
+            WHERE mi.term_id = %s
+            GROUP BY ct.emp_id
+        ) fac_status ON fac_status.emp_id = ep.emp_id
+        WHERE ep.designation = 'Regular Faculty' AND ep.leave_status = 'Active'
+        GROUP BY ep.specialization
+        ORDER BY ep.specialization
     """
-    return timed_query(cursor, query, (term_id,), label="get_pending_final_approvals")
+    rows = timed_query(cursor, query, (term_id,), label="dean_department_completion")
+    for r in rows:
+        # MySQL returns SUM(CASE...) as Decimal, not int, unlike COUNT(DISTINCT...) -- normalize
+        # before doing integer subtraction below, and so callers/templates get plain ints.
+        r['completed_count'] = int(r['completed_count'])
+        r['awaiting_approval_count'] = int(r['awaiting_approval_count'])
+        r['in_progress_count'] = r['total_faculty'] - r['completed_count'] - r['awaiting_approval_count']
+    by_department = {r['department']: r for r in rows}
+
+    totals = {
+        'total_faculty': sum(r['total_faculty'] for r in rows),
+        'in_progress_count': sum(r['in_progress_count'] for r in rows),
+        'awaiting_approval_count': sum(r['awaiting_approval_count'] for r in rows),
+        'completed_count': sum(r['completed_count'] for r in rows),
+    }
+    return by_department, totals
 
 
 def save_cascaded_quotas(cursor, connection, term_id, quotas_data):
     try:
+        cursor.execute("""
+            SELECT COUNT(*) FROM tbl_cascaded_quotas cq
+            JOIN tbl_master_indicators mi ON mi.indicator_id = cq.indicator_id
+            WHERE mi.term_id = %s
+        """, (term_id,))
+        if cursor.fetchone()[0] > 0:
+            return False, "Institutional quotas have already been cascaded and locked for this term."
+
         cursor.execute("""
             DELETE cq FROM tbl_cascaded_quotas cq
             JOIN tbl_master_indicators mi ON mi.indicator_id = cq.indicator_id
@@ -229,7 +291,7 @@ def get_dean_review_items(cursor, review_id):
     items = timed_query(cursor, query, (review_id,), label="get_dean_review_items")
     from app.models.scoring import format_duration
     for item in items:
-        if item.get('category_name') == 'Custom Target Items':
+        if item.get('is_custom'):
             item['category_name'] = 'Support Functions'
         if not item.get('target_deadline'):
             # A hardcoded '1 Semester' default here would silently mask a real data gap
@@ -509,6 +571,33 @@ def get_designated_faculty_list(cursor):
         ORDER BY ep.last_name ASC, ep.first_name ASC
     """
     return timed_query(cursor, query, tuple(excluded), label="get_designated_faculty_list")
+
+
+def get_department_faculty_roster(cursor, specialization):
+    """
+    Every active employee in one department/specialization, split into the three groups the
+    Department Accomplishment panel lists separately: Program Chair, plain Designated Faculty,
+    and Regular Faculty. RET Chair and Dean are college-wide (not department-scoped) roles, so
+    they're intentionally left out of this per-department roster.
+
+    Deliberately a plain roster query -- no term or tbl_committed_targets join, no filtering on
+    submission status -- since this panel is meant to give the Dean access to *everyone's*
+    evidence, including faculty who haven't submitted anything yet this term.
+    """
+    from app.models.connection import timed_query
+    query = """
+        SELECT emp_id, first_name, last_name, academic_rank, designation
+        FROM tbl_employee_profiles
+        WHERE leave_status = 'Active' AND specialization = %s
+          AND designation IN ('Program Chair', 'Designated Faculty', 'Regular Faculty')
+        ORDER BY designation, last_name ASC, first_name ASC
+    """
+    rows = timed_query(cursor, query, (specialization,), label="get_department_faculty_roster")
+    return {
+        'program_chairs': [r for r in rows if r['designation'] == 'Program Chair'],
+        'designated_faculty': [r for r in rows if r['designation'] == 'Designated Faculty'],
+        'regular_faculty': [r for r in rows if r['designation'] == 'Regular Faculty'],
+    }
 
 
 def get_college_wide_cascaded_quotas(cursor, term_id):

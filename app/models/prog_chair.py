@@ -1,7 +1,16 @@
 from datetime import datetime
 
 from app.models.criteria import SLUG_INSTRUCTION, SLUG_SUPPORT
-from app.models.ipcr_description import format_ipcr_target_description
+from app.models.ipcr_description import format_ipcr_target_description, render_indicator_preview
+
+
+def _truncate_title(text, max_len=37):
+    """Clean, readable indicator title for a compact flash message -- long descriptions
+    would otherwise blow up a multi-indicator warning into an unreadable wall of text."""
+    text = (text or '').strip()
+    if len(text) <= max_len:
+        return text
+    return text[:max_len].rstrip() + '...'
 
 
 # ─────────────────────────────────────────────
@@ -139,10 +148,12 @@ def get_assigned_quantity(cursor, term_id, indicator_id, faculty_ids):
     return res[0][0] if res else 0
 
 
-def save_chair_allocations_batch(conn, cursor, term_id, allocations, faculty_ids):
+def save_chair_allocations_batch(conn, cursor, term_id, allocations, faculty_ids, specialization=None):
     try:
         if not faculty_ids:
             return False, "No active faculty found for this specialization."
+
+        quota_warnings = []
 
         for item in allocations:
             # Newer callers pass a structured duration (value + unit) alongside the label,
@@ -212,6 +223,30 @@ def save_chair_allocations_batch(conn, cursor, term_id, allocations, faculty_ids
                     )
                 continue
 
+            # Non-fatal capacity check: flag (don't block) when the total about to be
+            # distributed exceeds what the Dean actually cascaded for this indicator — a
+            # chair may have a legitimate reason for the totals not to match exactly.
+            if specialization and target_emp_ids:
+                cursor.execute("""
+                    SELECT COALESCE(dept_cq.total_target_value, cw_cq.total_target_value)
+                    FROM tbl_master_indicators mi
+                    LEFT JOIN tbl_cascaded_quotas dept_cq
+                        ON dept_cq.indicator_id = mi.indicator_id AND dept_cq.assigned_to_role = %s
+                    LEFT JOIN tbl_cascaded_quotas cw_cq
+                        ON cw_cq.indicator_id = mi.indicator_id AND cw_cq.assigned_to_role = 'College-Wide'
+                       AND cw_cq.allow_chair_allocation = 1
+                    WHERE mi.indicator_id = %s
+                """, (specialization, indicator_id))
+                quota_row = cursor.fetchone()
+                dept_quota = quota_row[0] if quota_row else None
+                if dept_quota is not None:
+                    total_distributed = assigned_quantity * len(target_emp_ids)
+                    if total_distributed > dept_quota:
+                        # Store the raw pieces, not a pre-formatted sentence -- the final
+                        # message compacts/truncates these once every indicator has been
+                        # processed, rather than concatenating a full sentence per indicator.
+                        quota_warnings.append((total_distributed, dept_quota, indicator_description))
+
             for emp_id in target_emp_ids:
                 # Check if an allocation record already exists in the draft staging table
                 check_query = """
@@ -241,7 +276,24 @@ def save_chair_allocations_batch(conn, cursor, term_id, allocations, faculty_ids
                                                   target_deadline, duration_value, duration_unit, is_auto_description))
 
         conn.commit()
-        return True, "Targets distributed successfully to all faculty draft worklists."
+        msg = "Targets distributed successfully to all faculty draft worklists."
+        if quota_warnings:
+            # Clean placeholder syntax (e.g. "{qty:50}") out of the raw indicator template
+            # and truncate each title -- the full, repeated sentence-per-indicator this used
+            # to build was the actual complaint (a wall of text once a few indicators went
+            # over quota), not the underlying check.
+            items = [
+                f"'{_truncate_title(render_indicator_preview(desc))}' "
+                f"(Distributed: {total} / Quota: {quota})"
+                for total, quota, desc in quota_warnings
+            ]
+            if len(items) > 3:
+                remaining = len(items) - 2
+                summary = ", ".join(items[:2]) + f", ...and {remaining} other indicators."
+            else:
+                summary = ", ".join(items) + "."
+            msg += " Warning: Quota exceeded for: " + summary
+        return True, msg
     except Exception as e:
         conn.rollback()
         return False, str(e)

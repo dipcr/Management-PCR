@@ -11,6 +11,18 @@ def get_master_indicators(cursor, term_id):
     return timed_query(cursor, query, (term_id,), label="get_master_indicators")
 
 
+def is_indicator_cascaded(cursor, indicator_id):
+    """True once this indicator has entered any downstream pipeline: a Dean-cascaded quota
+    (the normal path for Instruction/Support/RET indicators), or a RET Chair rank rule
+    (tbl_ret_rule_indicators has no FK to tbl_cascaded_quotas, so an indicator assigned into
+    a rank rule wouldn't be caught by the quota check alone)."""
+    cursor.execute("SELECT COUNT(*) FROM tbl_cascaded_quotas WHERE indicator_id = %s", (indicator_id,))
+    if cursor.fetchone()[0] > 0:
+        return True
+    cursor.execute("SELECT COUNT(*) FROM tbl_ret_rule_indicators WHERE indicator_id = %s", (indicator_id,))
+    return cursor.fetchone()[0] > 0
+
+
 def add_master_indicator(conn, cursor, category_name, description, efficiency_type, term_id):
     cursor.execute("SELECT category_id FROM tbl_target_categories WHERE category_name = %s", (category_name,))
     cat_result = cursor.fetchone()
@@ -26,13 +38,28 @@ def add_master_indicator(conn, cursor, category_name, description, efficiency_ty
 
 
 def edit_master_indicator(conn, cursor, indicator_id, category_name, description, efficiency_type):
+    cursor.execute("SELECT category_id FROM tbl_master_indicators WHERE indicator_id = %s", (indicator_id,))
+    current = cursor.fetchone()
+    current_category_id = current[0] if current else None
+
+    # Look up only -- do not create the category row yet. Creating it here and only
+    # checking the cascade lock afterward would leave a permanent orphan row (autocommit
+    # is on, no rollback) if the edit turns out to be blocked below.
     cursor.execute("SELECT category_id FROM tbl_target_categories WHERE category_name = %s", (category_name,))
     cat_result = cursor.fetchone()
-    if not cat_result:
+    category_changing = (cat_result is None) or (cat_result[0] != current_category_id)
+
+    if category_changing and is_indicator_cascaded(cursor, indicator_id):
+        raise ValueError(
+            "This indicator has already been cascaded to departments — its category cannot "
+            "be changed. The description and efficiency type can still be edited."
+        )
+
+    if cat_result:
+        category_id = cat_result[0]
+    else:
         cursor.execute("INSERT INTO tbl_target_categories (category_name) VALUES (%s)", (category_name,))
         category_id = cursor.lastrowid
-    else:
-        category_id = cat_result[0]
 
     query = "UPDATE tbl_master_indicators SET category_id = %s, indicator_description = %s, efficiency_type = %s WHERE indicator_id = %s"
     cursor.execute(query, (category_id, description, efficiency_type, indicator_id))
@@ -40,6 +67,8 @@ def edit_master_indicator(conn, cursor, indicator_id, category_name, description
 
 
 def delete_master_indicator(conn, cursor, indicator_id):
+    if is_indicator_cascaded(cursor, indicator_id):
+        raise ValueError("This indicator has already been cascaded to departments and cannot be deleted.")
     cursor.execute("DELETE FROM tbl_master_indicators WHERE indicator_id = %s", (indicator_id,))
     conn.commit()
 

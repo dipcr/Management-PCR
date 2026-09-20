@@ -152,7 +152,7 @@ def designated_dashboard(conn, cursor):
             for t in dpcr_targets:
                 t['is_selected'] = True
                 t['total_target_value'] = t['assigned_quantity']
-                if t.get('category_name') == 'Custom Target Items':
+                if t.get('is_custom'):
                     t['category_name'] = 'Support Functions'
                 # A chair's oversight row (is_admin_function) can share an indicator_id with
                 # their own personal Core Function allocation of that same indicator — only
@@ -233,7 +233,7 @@ def designated_dashboard(conn, cursor):
                 # screen has to resolve back to the same tbl_target_categories row it was
                 # filed under, and the remapped display name would not find it.
                 d['custom_category_name'] = d['category_name']
-                if d['category_name'] == 'Custom Target Items':
+                if d.get('is_custom'):
                     d['category_name'] = 'Support Functions'
 
             draft_map = {d['indicator_id']: d for d in draft_targets}
@@ -399,7 +399,7 @@ def designated_dashboard(conn, cursor):
             from app.models.ipcr_description import format_ipcr_target_description
             for t in dpcr_targets:
                 t['is_selected'] = True
-                if t['category_name'] == 'Custom Target Items':
+                if t.get('is_custom'):
                     t['category_name'] = 'Support Functions'
                 # See the is_committed branch above: an oversight row can share an
                 # indicator_id with the chair's own personal Core Function allocation, so

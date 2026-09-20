@@ -1039,21 +1039,28 @@
             {% for dt in designation_types %}
             {% set slug = dt | lower | replace(' ', '_') %}
             {% set cats = ipcr_categories.get(dt, []) | selectattr('is_active') | list %}
+            {% set is_weights_saved = weights_saved.get(dt) %}
             <div class="weight-tab-panel" id="weightTabPanel_{{ slug }}" style="{% if not loop.first %}display:none;{% endif %}">
-                <div class="d-flex justify-content-end mb-2">
-                    <form action="{{ url_for('admin.admin_copy_weights') }}" method="POST" class="d-inline">
-                        <input type="hidden" name="term_id" value="{{ active_term.term_id }}">
-                        <input type="hidden" name="designation_type" value="{{ dt }}">
-                        <button type="submit" class="btn btn-sm btn-outline-secondary">
-                            <i class="ti ti-history me-1"></i>Copy from Previous Term
-                        </button>
-                    </form>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="badge bg-success-subtle text-success border border-success small"
+                          id="weightsSavedBadge_{{ slug }}" style="{% if not is_weights_saved %}display:none;{% endif %}">
+                        <i class="ti ti-circle-check me-1"></i>Configured &amp; Saved
+                    </span>
+                    <div class="ms-auto">
+                        <form action="{{ url_for('admin.admin_copy_weights') }}" method="POST" class="d-inline">
+                            <input type="hidden" name="term_id" value="{{ active_term.term_id }}">
+                            <input type="hidden" name="designation_type" value="{{ dt }}">
+                            <button type="submit" class="btn btn-sm btn-outline-secondary">
+                                <i class="ti ti-history me-1"></i>Copy from Previous Term
+                            </button>
+                        </form>
+                    </div>
                 </div>
                 {% set cur_mode = weights_mode.get(dt, 'GENERAL') %}
                 <form action="{{ url_for('admin.admin_save_weights') }}" method="POST" id="weightMatrixForm_{{ slug }}" onsubmit="return validateWeightAllocation(this, '{{ slug }}')">
                     <input type="hidden" name="term_id" value="{{ active_term.term_id }}">
                     <input type="hidden" name="designation_type" value="{{ dt }}">
-                    <input type="hidden" name="mode" id="weightMode_{{ slug }}" value="{{ cur_mode }}">
+                    <input type="hidden" name="mode" id="weightMode_{{ slug }}" value="{{ cur_mode }}" data-original-mode="{{ cur_mode }}">
 
                     <fieldset class="d-flex align-items-center gap-3 mb-3 flex-wrap">
                         <legend class="small fw-semibold text-muted mb-0 w-auto">Allocation:</legend>
@@ -1061,6 +1068,7 @@
                             <input class="form-check-input" type="radio" name="mode_toggle_{{ slug }}"
                                    id="modeGeneral_{{ slug }}" value="GENERAL"
                                    {% if cur_mode == 'GENERAL' %}checked{% endif %}
+                                   {% if is_weights_saved %}disabled{% endif %}
                                    onchange="setWeightMode('{{ slug }}', 'GENERAL')">
                             <label class="form-check-label small" for="modeGeneral_{{ slug }}">
                                 General <span class="text-muted">(same for all ranks)</span>
@@ -1070,6 +1078,7 @@
                             <input class="form-check-input" type="radio" name="mode_toggle_{{ slug }}"
                                    id="modeSpecific_{{ slug }}" value="SPECIFIC"
                                    {% if cur_mode == 'SPECIFIC' %}checked{% endif %}
+                                   {% if is_weights_saved %}disabled{% endif %}
                                    onchange="setWeightMode('{{ slug }}', 'SPECIFIC')">
                             <label class="form-check-label small" for="modeSpecific_{{ slug }}">
                                 Specific per Academic Rank
@@ -1099,7 +1108,9 @@
                                             <input type="number" class="form-control form-control-sm text-center weight-input"
                                                    data-row="0" name="w_general_{{ c.ipcr_category_id }}"
                                                    value="{{ weights_grid.get(dt, {}).get(general_band, {}).get(c.ipcr_category_id, 0) }}"
-                                                   min="0" max="100" step="0.01">
+                                                   data-original="{{ weights_grid.get(dt, {}).get(general_band, {}).get(c.ipcr_category_id, 0) }}"
+                                                   min="0" max="100" step="0.01"
+                                                   {% if is_weights_saved %}disabled{% endif %}>
                                         </td>
                                         {% endfor %}
                                         <td class="text-center">
@@ -1136,7 +1147,9 @@
                                                    data-row="{{ row_idx }}"
                                                    name="w_{{ row_idx }}_{{ c.ipcr_category_id }}"
                                                    value="{{ weights_grid.get(dt, {}).get(band, {}).get(c.ipcr_category_id, 0) }}"
-                                                   min="0" max="100" step="0.01">
+                                                   data-original="{{ weights_grid.get(dt, {}).get(band, {}).get(c.ipcr_category_id, 0) }}"
+                                                   min="0" max="100" step="0.01"
+                                                   {% if is_weights_saved %}disabled{% endif %}>
                                         </td>
                                         {% endfor %}
                                         <td class="text-center">
@@ -1150,7 +1163,18 @@
                     </div>
 
                     <div class="text-end">
-                        <button type="submit" class="btn btn-primary fw-bold">
+                        <button type="button" class="btn btn-outline-secondary fw-bold me-2"
+                                id="weightsCancelBtn_{{ slug }}" onclick="cancelWeightsEdit('{{ slug }}')"
+                                style="display:none;">
+                            Cancel
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary fw-bold me-2"
+                                id="weightsEditBtn_{{ slug }}" onclick="unlockWeights('{{ slug }}')"
+                                {% if not is_weights_saved %}style="display:none;"{% endif %}>
+                            <i class="ti ti-pencil me-1"></i>Edit Weights
+                        </button>
+                        <button type="submit" class="btn btn-primary fw-bold" id="weightsSaveBtn_{{ slug }}"
+                                {% if is_weights_saved %}style="display:none;"{% endif %}>
                             <i class="ti ti-device-floppy me-1"></i>Save {{ dt }} Weights
                         </button>
                     </div>
@@ -1229,6 +1253,64 @@
                 }
                 document.querySelectorAll('[id^="weightMatrixTable_"], [id^="weightGeneralTable_"]').forEach(initTable);
             })();
+
+            function recomputeWeightTotals(slug) {
+                ['weightGeneralTable_' + slug, 'weightMatrixTable_' + slug].forEach(function (id) {
+                    const table = document.getElementById(id);
+                    if (table) table.dispatchEvent(new Event('input', { bubbles: true }));
+                });
+            }
+
+            function setWeightsLocked(slug, locked) {
+                const panel = document.getElementById('weightTabPanel_' + slug);
+                if (!panel) return;
+                panel.querySelectorAll('input, select').forEach(function (el) {
+                    if (el.type === 'hidden') return;
+                    el.disabled = locked;
+                });
+                const editBtn = document.getElementById('weightsEditBtn_' + slug);
+                const saveBtn = document.getElementById('weightsSaveBtn_' + slug);
+                const cancelBtn = document.getElementById('weightsCancelBtn_' + slug);
+                const badge = document.getElementById('weightsSavedBadge_' + slug);
+                if (editBtn) editBtn.style.display = locked ? '' : 'none';
+                if (saveBtn) saveBtn.style.display = locked ? 'none' : '';
+                if (cancelBtn) cancelBtn.style.display = locked ? 'none' : '';
+                if (badge) badge.style.display = locked ? '' : 'none';
+            }
+
+            function unlockWeights(slug) {
+                setWeightsLocked(slug, false);
+            }
+
+            function cancelWeightsEdit(slug) {
+                // Restore every percentage input to what was last actually saved.
+                document.querySelectorAll('#weightTabPanel_' + slug + ' .weight-input').forEach(function (inp) {
+                    inp.value = inp.dataset.original;
+                });
+
+                // Restore the originally-saved allocation mode (General vs. Specific) and its
+                // radio selection -- editing may have switched tabs without saving.
+                const modeHidden = document.getElementById('weightMode_' + slug);
+                const originalMode = modeHidden ? modeHidden.dataset.originalMode : 'GENERAL';
+                const radio = document.getElementById((originalMode === 'GENERAL' ? 'modeGeneral_' : 'modeSpecific_') + slug);
+                if (radio) radio.checked = true;
+                setWeightMode(slug, originalMode);
+
+                recomputeWeightTotals(slug);
+                setWeightsLocked(slug, true);
+            }
+
+            // Lock every weight tab that already has a saved configuration. This runs on
+            // DOMContentLoaded rather than inline, because the panels are rendered well before
+            // these functions are defined (mirrors the same pattern used for Teaching Load).
+            document.addEventListener('DOMContentLoaded', function () {
+                {% for dt in designation_types %}
+                {% set slug = dt | lower | replace(' ', '_') %}
+                {% if weights_saved.get(dt) %}
+                setWeightsLocked('{{ slug }}', true);
+                {% endif %}
+                {% endfor %}
+            });
             </script>
             {% endif %}
 
@@ -1574,6 +1656,14 @@ function openAddIndicator(categoryName, targetTypes) {
                                         <i class="ti ti-lock me-1"></i>Lock Account
                                     </button>
                                 </form>
+                                <form method="POST" action="{{ url_for('admin.admin_unlock_account') }}" class="d-inline"
+                                    onsubmit="return confirm('Unlock this account? The user will be able to log in again.')">
+                                    <input type="hidden" name="emp_id" value="{{ u['emp_id'] }}">
+                                    <button type="submit" class="btn btn-success btn-sm" {% if
+                                        u['account_status']!='Locked' %}disabled{% endif %}>
+                                        <i class="ti ti-lock-open me-1"></i>Unlock Account
+                                    </button>
+                                </form>
                             </td>
                         </tr>
                         {% else %}
@@ -1686,12 +1776,12 @@ function openAddIndicator(categoryName, targetTypes) {
                             <td>
                                 <div class="d-flex gap-1 justify-content-center">
                                     <form method="POST" action="{{ url_for('admin.approve_claim') }}" class="d-inline"
-                                        onsubmit="return confirm('Approve this account claim? They will be able to log in.')">
+                                        onsubmit="return confirmClaimAction(this, 'approve', '{{ (c['first_name'] ~ ' ' ~ c['last_name']) | e }}')">
                                         <input type="hidden" name="emp_id" value="{{ c['emp_id'] }}">
                                         <button type="submit" class="btn btn-success btn-sm"><i class="ti ti-check me-1"></i>Approve</button>
                                     </form>
                                     <form method="POST" action="{{ url_for('admin.deny_claim') }}" class="d-inline"
-                                        onsubmit="return confirm('Deny this claim? The request is removed and they may claim again.')">
+                                        onsubmit="return confirmClaimAction(this, 'deny', '{{ (c['first_name'] ~ ' ' ~ c['last_name']) | e }}')">
                                         <input type="hidden" name="emp_id" value="{{ c['emp_id'] }}">
                                         <button type="submit" class="btn btn-outline-danger btn-sm"><i class="ti ti-x me-1"></i>Deny</button>
                                     </form>
@@ -1709,6 +1799,114 @@ function openAddIndicator(categoryName, targetTypes) {
         </div>
     </div>
 </div>
+
+<!-- Approve/Deny Account Claim Confirmation Modal -->
+<div class="modal fade" id="customConfirmModal" tabindex="-1" aria-hidden="true" style="z-index: 1060;">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 20px;">
+            <div class="modal-header border-0 pb-0 pe-3 pt-3 justify-content-end">
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"
+                    style="font-size: 0.85rem; opacity: 0.6;"></button>
+            </div>
+            <div class="modal-body text-center px-4 pb-4 pt-1">
+                <h5 class="modal-title fw-bold text-dark mb-3" id="confirmModalTitle"
+                    style="font-size: 1.35rem; letter-spacing: -0.2px;">Title</h5>
+                <p class="mb-2 text-secondary fw-semibold px-2" id="confirmModalTextMain"
+                    style="font-size: 0.95rem; line-height: 1.5; color: var(--c-text-sub) !important;">Main message</p>
+                <p class="text-muted small px-3 mb-0" id="confirmModalTextSub"
+                    style="font-size: 0.85rem; line-height: 1.4;">Sub message</p>
+            </div>
+            <div class="modal-footer border-0 justify-content-center pb-4 pt-0 gap-2 px-4">
+                <button type="button" class="btn px-4 py-2 fw-bold text-white shadow-sm" data-bs-dismiss="modal"
+                    id="confirmModalCancelBtn"
+                    style="border-radius: 10px; background-color: var(--bs-secondary); font-size: 0.9rem; min-width: 110px; transition: all 0.2s;">Cancel</button>
+                <button type="button"
+                    class="btn px-4 py-2 fw-bold text-white shadow-sm d-inline-flex align-items-center justify-content-center gap-2"
+                    id="confirmModalConfirmBtn"
+                    style="border-radius: 10px; font-size: 0.9rem; min-width: 140px; transition: all 0.2s;">
+                    <i class="ti" id="confirmModalIcon"></i>
+                    <span id="confirmModalConfirmText">Confirm</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    #customConfirmModal .btn-close:focus {
+        box-shadow: none;
+    }
+
+    #customConfirmModal .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12) !important;
+    }
+</style>
+
+<script>
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // Helper to show custom confirmation modal
+    window.showCustomConfirm = function ({ title, mainText, subText, confirmText, confirmClass, iconClass, onConfirm }) {
+        const modal = new bootstrap.Modal(document.getElementById('customConfirmModal'));
+
+        document.getElementById('confirmModalTitle').textContent = title;
+        document.getElementById('confirmModalTextMain').innerHTML = mainText;
+        document.getElementById('confirmModalTextSub').textContent = subText;
+
+        const confirmBtn = document.getElementById('confirmModalConfirmBtn');
+        confirmBtn.className = `btn px-4 py-2 fw-bold text-white shadow-sm d-inline-flex align-items-center justify-content-center gap-2 ${confirmClass}`;
+
+        const confirmTextSpan = document.getElementById('confirmModalConfirmText');
+        confirmTextSpan.textContent = confirmText;
+
+        const icon = document.getElementById('confirmModalIcon');
+        if (iconClass) {
+            icon.className = `ti ${iconClass}`;
+            icon.style.display = '';
+        } else {
+            icon.style.display = 'none';
+        }
+
+        // Remove previous listeners
+        const newConfirmBtn = confirmBtn.cloneNode(true);
+        confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+
+        newConfirmBtn.addEventListener('click', function () {
+            modal.hide();
+            onConfirm();
+        });
+
+        modal.show();
+    };
+
+    // Approve/Deny both submit via this instead of a native confirm() dialog.
+    function confirmClaimAction(form, action, employeeName) {
+        const isApprove = action === 'approve';
+        if (window.showCustomConfirm) {
+            showCustomConfirm({
+                title: isApprove ? 'Approve Account Claim?' : 'Deny Account Claim?',
+                mainText: `${isApprove ? 'Approve' : 'Deny'} the account claim for <strong>${escapeHtml(employeeName)}</strong>?`,
+                subText: isApprove
+                    ? 'They will be able to log in immediately.'
+                    : 'The request is removed and they may submit a new claim later.',
+                confirmText: isApprove ? 'Yes, Approve' : 'Yes, Deny',
+                confirmClass: isApprove ? 'btn-success' : 'btn-danger',
+                iconClass: isApprove ? 'ti-circle-check' : 'ti-x',
+                onConfirm: () => form.submit()
+            });
+        } else {
+            const msg = isApprove
+                ? 'Approve this account claim? They will be able to log in.'
+                : 'Deny this claim? The request is removed and they may claim again.';
+            if (confirm(msg)) form.submit();
+        }
+        return false;
+    }
+</script>
 
 <!-- Edit Indicator Modal -->
 <div class="modal fade" id="editIndicatorModal" tabindex="-1" aria-hidden="true">
