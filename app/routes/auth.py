@@ -53,6 +53,10 @@ def authenticate():
         flash("Your account has been deactivated. Please contact the administrator.", "danger")
         return redirect(url_for('auth.login'))
 
+    if acc_status_row and acc_status_row[0] == 'Locked':
+        flash("Your account has been locked by the administrator. Please contact IT/Administration for assistance.", "danger")
+        return redirect(url_for('auth.login'))
+
     # Normalize role for matching
     role = role.upper() if role else ""
 

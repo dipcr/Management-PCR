@@ -1,7 +1,16 @@
 from datetime import datetime
 
 from app.models.criteria import SLUG_INSTRUCTION, SLUG_SUPPORT
-from app.models.ipcr_description import format_ipcr_target_description
+from app.models.ipcr_description import format_ipcr_target_description, render_indicator_preview
+
+
+def _truncate_title(text, max_len=37):
+    """Clean, readable indicator title for a compact flash message -- long descriptions
+    would otherwise blow up a multi-indicator warning into an unreadable wall of text."""
+    text = (text or '').strip()
+    if len(text) <= max_len:
+        return text
+    return text[:max_len].rstrip() + '...'
 
 
 # ─────────────────────────────────────────────
@@ -233,10 +242,10 @@ def save_chair_allocations_batch(conn, cursor, term_id, allocations, faculty_ids
                 if dept_quota is not None:
                     total_distributed = assigned_quantity * len(target_emp_ids)
                     if total_distributed > dept_quota:
-                        quota_warnings.append(
-                            f"Distributed total ({total_distributed}) exceeds the Dean's cascaded "
-                            f"quota ({dept_quota}) for '{indicator_description}'."
-                        )
+                        # Store the raw pieces, not a pre-formatted sentence -- the final
+                        # message compacts/truncates these once every indicator has been
+                        # processed, rather than concatenating a full sentence per indicator.
+                        quota_warnings.append((total_distributed, dept_quota, indicator_description))
 
             for emp_id in target_emp_ids:
                 # Check if an allocation record already exists in the draft staging table
@@ -269,7 +278,21 @@ def save_chair_allocations_batch(conn, cursor, term_id, allocations, faculty_ids
         conn.commit()
         msg = "Targets distributed successfully to all faculty draft worklists."
         if quota_warnings:
-            msg += " Warning: " + " ".join(quota_warnings)
+            # Clean placeholder syntax (e.g. "{qty:50}") out of the raw indicator template
+            # and truncate each title -- the full, repeated sentence-per-indicator this used
+            # to build was the actual complaint (a wall of text once a few indicators went
+            # over quota), not the underlying check.
+            items = [
+                f"'{_truncate_title(render_indicator_preview(desc))}' "
+                f"(Distributed: {total} / Quota: {quota})"
+                for total, quota, desc in quota_warnings
+            ]
+            if len(items) > 3:
+                remaining = len(items) - 2
+                summary = ", ".join(items[:2]) + f", ...and {remaining} other indicators."
+            else:
+                summary = ", ".join(items) + "."
+            msg += " Warning: Quota exceeded for: " + summary
         return True, msg
     except Exception as e:
         conn.rollback()

@@ -29,6 +29,13 @@ def admin_dashboard():
             dt: (get_weights_mode(cursor, active_term['term_id'], dt) if active_term else MODE_GENERAL)
             for dt in DESIGNATION_TYPES
         }
+        # get_criteria_weights_grid pre-seeds every rank band with an empty dict even when
+        # nothing has been saved, so "saved" means at least one band actually holds a weight
+        # row -- an empty grid dict is never falsy on its own.
+        weights_saved = {
+            dt: any(bool(band_weights) for band_weights in weights_grid[dt].values())
+            for dt in DESIGNATION_TYPES
+        }
         departments = get_departments(cursor, active_only=False)
         institution = get_institution_settings(cursor)
         # conn lets the panel recreate the standard blocks if the table was emptied.
@@ -50,6 +57,7 @@ def admin_dashboard():
                                category_scopes=category_scopes,
                                ipcr_categories=ipcr_categories, category_types=category_types,
                                weights_grid=weights_grid, weights_mode=weights_mode,
+                               weights_saved=weights_saved,
                                departments=departments, institution=institution,
                                signatories=signatories,
                                signatory_labels=SIGNATORY_BLOCK_LABELS,
@@ -150,12 +158,13 @@ def admin_open_term():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        open_new_term(conn, cursor, academic_year, semester,
-                      period_start, period_end)
-        log_audit_action(conn, cursor, session.get('user_id'), 'Term Opened',
-                         f"New term opened: {academic_year} {semester}",
-                         request.remote_addr)
-        flash("New Academic Term opened successfully.", "success")
+        success, category, message = open_new_term(conn, cursor, academic_year, semester,
+                                                    period_start, period_end)
+        if success:
+            log_audit_action(conn, cursor, session.get('user_id'), 'Term Opened',
+                             f"New term opened: {academic_year} {semester}",
+                             request.remote_addr)
+        flash(message, category)
     except Exception as e:
         flash(f"Error opening term: {e}", "danger")
     finally:
@@ -164,7 +173,7 @@ def admin_open_term():
         if conn:
             conn.close()
 
-    return redirect(url_for('admin.admin_dashboard'))
+    return redirect(url_for('admin.admin_dashboard') + '#nav-term')
 
 
 @admin_bp.route('/faculty/save', methods=['POST'])
