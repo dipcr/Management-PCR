@@ -176,6 +176,32 @@ def admin_open_term():
     return redirect(url_for('admin.admin_dashboard') + '#nav-term')
 
 
+@admin_bp.route('/term/mark_faculty_reviewed', methods=['POST'])
+@role_required('ADMIN')
+def admin_mark_faculty_reviewed():
+    term_id = request.form.get('term_id')
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        if term_id and mark_faculty_config_reviewed(conn, cursor, term_id):
+            log_audit_action(conn, cursor, session.get('user_id'), 'Faculty Configuration Reviewed',
+                             f"Marked Faculty Configuration as reviewed for term_id {term_id}.",
+                             request.remote_addr)
+            flash("Faculty Configuration marked as reviewed for this term.", "success")
+        else:
+            flash("No matching term found to mark as reviewed.", "danger")
+    except Exception as e:
+        flash(f"Error updating review status: {str(e)}", "danger")
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+    return redirect(url_for('admin.admin_dashboard') + '#nav-roster')
+
+
 @admin_bp.route('/faculty/save', methods=['POST'])
 @role_required('ADMIN')
 def save_faculty():
@@ -198,21 +224,41 @@ def save_faculty():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT emp_id FROM tbl_employee_profiles WHERE employee_id_number = %s",
+            "SELECT emp_id, designation FROM tbl_employee_profiles WHERE employee_id_number = %s",
             (data['employee_id_number'],))
-        existed = cursor.fetchone() is not None
+        existing_row = cursor.fetchone()
+        existed = existing_row is not None
+        old_designation = existing_row[1] if existing_row else None
+
+        conflict = find_designation_conflict(
+            cursor, data['designation'], data['specialization'],
+            exclude_employee_id_number=data['employee_id_number'])
+        if conflict:
+            scope = f" for {data['specialization']}" if data['designation'] == 'Program Chair' else ""
+            flash(f"Cannot save: {conflict['first_name']} {conflict['last_name']} "
+                  f"({conflict['employee_id_number']}) is already the {data['designation']}{scope}. "
+                  f"Reassign or change their designation first.", "danger")
+            return redirect(url_for('admin.admin_dashboard'))
+
         save_single_profile(conn, cursor, data)
         cursor.execute(
             "SELECT emp_id FROM tbl_employee_profiles WHERE employee_id_number = %s",
             (data['employee_id_number'],))
         row = cursor.fetchone()
         emp_id = row[0] if row else None
+
+        role_sync_note = ""
+        if existed and emp_id and old_designation != data['designation']:
+            if sync_system_role_for_designation(conn, cursor, emp_id, data['designation']):
+                role_sync_note = f" Login role synced to {system_role_for_designation(data['designation'])}."
+
         log_audit_action(conn, cursor, session.get('user_id'),
                          'Profile Updated' if existed else 'Profile Created',
                          f"{'Updated' if existed else 'Created'} profile {data['employee_id_number']} "
-                         f"({data['first_name']} {data['last_name']}, designation: {data['designation'] or '-'}).",
+                         f"({data['first_name']} {data['last_name']}, designation: {data['designation'] or '-'})."
+                         f"{role_sync_note}",
                          request.remote_addr)
-        flash("Faculty profile saved successfully.", "success")
+        flash(f"Faculty profile saved successfully.{role_sync_note}", "success")
     except Exception as e:
         flash(f"Error saving profile: {str(e)}", "danger")
     finally:
@@ -335,10 +381,11 @@ def import_csv():
         conn = get_db_connection()
         cursor = conn.cursor()
         try:
-            success, new_added, updated, unchanged = import_csv_roster(conn, cursor, rows)
+            success, new_added, updated, unchanged, conflicts = import_csv_roster(conn, cursor, rows)
             if success:
                 log_audit_action(conn, cursor, session.get('user_id'), 'CSV Roster Import',
-                                 f"Import complete: {new_added} added, {updated} updated, {unchanged} unchanged.",
+                                 f"Import complete: {new_added} added, {updated} updated, {unchanged} unchanged, "
+                                 f"{len(conflicts)} skipped (role conflict).",
                                  request.remote_addr)
         finally:
             cursor.close()
@@ -347,6 +394,9 @@ def import_csv():
         if success:
             flash(f"CSV Import Complete: {new_added} New Hires Added, {updated} Profiles Updated, {unchanged} Unchanged.",
                   "success")
+            if conflicts:
+                flash(f"{len(conflicts)} row(s) skipped due to a role conflict (Program Chair/RET Chair/Dean "
+                      f"already held by someone else): " + "; ".join(conflicts), "warning")
         else:
             flash(f"Error importing CSV: {new_added}", "danger")
     except Exception as e:

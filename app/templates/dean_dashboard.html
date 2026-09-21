@@ -290,22 +290,32 @@
                                     {% if role == 'College-Wide' %}
                                     {% set cw_checked = existing_cw_allow_allocation.get(indicator.indicator_id, 0) %}
                                     {% if has_cascaded_quotas %}
-                                    <span class="badge {% if cw_checked %}bg-success-subtle text-success border border-success-subtle{% else %}bg-secondary-subtle text-secondary border border-secondary-subtle{% endif %} mt-1 d-block text-center">
-                                        {% if cw_checked %}To Chairs{% else %}Silent{% endif %}
-                                    </span>
+                                    <div class="d-flex align-items-center justify-content-center gap-1 mt-1">
+                                        <span class="badge {% if cw_checked %}bg-success-subtle text-success border border-success-subtle{% else %}bg-secondary-subtle text-secondary border border-secondary-subtle{% endif %} d-block text-center">
+                                            {% if cw_checked %}Shared with Chairs{% else %}Dean Only{% endif %}
+                                        </span>
+                                        <i class="ti ti-info-circle text-muted" style="font-size: 0.85rem; cursor: help;"
+                                           title="{% if cw_checked %}Program Chairs can see this quota and sub-allocate portions of it to their faculty.{% else %}This quota stays with you only -- Program Chairs never see it or any part of it.{% endif %}"></i>
+                                    </div>
                                     {% else %}
                                     <input type="hidden" id="cwAllow_{{ indicator.indicator_id }}"
                                         name="cw_allow_allocation_{{ indicator.indicator_id }}"
                                         value="{{ 1 if cw_checked else 0 }}">
-                                    <div class="btn-group btn-group-sm mt-1 w-100" role="group" aria-label="Cascade control for {{ indicator.indicator_description | ipcr_preview }}">
-                                        <button type="button"
-                                            class="btn cw-toggle-btn {% if not cw_checked %}btn-secondary{% else %}btn-outline-secondary{% endif %}"
-                                            data-value="0" data-target="cwAllow_{{ indicator.indicator_id }}"
-                                            onclick="setCwAllocation(this)">Silent</button>
-                                        <button type="button"
-                                            class="btn cw-toggle-btn {% if cw_checked %}btn-success{% else %}btn-outline-success{% endif %}"
-                                            data-value="1" data-target="cwAllow_{{ indicator.indicator_id }}"
-                                            onclick="setCwAllocation(this)">To Chairs</button>
+                                    <div class="d-flex align-items-center gap-1 mt-1">
+                                        <div class="btn-group btn-group-sm flex-grow-1" role="group" aria-label="Cascade control for {{ indicator.indicator_description | ipcr_preview }}">
+                                            <button type="button"
+                                                class="btn cw-toggle-btn {% if not cw_checked %}btn-secondary{% else %}btn-outline-secondary{% endif %}"
+                                                data-value="0" data-target="cwAllow_{{ indicator.indicator_id }}"
+                                                title="Keeps this quota with you only -- Program Chairs never see it or any part of it."
+                                                onclick="setCwAllocation(this)">Dean Only</button>
+                                            <button type="button"
+                                                class="btn cw-toggle-btn {% if cw_checked %}btn-success{% else %}btn-outline-success{% endif %}"
+                                                data-value="1" data-target="cwAllow_{{ indicator.indicator_id }}"
+                                                title="Lets Program Chairs see this quota and sub-allocate portions of it to their faculty."
+                                                onclick="setCwAllocation(this)">Share with Chairs</button>
+                                        </div>
+                                        <i class="ti ti-info-circle text-muted" style="font-size: 0.85rem; cursor: help;"
+                                           title="Dean Only: stays with you, Program Chairs never see it. Share with Chairs: Program Chairs can see it and sub-allocate portions of it to their faculty."></i>
                                     </div>
                                     {% endif %}
                                     {% endif %}
@@ -466,7 +476,7 @@
                             <th scope="col" class="ps-4 py-3">Faculty Name</th>
                             <th scope="col">Academic Rank</th>
                             <th scope="col">Designation</th>
-                            <th scope="col">Assigned Program</th>
+                            <th scope="col">Specialization</th>
                             <th scope="col" class="text-center">Targets</th>
                             <th scope="col" class="text-center">Status</th>
                             <th scope="col" class="text-center pe-4">Actions</th>
@@ -478,7 +488,7 @@
                             <td class="ps-4 fw-bold">{{ sub.faculty_name }}</td>
                             <td><span class="badge bg-light text-dark border">{{ sub.academic_rank }}</span></td>
                             <td>{{ sub.designation }}</td>
-                            <td>{{ sub.assigned_program }}</td>
+                            <td>{{ sub.specialization }}</td>
                             <td class="text-center">
                                 <span class="badge bg-secondary">{{ sub.total_targets }} target{{ 's' if sub.total_targets != 1 }}</span>
                             </td>
@@ -526,7 +536,7 @@
                             <th scope="col" class="ps-4 py-3">Faculty Name</th>
                             <th scope="col">Academic Rank</th>
                             <th scope="col">Designation</th>
-                            <th scope="col">Assigned Program</th>
+                            <th scope="col">Specialization</th>
                             <th scope="col" class="text-center">Targets</th>
                             <th scope="col" class="text-center">Status</th>
                             <th scope="col" class="text-center pe-4">Actions</th>
@@ -538,7 +548,7 @@
                             <td class="ps-4 fw-bold text-success">{{ sub.faculty_name }}</td>
                             <td><span class="badge bg-light text-dark border">{{ sub.academic_rank }}</span></td>
                             <td>{{ sub.designation }}</td>
-                            <td>{{ sub.assigned_program }}</td>
+                            <td>{{ sub.specialization }}</td>
                             <td class="text-center">
                                 <span class="badge bg-success bg-opacity-10 text-success fw-bold">{{ sub.total_targets }} target{{ 's' if sub.total_targets != 1 }} Approved</span>
                             </td>
@@ -841,7 +851,7 @@
                         <tr>
                             <th scope="col" class="ps-4">Faculty / Chairperson</th>
                             <th scope="col">Designation</th>
-                            <th scope="col">Program / Specialization</th>
+                            <th scope="col">Specialization</th>
                             <th scope="col">Academic Rank</th>
                             <th scope="col" class="text-center" style="width: 170px;">Draft IPCR Status</th>
                             <th scope="col" class="text-end pe-4" style="width: 150px;">Action</th>
@@ -865,7 +875,7 @@
                                 <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1"><i class="ti ti-badge me-1"></i>{{ f.designation or 'Designated Faculty' }}</span>
                                 {% endif %}
                             </td>
-                            <td><span class="badge bg-light text-dark border">{{ f.assigned_program or f.specialization or 'General' }}</span></td>
+                            <td><span class="badge bg-light text-dark border">{{ f.specialization or 'General' }}</span></td>
                             <td>{{ f.academic_rank or '—' }}</td>
                             <td class="text-center">
                                 {% if review_status == 'Approved' %}
@@ -1323,7 +1333,7 @@
                         <thead class="table-light">
                             <tr>
                                 <th scope="col">Faculty Member</th>
-                                <th scope="col">Program</th>
+                                <th scope="col">Specialization</th>
                                 <th scope="col" class="text-center" width="150">Allocated Qty</th>
                                 <th scope="col" class="text-center" width="150">Review Status</th>
                             </tr>
@@ -1332,7 +1342,7 @@
                             {% for a in allocs %}
                             <tr>
                                 <td class="fw-semibold small">{{ a.faculty_name }}</td>
-                                <td class="small">{{ a.assigned_program }}</td>
+                                <td class="small">{{ a.specialization }}</td>
                                 <td class="text-center fw-bold text-primary small">{{ a.proposed_quantity }}</td>
                                 <td class="text-center">
                                     {% if a.review_status == 'Approved' %}
@@ -1817,7 +1827,7 @@
                         <tr>
                             <th scope="col" class="ps-4 py-3">Faculty Member</th>
                             <th scope="col" class="text-center">Academic Rank</th>
-                            <th scope="col" class="text-center">Program / Dept</th>
+                            <th scope="col" class="text-center">Specialization</th>
                             <th scope="col" class="text-center">Committed Targets</th>
                             <th scope="col" class="text-center">Status</th>
                             <th scope="col" class="text-center pe-4">Action</th>
@@ -1829,10 +1839,10 @@
                             <tr>
                                 <td class="ps-4 py-3">
                                     <div class="fw-bold text-dark">{{ fac.first_name }} {{ fac.last_name }}</div>
-                                    <small class="text-muted">{% if fac.designation %}{{ fac.designation }}{% if fac.specialization %} ({{ fac.specialization }}){% elif fac.assigned_program %} ({{ fac.assigned_program }}){% endif %}{% else %}{{ fac.specialization or 'Regular Faculty' }}{% endif %}</small>
+                                    <small class="text-muted">{% if fac.designation %}{{ fac.designation }}{% if fac.specialization %} ({{ fac.specialization }}){% endif %}{% else %}{{ fac.specialization or 'Regular Faculty' }}{% endif %}</small>
                                 </td>
                                 <td class="text-center">{{ fac.academic_rank or 'Instructor I' }}</td>
-                                <td class="text-center"><span class="badge bg-secondary-subtle text-secondary px-2 py-1">{{ fac.assigned_program or 'CIT' }}</span></td>
+                                <td class="text-center"><span class="badge bg-secondary-subtle text-secondary px-2 py-1">{{ fac.specialization or '—' }}</span></td>
                                 <td class="text-center fw-bold text-primary fs-6">{{ fac.total_targets }}</td>
                                 <td class="text-center">
                                     <span class="badge bg-warning text-dark px-3 py-2 shadow-xs"><i class="ti ti-history me-1"></i>Awaiting Final Verification</span>
@@ -1879,7 +1889,7 @@
                         <tr>
                             <th scope="col" class="ps-4 py-3">Faculty Member</th>
                             <th scope="col" class="text-center">Academic Rank</th>
-                            <th scope="col" class="text-center">Program / Dept</th>
+                            <th scope="col" class="text-center">Specialization</th>
                             <th scope="col" class="text-center">Committed Targets</th>
                             <th scope="col" class="text-center">Status</th>
                             <th scope="col" class="text-center pe-4">Actions</th>
@@ -1891,10 +1901,10 @@
                             <tr>
                                 <td class="ps-4 py-3">
                                     <div class="fw-bold text-dark">{{ fac.first_name }} {{ fac.last_name }}</div>
-                                    <small class="text-muted">{{ fac.designation or 'Designated Faculty' }}{% if fac.specialization %} ({{ fac.specialization }}){% elif fac.assigned_program %} ({{ fac.assigned_program }}){% endif %}</small>
+                                    <small class="text-muted">{{ fac.designation or 'Designated Faculty' }}{% if fac.specialization %} ({{ fac.specialization }}){% endif %}</small>
                                 </td>
                                 <td class="text-center">{{ fac.academic_rank or 'Instructor I' }}</td>
-                                <td class="text-center"><span class="badge bg-secondary-subtle text-secondary px-2 py-1">{{ fac.assigned_program or 'CIT' }}</span></td>
+                                <td class="text-center"><span class="badge bg-secondary-subtle text-secondary px-2 py-1">{{ fac.specialization or '—' }}</span></td>
                                 <td class="text-center fw-bold text-primary fs-6">{{ fac.total_targets }}</td>
                                 <td class="text-center">
                                     <span class="badge bg-success px-3 py-2 shadow-xs"><i class="ti ti-circle-check-filled me-1"></i>Dean Approved</span>
@@ -1940,7 +1950,7 @@
                         <tr>
                             <th scope="col" class="ps-4 py-3">Faculty Member</th>
                             <th scope="col" class="text-center">Academic Rank</th>
-                            <th scope="col" class="text-center">Program / Dept</th>
+                            <th scope="col" class="text-center">Specialization</th>
                             <th scope="col" class="text-center">Committed Targets</th>
                             <th scope="col" class="text-center">Status</th>
                             <th scope="col" class="text-center pe-4">Actions</th>
@@ -1955,7 +1965,7 @@
                                     <small class="text-muted">{{ fac.specialization or 'Regular Faculty' }}</small>
                                 </td>
                                 <td class="text-center">{{ fac.academic_rank or 'Instructor I' }}</td>
-                                <td class="text-center"><span class="badge bg-secondary-subtle text-secondary px-2 py-1">{{ fac.assigned_program or 'CIT' }}</span></td>
+                                <td class="text-center"><span class="badge bg-secondary-subtle text-secondary px-2 py-1">{{ fac.specialization or '—' }}</span></td>
                                 <td class="text-center fw-bold text-primary fs-6">{{ fac.total_targets }}</td>
                                 <td class="text-center">
                                     <span class="badge bg-success px-3 py-2 shadow-xs"><i class="ti ti-circle-check-filled me-1"></i>Dean Approved</span>
