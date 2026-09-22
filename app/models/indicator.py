@@ -6,7 +6,7 @@ def get_master_indicators(cursor, term_id):
         FROM tbl_master_indicators mi
         LEFT JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
         WHERE mi.term_id = %s AND mi.is_custom = 0 AND mi.indicator_description NOT LIKE '%%Teaching Load%%'
-        ORDER BY tc.category_name, mi.indicator_id
+        ORDER BY tc.display_order, tc.category_name, mi.indicator_id
     """
     return timed_query(cursor, query, (term_id,), label="get_master_indicators")
 

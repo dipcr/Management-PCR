@@ -4,11 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IPCR — {{ form.full_name }}</title>
-    <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" rel="stylesheet">
     <style>
-        /* Short bond paper, 8.5 x 11 inches, landscape. The on-screen preview uses the same
+        /* Long bond paper, 8.5 x 13 inches, landscape. The on-screen preview uses the same
            width so what is shown matches what comes out of the printer. */
-        @page { size: 11in 8.5in; margin: 0.4in; }
+        @page { size: 13in 8.5in; margin: 0.5in; }
 
         * { box-sizing: border-box; }
         body {
@@ -21,7 +20,7 @@
         }
         .sheet {
             background: #fff;
-            width: 10.2in;           /* 11in less the page margins */
+            width: 12in;             /* 13in less the page margins */
             max-width: 100%;
             margin: 0 auto 16px;
             padding: 14px 16px;
@@ -45,14 +44,6 @@
         .section-row td { background: #f2f2f2; font-weight: bold; }
         .sub-row td { font-weight: bold; }
         .rating-col { width: 32px; text-align: center; }
-        .draft-notice {
-            border: 1px solid #b00; background: #fff4f4; color: #b00;
-            padding: 8px 12px; margin-bottom: 12px; font-weight: bold;
-        }
-        .commitment-notice {
-            border: 1px solid #1a7a3c; background: #f0fbf4; color: #1a7a3c;
-            padding: 8px 12px; margin-bottom: 12px; font-weight: bold;
-        }
         .toolbar { max-width: 1100px; margin: 0 auto 12px; display: flex; gap: 8px; }
         .toolbar button, .toolbar a {
             font-family: 'Public Sans', 'Segoe UI', system-ui, sans-serif; font-size: 13px; padding: 8px 16px;
@@ -83,12 +74,16 @@
                 padding: 6px 8px;
                 border: 1.5px solid #000;   /* keep the frame on paper */
             }
-            td, th { padding: 2px 4px; }
+            td, th { padding: 1px 4px; }
             /* The summary box and signature footer belong together on whichever page
                they land on, but should not drag a half-empty page behind them. */
             .summary-block { page-break-inside: avoid; }
             .small { font-size: 8pt; }
-            .title { font-size: 11pt; }
+            /* Header spacing is trimmed on paper so a typical form clears the 7.5in
+               printable height (8.5in page less the 0.5in margins) in one sheet. */
+            .title { font-size: 11pt; margin-bottom: 3px; }
+            .commitment { margin-bottom: 3px; }
+            .ratee { margin-bottom: 3px; }
             thead { display: table-header-group; }
             tr { page-break-inside: avoid; }
         }
@@ -102,14 +97,6 @@
 </div>
 
 <main class="sheet">
-    {% if form.form_stage == 'commitment' %}
-    <div class="commitment-notice">
-        <i class="ti ti-circle-check"></i>
-        Approved Performance Commitment — targets are locked and approved. Actual accomplishments
-        and Q/E/T ratings will be completed at the end of the rating period.
-    </div>
-    {% endif %}
-
     <h1 class="title">{{ form.stage_title }}</h1>
 
     <p class="commitment">{{ form.commitment }}</p>
@@ -121,7 +108,7 @@
     </div>
 
     <!-- Reviewed by / Approved by -->
-    <table style="margin-bottom: 8px;">
+    <table style="margin-bottom: 4px;">
         <caption class="visually-hidden">Reviewed by and approved by signatories</caption>
         <tr>
             <td style="width: 42%;">
@@ -210,7 +197,7 @@
 
     <!-- Summary box -->
     <div class="summary-block">
-    <table style="margin-top: 10px;">
+    <table style="margin-top: 4px;">
         <caption class="visually-hidden">IPCR category weights, ratings, and comments summary</caption>
         <tr>
             <td rowspan="{{ 5 + (form.score.breakdown | length) }}" style="width: 46%; vertical-align: top;">
@@ -254,7 +241,7 @@
         </tr>
     </table>
 
-    <div class="small" style="margin: 6px 0 10px;">
+    <div class="small" style="margin: 3px 0 5px;">
         <em>Legend: 1 - Quantity&nbsp;&nbsp;2 - Efficiency&nbsp;&nbsp;3 - Timeliness&nbsp;&nbsp;4 - Average</em>
     </div>
 
