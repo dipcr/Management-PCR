@@ -836,9 +836,14 @@
                                     {% set target_approved_count = (target.evidence_list | selectattr('verification_status', 'equalto', 'Approved') | list | length) if target.evidence_list else 0 %}
                                     {% set target_is_approved = (target.evidence_list and target.evidence_list | length > 0) and (target_approved_count == target.evidence_list | length) and not target_has_returned %}
                                     {% set target_is_submitted = (target.status in ['Submitted', 'Pending Verification', 'Verified', 'Submitted to Dean', 'Dean Approved']) and not target_has_returned %}
+                                    {# A Program Chair/RET Chair's oversight row stays fully read-only (no upload
+                                       slot of its own); only a Dean's oversight row also accepts a direct
+                                       upload, so it gets the same dynamic status treatment as a personal row --
+                                       see IS_DEAN in applyEvidenceLock. #}
+                                    {% set oversight_read_only = target.is_oversight_cascade and designation != 'Dean' %}
                                     <td class="text-center pe-4 py-3">
                                         <button type="button"
-                                            class="btn {% if target.is_oversight_cascade or has_final_ipcr %}btn-outline-secondary{% elif target_has_returned %}btn-danger{% elif target_is_approved %}btn-success-subtle text-success border border-success-subtle{% elif target_is_submitted or (evidence_readiness and evidence_readiness.evidence_submitted) %}btn-secondary{% else %}btn-primary{% endif %} btn-sm px-3 py-2 fw-bold shadow-sm transition-all hover-shadow"
+                                            class="btn {% if oversight_read_only %}btn-outline-secondary{% elif has_final_ipcr %}btn-outline-secondary{% elif target_has_returned %}btn-danger{% elif target_is_approved %}btn-success-subtle text-success border border-success-subtle{% elif target_is_submitted or (evidence_readiness and evidence_readiness.evidence_submitted) %}btn-secondary{% else %}btn-primary{% endif %} btn-sm px-3 py-2 fw-bold shadow-sm transition-all hover-shadow"
                                             data-target-id="{{ target.target_id }}"
                                             data-indicator-id="{{ target.indicator_id }}"
                                             data-desc="{{ target.indicator_description | ipcr_preview }}"
@@ -846,8 +851,10 @@
                                             data-actual-qty="{{ target.actual_quantity or 0 }}"
                                             data-oversight="{{ 'true' if target.is_oversight_cascade else 'false' }}"
                                             onclick="openEvidenceModal(this.dataset.targetId, this.dataset.indicatorId, this.dataset.desc, this.dataset.targetQty, this.dataset.actualQty, this.dataset.oversight === 'true')">
-                                            {% if target.is_oversight_cascade %}
+                                            {% if oversight_read_only %}
                                             <i class="ti ti-link me-1" aria-hidden="true"></i>View Linked Evidence
+                                            {% elif target.is_oversight_cascade %}
+                                            <i class="ti ti-link me-1" aria-hidden="true"></i>Manage Evidence
                                             {% elif has_final_ipcr %}
                                             <i class="ti ti-eye me-1" aria-hidden="true"></i>View (Approved)
                                             {% elif target_has_returned %}
@@ -1777,6 +1784,11 @@
 
     const EVIDENCE_SUBMITTED = {{ 'true' if (evidence_readiness and evidence_readiness.evidence_submitted) else 'false' }};
     const HAS_FINAL_IPCR = {{ 'true' if has_final_ipcr else 'false' }};
+    // Only a Dean's own Departmental Oversight rows accept a direct evidence upload on top of
+    // the linked faculty evidence (see get_oversight_evidence) -- a Program Chair/RET Chair's
+    // stay fully derived/read-only, same as before, to avoid double-counting past their
+    // department's actual cascaded total.
+    const IS_DEAN = {{ 'true' if designation == 'Dean' else 'false' }};
     window.evidenceModalHasChanges = false;
 
     function applyEvidenceLock() {
@@ -1789,7 +1801,14 @@
         const targetMeta = TARGET_META[String(currentTargetId)] || {};
         const targetHasReturned = !!targetMeta.hasReturned;
         const isOversight = !!window.currentIsOversight;
-        const isLocked = HAS_FINAL_IPCR || isOversight || (EVIDENCE_SUBMITTED && !targetHasReturned);
+        // Dean-only: a Departmental Oversight row is no longer locked just for being oversight
+        // -- its Accomplished Qty is a mix of linked faculty evidence AND whatever the Dean
+        // uploads directly here (see get_oversight_evidence). A Program Chair/RET Chair's
+        // oversight row stays fully derived/read-only, same as before this feature existed --
+        // letting a chair upload their own number on top would double-count past the
+        // department's actual cascaded total, which the no-upload rule exists to prevent.
+        const oversightLocked = isOversight && !IS_DEAN;
+        const isLocked = HAS_FINAL_IPCR || oversightLocked || (EVIDENCE_SUBMITTED && !targetHasReturned);
 
         form.querySelectorAll('input, button, select, textarea').forEach(el => {
             el.disabled = isLocked;
@@ -1804,22 +1823,26 @@
 
         if (footerSubmitBtn) footerSubmitBtn.disabled = isLocked;
 
-        // An oversight row has no upload slot or self-reported Q/duration of its own at all
-        // (see get_oversight_evidence) -- hide the whole Accomplishment Details editor rather
-        // than just disabling it, so it doesn't look like a broken form.
-        if (accomplishmentSection) accomplishmentSection.style.display = isOversight ? 'none' : '';
+        // A chair's oversight row still has no self-reported Q/duration of its own at all --
+        // hide the whole Accomplishment Details editor rather than just disabling it, so it
+        // doesn't look like a broken form. Shown for the Dean's own oversight rows, same as
+        // any personal target.
+        if (accomplishmentSection) accomplishmentSection.style.display = oversightLocked ? 'none' : '';
 
         if (notice) {
-            notice.style.display = isLocked ? '' : 'none';
-            if (isOversight) {
+            notice.style.display = (isLocked || isOversight) ? '' : 'none';
+            if (oversightLocked) {
                 notice.className = 'alert alert-info border-0 small mb-0';
                 notice.innerHTML = '<i class="ti ti-sitemap me-2"></i>This is a Departmental Oversight target — its evidence and Accomplished Qty are linked automatically from your department\'s/RET\'s faculty, not uploaded here.';
-            } else if (HAS_FINAL_IPCR) {
+            } else if (isLocked && HAS_FINAL_IPCR) {
                 notice.className = 'alert alert-success border-0 small mb-0';
                 notice.innerHTML = '<i class="ti ti-shield-lock me-2"></i>Your evidence submission has been fully verified and approved by the Dean. Evidence gathering is now locked.';
-            } else if (EVIDENCE_SUBMITTED && !targetHasReturned) {
+            } else if (isLocked && EVIDENCE_SUBMITTED && !targetHasReturned) {
                 notice.className = 'alert alert-secondary border-0 small mb-0';
                 notice.innerHTML = '<i class="ti ti-lock me-2"></i>Your evidences have been submitted for verification. This target is locked — you can view your files below.';
+            } else if (isOversight) {
+                notice.className = 'alert alert-info border-0 small mb-0';
+                notice.innerHTML = '<i class="ti ti-sitemap me-2"></i>This is a Departmental Oversight target — its Accomplished Qty also includes evidence automatically linked from your department\'s/RET\'s faculty (shown below). You can upload your own supporting evidence here too.';
             }
         }
         form.style.display = isLocked ? 'none' : '';
@@ -1888,18 +1911,30 @@
                 let totalQty = 0;
                 let hasReturned = false;
                 const targetMeta = TARGET_META[String(currentTargetId)] || {};
-                if (data.success && data.is_oversight) {
-                    // Files here belong to scoped faculty's own committed targets, not this
-                    // row -- no delete action, and the badge is per-file, not per-item
-                    // color-coded the same way a self-uploaded submission is (any status is
-                    // informational only; the faculty member's own dashboard is where it
-                    // gets acted on).
+                const isOversight = data.success && data.is_oversight;
+                // Dean-only: a Program Chair/RET Chair's oversight row has no upload slot of
+                // its own at all (see IS_DEAN in applyEvidenceLock) -- its evidence_list from
+                // the server is always empty for them, so skip rendering an empty, unusable
+                // "Your own uploads" section entirely rather than showing a dead end.
+                const oversightReadOnly = isOversight && !IS_DEAN;
+
+                if (isOversight) {
+                    // Read-only: files here belong to scoped faculty's own committed targets,
+                    // not this row -- no delete action, and the badge is per-file, informational
+                    // only (the faculty member's own dashboard is where it gets acted on). Shown
+                    // above this person's own uploads, which render normally just below.
+                    const linkedHeader = document.createElement('div');
+                    linkedHeader.className = 'text-uppercase text-muted small fw-bold mb-2';
+                    linkedHeader.style.letterSpacing = '0.5px';
+                    linkedHeader.textContent = 'Linked from department/RET faculty';
+                    submissionsContainer.appendChild(linkedHeader);
+
                     if (data.breakdown.length > 0) {
                         data.breakdown.forEach(ev => {
                             const parts = ev.file_path.split('/');
                             const cleanName = parts[parts.length - 1].substring(33);
                             const itemDiv = document.createElement('div');
-                            itemDiv.className = 'p-3 border rounded bg-white shadow-xs d-flex align-items-center justify-content-between gap-3 text-start';
+                            itemDiv.className = 'p-3 border rounded bg-white shadow-xs d-flex align-items-center justify-content-between gap-3 text-start mb-2';
                             itemDiv.style.borderRadius = '10px';
                             itemDiv.innerHTML = `
                                 <div class="d-flex align-items-center gap-2 overflow-hidden text-start">
@@ -1916,12 +1951,27 @@
                             submissionsContainer.appendChild(itemDiv);
                         });
                     } else {
-                        submissionsContainer.innerHTML = '<div class="text-center text-muted py-4 small">No department faculty have uploaded evidence for this indicator yet.</div>';
+                        const emptyLinked = document.createElement('div');
+                        emptyLinked.className = 'text-center text-muted py-3 small mb-2';
+                        emptyLinked.textContent = 'No department faculty have uploaded evidence for this indicator yet.';
+                        submissionsContainer.appendChild(emptyLinked);
                     }
-                    document.getElementById('evidenceActualQty').textContent = data.total_actual_quantity || 0;
-                    return;
+
+                    if (!oversightReadOnly) {
+                        const ownHeader = document.createElement('div');
+                        ownHeader.className = 'text-uppercase text-muted small fw-bold mb-2 mt-3';
+                        ownHeader.style.letterSpacing = '0.5px';
+                        ownHeader.textContent = 'Your own uploads';
+                        submissionsContainer.appendChild(ownHeader);
+                    }
                 }
-                if (data.success) {
+
+                if (data.success && oversightReadOnly) {
+                    // No self-upload possible on a chair's oversight row -- the linked
+                    // breakdown above is the whole picture, so just reflect its total and stop.
+                    document.getElementById('evidenceActualQty').textContent = data.total_actual_quantity || 0;
+                    applyEvidenceLock();
+                } else if (data.success) {
                     if (data.evidence_list.length > 0) {
                         data.evidence_list.forEach(ev => {
                             if (ev.verification_status === 'Returned' || ev.verification_status === 'Rejected') {
@@ -1974,9 +2024,15 @@
                             submissionsContainer.appendChild(itemDiv);
                         });
                     } else {
-                        submissionsContainer.innerHTML = '<div class="text-center text-muted py-4 small">No evidence uploaded yet.</div>';
+                        const emptyOwn = document.createElement('div');
+                        emptyOwn.className = 'text-center text-muted py-4 small';
+                        emptyOwn.textContent = 'No evidence uploaded yet.';
+                        submissionsContainer.appendChild(emptyOwn);
                     }
-                    document.getElementById('evidenceActualQty').textContent = totalQty;
+                    // For an oversight row the server-computed total already includes linked
+                    // faculty evidence on top of this person's own (see get_oversight_evidence)
+                    // -- totalQty here only counts this person's own uploads, an undercount.
+                    document.getElementById('evidenceActualQty').textContent = isOversight ? (data.total_actual_quantity || 0) : totalQty;
                     const meta = TARGET_META[String(currentTargetId)];
                     if (meta) {
                         meta.hasReturned = hasReturned;

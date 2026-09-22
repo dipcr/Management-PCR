@@ -175,9 +175,13 @@ def designated_dashboard(conn, cursor):
                 # is_oversight_cascade is already set by get_designated_committed_targets
                 # (narrower than is_admin_function, which is also 1 for a freely-picked
                 # Strategic Priorities/Support item, not just a genuine departmental
-                # oversight quota — see get_oversight_indicator_ids).
-                if not t.get('is_oversight_cascade'):
-                    t['evidence_list'] = get_evidence_by_target(cursor, t['target_id'])
+                # oversight quota — see get_oversight_indicator_ids). Set for every row,
+                # oversight included: an oversight row can now carry its own directly-uploaded
+                # evidence too (see get_oversight_evidence), so this is real, actionable data
+                # for it, not just for a personal row -- the button/status styling below reads
+                # it the same way either way. The department's/RET's linked evidence is fetched
+                # separately, on demand, by the evidence modal's AJAX call.
+                t['evidence_list'] = get_evidence_by_target(cursor, t['target_id'])
             evidence_readiness = check_designated_evidence_readiness(cursor, emp_id, term_id, dpcr_targets)
             has_final_ipcr = any(t.get('status') == 'Dean Approved' for t in dpcr_targets) if dpcr_targets else False
             # Live IPCR summary — uses the Designated Faculty weight table.
@@ -392,12 +396,19 @@ def designated_dashboard(conn, cursor):
             from app.models.designated import get_oversight_indicator_ids
             oversight_ids = get_oversight_indicator_ids(cursor, emp_id, term_id)
 
+            # Dean-only: a Support-slug oversight/College-Wide-pick total counts as a Core
+            # Function, not a Strategic Priorities/Support one -- see the is_committed branch
+            # above for the full rationale; this is the same rule applied to the pre-lock
+            # (approved but not yet committed) view of a Dean-formulated draft.
+            from app.models.criteria import get_category_id, SLUG_SUPPORT
+            dean_support_category_id = get_category_id(cursor, SLUG_SUPPORT) if designation == 'Dean' else None
+
             # If they cannot edit, we just load their submitted drafts
             dpcr_targets = timed_query(cursor, """
                 SELECT dt.draft_id as target_id, dt.indicator_id, dt.proposed_quantity as total_target_value, dt.review_status as status,
                        dt.target_description, dt.target_deadline, dt.target_duration_value, dt.target_duration_unit,
                        dt.is_admin_function,
-                       mi.indicator_description, tc.category_name, mi.is_custom,
+                       mi.indicator_description, tc.category_name, tc.category_id, mi.is_custom,
                        dri.item_remarks as dean_remarks, dri.original_quantity, dri.reviewed_quantity
                 FROM tbl_draft_targets dt
                 JOIN tbl_master_indicators mi ON dt.indicator_id = mi.indicator_id
@@ -418,6 +429,9 @@ def designated_dashboard(conn, cursor):
                         'Teaching Load' in t['indicator_description'] or t['indicator_id'] in alloc_ids):
                     t['is_core'] = True
                     t['is_locked'] = True
+                elif (dean_support_category_id and t.get('is_admin_function')
+                        and t.get('category_id') == dean_support_category_id):
+                    t['is_core'] = True
                 t['is_oversight_cascade'] = bool(t.get('is_admin_function')) and t['indicator_id'] in oversight_ids
                 if t['is_oversight_cascade']:
                     # Never trust the stored dt.target_description here — an oversight row has
@@ -844,18 +858,26 @@ def designated_target_evidence(target_id, indicator_id):
             from app.models.designated import get_oversight_indicator_ids
             is_oversight = indicator_id in get_oversight_indicator_ids(cursor, emp_id, row[1])
 
+        from app.models.faculty import get_evidence_by_target
+
         if is_oversight:
             from app.models.designated import get_oversight_evidence
             agg = get_oversight_evidence(cursor, emp_id, row[1], indicator_id)
+            # This target's own evidence_list (files uploaded directly to this oversight row,
+            # not linked from scoped faculty) is returned alongside the read-only breakdown so
+            # the modal can render both: linked evidence from the department/RET, and this
+            # person's own directly-uploaded files as a normal, actionable (deletable) list --
+            # get_oversight_evidence's evidence_breakdown deliberately excludes this target_id.
+            evidence_list = get_evidence_by_target(cursor, target_id)
             return jsonify({
                 'success': True,
                 'is_oversight': True,
                 'total_actual_quantity': agg['total_actual_quantity'],
                 'max_actual_duration_value': agg['max_actual_duration_value'],
                 'breakdown': agg['evidence_breakdown'],
+                'evidence_list': evidence_list,
             })
 
-        from app.models.faculty import get_evidence_by_target
         evidence_list = get_evidence_by_target(cursor, target_id)
         return jsonify({'success': True, 'is_oversight': False, 'evidence_list': evidence_list})
     except Exception as e:
@@ -921,19 +943,27 @@ def designated_upload_evidence():
                 flash(msg, "danger")
                 return redirect(url_for('designated.designated_dashboard'))
 
-        # A Departmental Oversight row has no upload slot of its own -- its evidence is
-        # linked automatically from the scoped faculty who did the real work (see
-        # get_oversight_evidence, app/models/designated.py). The UI already hides this row's
-        # upload form; this is the actual enforcement so a direct POST can't bypass it.
+        # A Dean's Departmental Oversight row's evidence is a mix of the college-wide linked
+        # faculty evidence AND whatever the Dean uploads directly (see get_oversight_evidence) --
+        # some indicators (e.g. "80% of undergraduate student population enrolled in priority
+        # programs") are institutional statistics no faculty member will ever personally hold,
+        # so a direct upload here is the only way that row ever gets real evidence at all. Not
+        # extended to Program Chair/RET Chair: their oversight rows are meant to be fully
+        # derived from real department faculty work, and a chair's own upload on top would
+        # double-count past the department's actual cascaded total -- the actual enforcement so
+        # a direct POST can't bypass the UI, which already hides this for anyone but the Dean.
         if row[2]:
             from app.models.designated import get_oversight_indicator_ids
             if row[1] in get_oversight_indicator_ids(cursor_check, emp_id, row[3]):
-                msg = ("This is a Departmental Oversight target -- evidence is linked automatically "
-                       "from your department's/RET's faculty, not uploaded here.")
-                if is_ajax:
-                    return jsonify({'success': False, 'message': msg}), 400
-                flash(msg, "danger")
-                return redirect(url_for('designated.designated_dashboard'))
+                cursor_check.execute("SELECT designation FROM tbl_employee_profiles WHERE emp_id = %s", (emp_id,))
+                desig_row = cursor_check.fetchone()
+                if (desig_row[0] if desig_row else '') != 'Dean':
+                    msg = ("This is a Departmental Oversight target -- evidence is linked automatically "
+                           "from your department's/RET's faculty, not uploaded here.")
+                    if is_ajax:
+                        return jsonify({'success': False, 'message': msg}), 400
+                    flash(msg, "danger")
+                    return redirect(url_for('designated.designated_dashboard'))
     finally:
         cursor_check.close()
         conn_check.close()

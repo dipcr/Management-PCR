@@ -831,12 +831,22 @@ def save_accomplishment_details(conn, cursor, emp_id, target_id, actual_duration
             if not has_ret:
                 return False, "This target is submitted and locked for verification."
 
+        # A Dean's Departmental Oversight row's Accomplished Qty is a mix of the college-wide
+        # linked faculty evidence AND whatever the Dean uploads directly here (see
+        # get_oversight_evidence) -- Completed-in-duration/Efficiency for their own contribution
+        # is exactly what this endpoint is for. Not extended to Program Chair/RET Chair: their
+        # oversight rows are meant to be fully derived from real department faculty work, and
+        # letting a chair self-report on top would double-count past the department's actual
+        # cascaded total -- the original reason this was rejected for every oversight row.
         if row[2]:
             from app.models.designated import get_oversight_indicator_ids
             if row[1] in get_oversight_indicator_ids(cursor, emp_id, row[3]):
-                return False, ("This is a Departmental Oversight target -- its Accomplished Qty and "
-                                "Timeliness are derived automatically from your department's/RET's "
-                                "faculty evidence.")
+                cursor.execute("SELECT designation FROM tbl_employee_profiles WHERE emp_id = %s", (emp_id,))
+                desig_row = cursor.fetchone()
+                if (desig_row[0] if desig_row else '') != 'Dean':
+                    return False, ("This is a Departmental Oversight target -- its Accomplished Qty and "
+                                    "Timeliness are derived automatically from your department's/RET's "
+                                    "faculty evidence.")
 
         if completion_status and completion_status not in COMPLETION_STATUSES:
             return False, "Invalid completion status."
