@@ -1,4 +1,27 @@
-from flask import session, redirect, url_for
+from flask import session, redirect, url_for, flash
+
+_LOCKED_MESSAGE = "Your account has been locked by the administrator. Please contact IT/Administration for assistance."
+
+
+def _account_is_locked(emp_id):
+    """
+    True if an Admin has locked (or deactivated) this account since it logged in.
+
+    Checked per-request rather than trusting the session, since a lock applied mid-session
+    must take effect immediately -- an already-logged-in locked user must not be able to keep
+    performing actions just because their session predates the lock.
+    """
+    from app.models.connection import get_db_connection
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT account_status FROM tbl_system_access WHERE emp_id = %s", (emp_id,))
+        row = cursor.fetchone()
+        return bool(row) and row[0] in ('Locked', 'Inactive')
+    finally:
+        cursor.close()
+        conn.close()
+
 
 def role_required(required_role):
     def decorator(func):
@@ -7,6 +30,10 @@ def role_required(required_role):
                 return redirect(url_for('auth.login'))
             if session.get('role') != required_role:
                 return "Unauthorised", 403
+            if _account_is_locked(session['user_id']):
+                session.clear()
+                flash(_LOCKED_MESSAGE, "danger")
+                return redirect(url_for('auth.login'))
             return func(*args, **kwargs)
 
         wrapper.__name__ = func.__name__
@@ -28,6 +55,11 @@ def designated_ipcr_required(func):
     """
     def wrapper(*args, **kwargs):
         if 'user_id' not in session:
+            return redirect(url_for('auth.login'))
+
+        if _account_is_locked(session['user_id']):
+            session.clear()
+            flash(_LOCKED_MESSAGE, "danger")
             return redirect(url_for('auth.login'))
 
         from app.models.connection import get_db_connection

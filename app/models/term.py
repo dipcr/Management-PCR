@@ -6,7 +6,26 @@ def open_new_term(conn, cursor, academic_year, semester,
     period_start/period_end are the rating period printed on the IPCR header
     ("...for the period JANUARY to JUNE 2026"); academic_year and semester cannot
     express that on their own.
+
+    Returns (success, category, message). A term already existing for this exact
+    Academic Year + Semester is checked before anything is written -- reopening the
+    already-active one is a no-op ('info'), reopening one that's since gone inactive would
+    create a confusing duplicate in term history ('warning'). Either way nothing is inserted
+    and no other term's is_active flag is touched.
     """
+    cursor.execute("""
+        SELECT term_id, is_active FROM tbl_academic_terms
+        WHERE academic_year = %s AND semester = %s
+    """, (academic_year, semester))
+    existing = cursor.fetchone()
+    if existing:
+        _, is_active = existing
+        if is_active:
+            return False, 'info', "This Academic Term is already open and active."
+        return False, 'warning', ("An Academic Term for this Academic Year and Semester "
+                                   "already exists in the system history. Duplicate terms "
+                                   "cannot be created.")
+
     try:
         # Deactivate all current terms
         cursor.execute("UPDATE tbl_academic_terms SET is_active = FALSE")
@@ -24,6 +43,7 @@ def open_new_term(conn, cursor, academic_year, semester,
         carry_forward_teaching_load(cursor, new_term_id)
 
         conn.commit()
+        return True, 'success', "New Academic Term opened successfully."
     except Exception as e:
         conn.rollback()
         raise e
@@ -86,7 +106,18 @@ def get_all_terms(cursor):
     from app.models.connection import timed_query
     query = """
         SELECT term_id, academic_year, semester,
-               period_start, period_end, is_active
+               period_start, period_end, is_active, faculty_config_reviewed
         FROM tbl_academic_terms ORDER BY term_id DESC
     """
     return timed_query(cursor, query, label="get_all_terms")
+
+
+def mark_faculty_config_reviewed(conn, cursor, term_id):
+    """Acknowledge, for this term, that the Admin has rechecked Faculty
+    Configuration (specialization/rank/designation) -- clears the term-open
+    reminder banner. Returns True if a term row was actually updated."""
+    cursor.execute(
+        "UPDATE tbl_academic_terms SET faculty_config_reviewed = 1 WHERE term_id = %s",
+        (term_id,))
+    conn.commit()
+    return cursor.rowcount > 0

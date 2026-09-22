@@ -27,11 +27,13 @@ def dean_dashboard():
                                    existing_cw_allow_allocation={},
                                    completion_rate=0,
                                    pending_count=0,
-                                   top_dept="N/A",
-                                   pending_approvals=[],
+                                   not_started_count=0,
                                    draft_submissions=[],
                                    college_wide_quotas=[],
-                                   designated_faculty_list=[])
+                                   designated_faculty_list=[],
+                                   department_completion=[],
+                                   department_faculty_roster={},
+                                   completion_totals={'total_faculty': 0, 'in_progress_count': 0, 'awaiting_approval_count': 0, 'completed_count': 0})
 
         term_id = active_term['term_id']
 
@@ -52,10 +54,8 @@ def dean_dashboard():
             if quota['assigned_to_role'] == 'College-Wide':
                 existing_cw_allow_allocation[ind_id] = quota['allow_chair_allocation']
 
-        # Consolidated KPI query — 1 round-trip instead of 3
-        completion_rate, pending_count, top_dept = get_dean_dashboard_kpis(cursor, term_id)
-
-        pending_approvals = get_pending_final_approvals(cursor, term_id)
+        # Consolidated KPI query — 1 round-trip instead of 2
+        completion_rate, not_started_count = get_dean_dashboard_kpis(cursor, term_id)
 
         # ── New: Draft IPCR submissions from designated faculty ──
         draft_submissions = get_designated_draft_submissions(cursor, term_id)
@@ -107,6 +107,11 @@ def dean_dashboard():
         # merely because their package status reached 'Submitted to Dean'.
         pending_dean_evidence_list = [f for f in pending_dean_evidence_list if f.get('is_both_approved')]
 
+        # The Overview "Awaiting Final Approval" KPI now counts exactly the same people as the
+        # Final Verification panel's "Pending Final Verification" table/badge -- one source of
+        # truth for both, instead of a separate tbl_final_scores-derived count that could drift.
+        pending_count = len(pending_dean_evidence_list)
+
         departments = get_departments(cursor)
 
         # Faculty Accomplishment: one Department Accomplishment Summary per department, for
@@ -118,6 +123,30 @@ def dean_dashboard():
             for d in departments
         }
 
+        # Per-department faculty roster (Program Chair / Designated Faculty / Regular Faculty)
+        # for the Department Accomplishment panel's "View Evidences" tables -- gives the Dean
+        # evidence access to everyone, independent of where they sit in the review pipeline.
+        department_faculty_roster = {
+            d['department_name']: get_department_faculty_roster(cursor, d['department_name'])
+            for d in departments
+        }
+
+        # Term-completion tracker (per department + college-wide): where Regular Faculty sit in
+        # the pipeline for the active term -- In Progress / Awaiting Your Approval / Completed.
+        # A department with no Regular Faculty at all won't have a row from the query, so
+        # default it to zeros rather than omitting it from the table.
+        dept_completion_by_name, completion_totals = get_department_ipcr_completion(cursor, term_id)
+        department_completion = [
+            {
+                'department_name': d['department_name'],
+                'total_faculty': dept_completion_by_name.get(d['department_name'], {}).get('total_faculty', 0),
+                'in_progress_count': dept_completion_by_name.get(d['department_name'], {}).get('in_progress_count', 0),
+                'awaiting_approval_count': dept_completion_by_name.get(d['department_name'], {}).get('awaiting_approval_count', 0),
+                'completed_count': dept_completion_by_name.get(d['department_name'], {}).get('completed_count', 0),
+            }
+            for d in departments
+        ]
+
         # Draft IPCR Status column (#assignDesignatedTable) — keyed off the same
         # tbl_ipcr_dean_review status draft_submissions already carries, whether that status
         # was reached by a manual Dean review (Plain Designated Faculty) or by the Dean's
@@ -128,14 +157,14 @@ def dean_dashboard():
                                active_term=active_term,
                                departments=departments,
                                department_accomplishment=department_accomplishment,
+                               department_faculty_roster=department_faculty_roster,
                                special_roles=SPECIAL_CASCADE_ROLES,
                                master_indicators=indicators,
                                existing_quotas=existing_quotas,
                                existing_cw_allow_allocation=existing_cw_allow_allocation,
                                completion_rate=completion_rate,
                                pending_count=pending_count,
-                               top_dept=top_dept,
-                               pending_approvals=pending_approvals,
+                               not_started_count=not_started_count,
                                draft_submissions=draft_submissions,
                                college_wide_quotas=college_wide_quotas,
                                designated_faculty_list=designated_faculty_list,
@@ -147,10 +176,14 @@ def dean_dashboard():
                                approved_dean_evidence_list=approved_dean_evidence_list,
                                approved_designated_dean_evidence_list=approved_designated_dean_evidence_list,
                                approved_regular_dean_evidence_list=approved_regular_dean_evidence_list,
+                               department_completion=department_completion,
+                               completion_totals=completion_totals,
                                has_own_ipcr=True)
     finally:
         cursor.close()
         conn.close()
+
+
 
 
 @dean_bp.route('/cascade_quotas', methods=['POST'])
@@ -223,16 +256,6 @@ def cascade_quotas():
             conn.close()
 
     return redirect(url_for('dean.dean_dashboard'))
-
-
-
-
-@dean_bp.route('/validate_quotas', methods=['POST'])
-@role_required('DEAN')
-def validate_quotas():
-    """AJAX endpoint to validate quotas before submission"""
-    data = request.get_json()
-    return jsonify({'valid': True, 'message': 'Quotas validated'})
 
 
 @dean_bp.route('/review_draft_fetch/<int:emp_id>')
@@ -802,12 +825,28 @@ def dean_approve_package():
             if not status.get('is_both_approved'):
                 return jsonify({'success': False, 'message': 'Every evidence file must be reviewed (Approved or Returned) in Evidence Verification before final approval can be given.'}), 400
 
+        # "Approve IPCR" is the Dean's one and only final sign-off -- compute/refresh the
+        # score first so a scoring failure (e.g. no weight allocation configured for this
+        # designation) is surfaced before anything is marked approved, rather than leaving
+        # the package half-approved with a stale or missing score.
+        scored, score_msg, _ = save_final_score(conn, cursor, int(emp_id), term_id)
+        if not scored:
+            return jsonify({'success': False, 'message': f'Could not finalize score: {score_msg}'}), 400
+
         cursor.execute("""
             UPDATE tbl_committed_targets ct
             JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
             SET ct.status = 'Dean Approved'
             WHERE ct.emp_id = %s AND mi.term_id = %s AND ct.status = 'Submitted to Dean'
         """, (emp_id, term_id))
+
+        cursor.execute(
+            "SELECT score_id FROM tbl_final_scores WHERE emp_id = %s AND term_id = %s",
+            (emp_id, term_id))
+        score_row = cursor.fetchone()
+        if score_row:
+            update_dean_approval_status(cursor, conn, [score_row[0]], 'Approved')
+
         conn.commit()
 
         # Trigger Tier 2 (Final) email notification asynchronously
@@ -845,6 +884,16 @@ def dean_return_to_faculty(emp_id):
             SET ct.status = 'Returned to Faculty'
             WHERE ct.emp_id = %s AND mi.term_id = %s AND ct.status = 'Dean Approved'
         """, (emp_id, term_id))
+
+        # Undo the final sign-off alongside the status revert, so a returned-then-resubmitted
+        # IPCR doesn't still read as already-Approved anywhere that checks dean_approval_status.
+        cursor.execute(
+            "SELECT score_id FROM tbl_final_scores WHERE emp_id = %s AND term_id = %s",
+            (emp_id, term_id))
+        score_row = cursor.fetchone()
+        if score_row:
+            update_dean_approval_status(cursor, conn, [score_row[0]], 'Pending')
+
         conn.commit()
         return jsonify({'success': True, 'message': 'IPCR successfully returned to faculty for printing!'})
     except Exception as e:

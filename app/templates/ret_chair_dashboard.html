@@ -1128,7 +1128,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 {% if draft.review_status == 'Rejected' or draft.review_status == 'Returned' %}
                                 <span class="badge bg-danger"><i class="ti ti-arrow-back-up me-1"></i>Returned
                                     to Faculty</span>
-                                {% elif draft.ipcr_status == 'draft' %}
+                                {% elif draft.ipcr_status in ('draft', 'rejected_by_program_chair', 'rejected_by_ret_chair') %}
                                 <span class="badge bg-secondary"><i class="ti ti-pencil me-1"></i>Draft
                                     (Unsubmitted)</span>
                                 {% else %}
@@ -1137,7 +1137,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 {% endif %}
                             </td>
                             <td class="text-end pe-4">
-                                {% if draft.ipcr_status == 'draft' %}
+                                {% if draft.ipcr_status in ('draft', 'rejected_by_program_chair', 'rejected_by_ret_chair') %}
                                 {% if draft.review_status in ('Rejected', 'Returned') %}
                                 <button class="btn btn-sm btn-outline-secondary" disabled
                                     title="Awaiting faculty resubmission.">

@@ -28,13 +28,11 @@ permission checks in Phase M, and ideally a **second Program Chair** in another 
 > rates it. A Program Chair has both: role `PROGRAM_CHAIR` *and* designation `Program Chair`.
 > If a chair's designation is wrong, their My IPCR silently will not appear.
 
-> **Migrations required:** `MIGRATION_group7.sql` (the `is_admin_function` column **and** its
-> backfill), `MIGRATION_group8.sql` (rating period, institution settings, signatories,
-> `print_remarks`), `MIGRATION_group9.sql` (`target_description`, `target_duration_value`,
-> `target_duration_unit` on `tbl_ret_assignments`), and `MIGRATION_group11.sql` (the
-> `is_auto_description` column on `tbl_draft_allocation`, `tbl_ret_rule_indicators`,
-> `tbl_ret_assignments`, `tbl_ret_extension_distribution`, `tbl_draft_targets` and
-> `tbl_committed_targets` — backs the auto-generated target description feature below).
+> **Migrations required:** all of `old MDS/MIGRATION_group*.sql` in numeric order — see SETUP.md
+> §2.2 for the full table. Later phases below depend on more than the four groups this note used
+> to list (e.g. Phase D3's Extension distribution assumes the `group13`/`group18` RET-rules
+> refactor, not the older `tbl_ret_extension_distribution` table); keeping one authoritative list
+> in SETUP.md avoids the two docs drifting against each other again.
 
 ---
 
@@ -967,7 +965,7 @@ term, target, evidence file, review and score, and keeps what the system cannot 
 
 | Keep | Why |
 |---|---|
-| `tbl_employee_profiles`, `tbl_auth_credentials`, `tbl_system_access` | Registration *claims* an existing profile via a stored procedure, so clearing these locks everyone out — **unless** you then run `python bootstrap_admin.py`, which writes the first Admin directly. With that, even a fully empty database is recoverable. |
+| `tbl_employee_profiles`, `tbl_auth_credentials`, `tbl_system_access` | Registration *claims* an existing profile via `register_user()` in `app/models/user.py`, landing the claim as PENDING for Admin approval — so clearing these locks everyone out — **unless** you then run `python bootstrap_admin.py`, which writes the first Admin directly. With that, even a fully empty database is recoverable. |
 | `tbl_target_categories` | 23 places in the code match exact slugs (`instruction`, `research`, …). Rebuildable — Admin → Criteria now has a **Slug** field — but a generated slug like `a_instructions` breaks routing **silently**, so it has to be typed exactly. |
 
 `tbl_ipcr_signatories` is now **self-healing**: opening Institution Setup recreates the five
@@ -997,8 +995,8 @@ SET @t = 99;
 DELETE b FROM tbl_final_score_breakdown b
   JOIN tbl_final_scores f ON b.score_id = f.score_id WHERE f.term_id = @t;
 DELETE FROM tbl_final_scores               WHERE term_id = @t;
-DELETE FROM tbl_ret_extension_distribution WHERE term_id = @t;  -- clears the one-time lock
-DELETE FROM tbl_ret_assignments            WHERE term_id = @t;
+DELETE ra FROM tbl_ret_assignments ra
+  JOIN tbl_master_indicators mi ON ra.indicator_id = mi.indicator_id WHERE mi.term_id = @t;
 DELETE FROM tbl_criteria_weights           WHERE term_id = @t;
 DELETE FROM tbl_teaching_load_config       WHERE term_id = @t;
 

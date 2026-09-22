@@ -88,33 +88,117 @@
         <div class="col-md-4">
             <div class="card shadow-sm border-0 h-100 border-start border-success border-4">
                 <div class="card-body text-center py-4">
-                    <h6 class="text-muted text-uppercase fw-bold">Overall Completion</h6>
+                    <h6 class="text-muted text-uppercase fw-bold">Target Completion</h6>
                     <h2 class="display-6 fw-bold text-success">{{ completion_rate }}%</h2>
-                    <small class="text-muted">Across all programs and categories</small>
+                    <small class="text-muted">Committed target items marked Approved, across all
+                        programs — not a faculty headcount; see the tracker below for that.</small>
                 </div>
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card shadow-sm border-0 h-100 border-start border-warning border-4">
-                <div class="card-body text-center py-4">
-                    <h6 class="text-muted text-uppercase fw-bold">Pending Batch Approvals</h6>
-                    <h2 class="display-6 fw-bold text-warning">{{ pending_count }}</h2>
-                    <small class="text-muted">Awaiting final digital signature</small>
+            <a href="javascript:void(0)" onclick="goToFinalVerification()" class="text-decoration-none">
+                <div class="card shadow-sm border-0 h-100 border-start border-warning border-4">
+                    <div class="card-body text-center py-4">
+                        <h6 class="text-muted text-uppercase fw-bold">Awaiting Final Approval</h6>
+                        <h2 class="display-6 fw-bold text-warning">{{ pending_count }}</h2>
+                        <small class="text-muted">Final IPCRs awaiting your review in Final Verification</small>
+                    </div>
                 </div>
-            </div>
+            </a>
         </div>
         <div class="col-md-4">
-            <div class="card shadow-sm border-0 h-100 border-start border-primary border-4">
+            <div class="card shadow-sm border-0 h-100 border-start border-danger border-4">
                 <div class="card-body text-center py-4">
-                    <h6 class="text-muted text-uppercase fw-bold">Top Performing Dept</h6>
-                    <h2 class="display-6 fw-bold text-primary" style="font-size: 1.8rem; margin-top: 10px;">
-                        {{ top_dept }} Program
-                    </h2>
-                    <small class="text-muted">Highest average final rating</small>
+                    <h6 class="text-muted text-uppercase fw-bold">Not Yet Started</h6>
+                    <h2 class="display-6 fw-bold text-danger">{{ not_started_count }}</h2>
+                    <small class="text-muted">Regular Faculty with no draft targets this term</small>
                 </div>
             </div>
         </div>
     </div>
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white border-0 pt-4 px-4">
+                    <h5 class="fw-bold mb-0"><i class="ti ti-clipboard-check me-2"></i>Term Completion Tracker</h5>
+                    <p class="text-muted small mb-0">Regular Faculty, active term, by department — where each
+                        person sits in the pipeline. Faculty-level counts (distinct from "Target Completion"
+                        above, which counts individual committed target items, not people).</p>
+                </div>
+                <div class="card-body px-4 pb-4">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Department</th>
+                                    <th class="text-center">Total Faculty</th>
+                                    <th class="text-center">In Progress</th>
+                                    <th class="text-center">Awaiting Your Approval</th>
+                                    <th class="text-center">Completed</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for d in department_completion %}
+                                <tr>
+                                    <td class="fw-semibold">{{ d.department_name }}</td>
+                                    <td class="text-center">{{ d.total_faculty }}</td>
+                                    <td class="text-center">{{ d.in_progress_count }}</td>
+                                    <td class="text-center">
+                                        {% if d.awaiting_approval_count > 0 %}
+                                        <a href="javascript:void(0)" onclick="goToFinalVerification()" class="text-decoration-none">
+                                            <span class="badge bg-warning-subtle text-warning border border-warning-subtle">{{ d.awaiting_approval_count }}</span>
+                                        </a>
+                                        {% else %}
+                                        {{ d.awaiting_approval_count }}
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {{ d.completed_count }} / {{ d.total_faculty }}
+                                        {% if d.total_faculty > 0 %}
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle ms-1">{{ (d.completed_count / d.total_faculty * 100) | round | int }}%</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-3">No departments configured.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr class="table-secondary fw-bold">
+                                    <td>College-Wide</td>
+                                    <td class="text-center">{{ completion_totals.total_faculty }}</td>
+                                    <td class="text-center">{{ completion_totals.in_progress_count }}</td>
+                                    <td class="text-center">{{ completion_totals.awaiting_approval_count }}</td>
+                                    <td class="text-center">{{ completion_totals.completed_count }} / {{ completion_totals.total_faculty }}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    <p class="text-muted small mt-3 mb-0">
+                        <i class="ti ti-info-circle me-1"></i>"Awaiting Your Approval" here covers Regular
+                        Faculty only. The "Awaiting Final Approval" KPI above is college-wide and also
+                        includes Designated Faculty/chairs/Dean, so the two numbers won't always match
+                        exactly — both link to the same Final Verification queue either way.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function goToFinalVerification() {
+            // Final Verification's own "Pending Final Verification" table is the Dean's one
+            // remaining approval queue -- approving a row there now finalizes both the
+            // evidence package and the final score in one action, so there's no separate
+            // Overview approval step to jump to anymore.
+            if (typeof showSection === 'function') {
+                showSection('nav-final-verification');
+            }
+        }
+    </script>
 
 </div>
 <!-- Phase 1: Institutional Quota Cascading -->
@@ -206,22 +290,32 @@
                                     {% if role == 'College-Wide' %}
                                     {% set cw_checked = existing_cw_allow_allocation.get(indicator.indicator_id, 0) %}
                                     {% if has_cascaded_quotas %}
-                                    <span class="badge {% if cw_checked %}bg-success-subtle text-success border border-success-subtle{% else %}bg-secondary-subtle text-secondary border border-secondary-subtle{% endif %} mt-1 d-block text-center">
-                                        {% if cw_checked %}To Chairs{% else %}Silent{% endif %}
-                                    </span>
+                                    <div class="d-flex align-items-center justify-content-center gap-1 mt-1">
+                                        <span class="badge {% if cw_checked %}bg-success-subtle text-success border border-success-subtle{% else %}bg-secondary-subtle text-secondary border border-secondary-subtle{% endif %} d-block text-center">
+                                            {% if cw_checked %}Shared with Chairs{% else %}Dean Only{% endif %}
+                                        </span>
+                                        <i class="ti ti-info-circle text-muted" style="font-size: 0.85rem; cursor: help;"
+                                           title="{% if cw_checked %}Program Chairs can divide this among their own regular faculty. You can still also assign portions of it directly below.{% else %}Program Chairs can't self-allocate this to their own regular faculty. You can still assign it directly to a Designated Faculty member, chair, or your own IPCR below.{% endif %}"></i>
+                                    </div>
                                     {% else %}
                                     <input type="hidden" id="cwAllow_{{ indicator.indicator_id }}"
                                         name="cw_allow_allocation_{{ indicator.indicator_id }}"
                                         value="{{ 1 if cw_checked else 0 }}">
-                                    <div class="btn-group btn-group-sm mt-1 w-100" role="group" aria-label="Cascade control for {{ indicator.indicator_description | ipcr_preview }}">
-                                        <button type="button"
-                                            class="btn cw-toggle-btn {% if not cw_checked %}btn-secondary{% else %}btn-outline-secondary{% endif %}"
-                                            data-value="0" data-target="cwAllow_{{ indicator.indicator_id }}"
-                                            onclick="setCwAllocation(this)">Silent</button>
-                                        <button type="button"
-                                            class="btn cw-toggle-btn {% if cw_checked %}btn-success{% else %}btn-outline-success{% endif %}"
-                                            data-value="1" data-target="cwAllow_{{ indicator.indicator_id }}"
-                                            onclick="setCwAllocation(this)">To Chairs</button>
+                                    <div class="d-flex align-items-center gap-1 mt-1">
+                                        <div class="btn-group btn-group-sm flex-grow-1" role="group" aria-label="Cascade control for {{ indicator.indicator_description | ipcr_preview }}">
+                                            <button type="button"
+                                                class="btn cw-toggle-btn {% if not cw_checked %}btn-secondary{% else %}btn-outline-secondary{% endif %}"
+                                                data-value="0" data-target="cwAllow_{{ indicator.indicator_id }}"
+                                                title="Program Chairs can't self-allocate this to their own regular faculty. You can still assign it directly to a Designated Faculty member, chair, or your own IPCR below."
+                                                onclick="setCwAllocation(this)">Dean Only</button>
+                                            <button type="button"
+                                                class="btn cw-toggle-btn {% if cw_checked %}btn-success{% else %}btn-outline-success{% endif %}"
+                                                data-value="1" data-target="cwAllow_{{ indicator.indicator_id }}"
+                                                title="Program Chairs can divide this among their own regular faculty. You can still also assign portions of it directly below."
+                                                onclick="setCwAllocation(this)">Share with Chairs</button>
+                                        </div>
+                                        <i class="ti ti-info-circle text-muted" style="font-size: 0.85rem; cursor: help;"
+                                           title="Only controls Program Chairs' own allocation screen -- Dean Only blocks them from self-allocating this to their regular faculty; Share with Chairs allows it. Either way, you can still assign it yourself to Designated Faculty, chairs, or your own IPCR from the table below."></i>
                                     </div>
                                     {% endif %}
                                     {% endif %}
@@ -382,7 +476,7 @@
                             <th scope="col" class="ps-4 py-3">Faculty Name</th>
                             <th scope="col">Academic Rank</th>
                             <th scope="col">Designation</th>
-                            <th scope="col">Assigned Program</th>
+                            <th scope="col">Specialization</th>
                             <th scope="col" class="text-center">Targets</th>
                             <th scope="col" class="text-center">Status</th>
                             <th scope="col" class="text-center pe-4">Actions</th>
@@ -394,7 +488,7 @@
                             <td class="ps-4 fw-bold">{{ sub.faculty_name }}</td>
                             <td><span class="badge bg-light text-dark border">{{ sub.academic_rank }}</span></td>
                             <td>{{ sub.designation }}</td>
-                            <td>{{ sub.assigned_program }}</td>
+                            <td>{{ sub.specialization }}</td>
                             <td class="text-center">
                                 <span class="badge bg-secondary">{{ sub.total_targets }} target{{ 's' if sub.total_targets != 1 }}</span>
                             </td>
@@ -442,7 +536,7 @@
                             <th scope="col" class="ps-4 py-3">Faculty Name</th>
                             <th scope="col">Academic Rank</th>
                             <th scope="col">Designation</th>
-                            <th scope="col">Assigned Program</th>
+                            <th scope="col">Specialization</th>
                             <th scope="col" class="text-center">Targets</th>
                             <th scope="col" class="text-center">Status</th>
                             <th scope="col" class="text-center pe-4">Actions</th>
@@ -454,7 +548,7 @@
                             <td class="ps-4 fw-bold text-success">{{ sub.faculty_name }}</td>
                             <td><span class="badge bg-light text-dark border">{{ sub.academic_rank }}</span></td>
                             <td>{{ sub.designation }}</td>
-                            <td>{{ sub.assigned_program }}</td>
+                            <td>{{ sub.specialization }}</td>
                             <td class="text-center">
                                 <span class="badge bg-success bg-opacity-10 text-success fw-bold">{{ sub.total_targets }} target{{ 's' if sub.total_targets != 1 }} Approved</span>
                             </td>
@@ -757,7 +851,7 @@
                         <tr>
                             <th scope="col" class="ps-4">Faculty / Chairperson</th>
                             <th scope="col">Designation</th>
-                            <th scope="col">Program / Specialization</th>
+                            <th scope="col">Specialization</th>
                             <th scope="col">Academic Rank</th>
                             <th scope="col" class="text-center" style="width: 170px;">Draft IPCR Status</th>
                             <th scope="col" class="text-end pe-4" style="width: 150px;">Action</th>
@@ -781,7 +875,7 @@
                                 <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1"><i class="ti ti-badge me-1"></i>{{ f.designation or 'Designated Faculty' }}</span>
                                 {% endif %}
                             </td>
-                            <td><span class="badge bg-light text-dark border">{{ f.assigned_program or f.specialization or 'General' }}</span></td>
+                            <td><span class="badge bg-light text-dark border">{{ f.specialization or 'General' }}</span></td>
                             <td>{{ f.academic_rank or '—' }}</td>
                             <td class="text-center">
                                 {% if review_status == 'Approved' %}
@@ -1239,7 +1333,7 @@
                         <thead class="table-light">
                             <tr>
                                 <th scope="col">Faculty Member</th>
-                                <th scope="col">Program</th>
+                                <th scope="col">Specialization</th>
                                 <th scope="col" class="text-center" width="150">Allocated Qty</th>
                                 <th scope="col" class="text-center" width="150">Review Status</th>
                             </tr>
@@ -1248,7 +1342,7 @@
                             {% for a in allocs %}
                             <tr>
                                 <td class="fw-semibold small">{{ a.faculty_name }}</td>
-                                <td class="small">{{ a.assigned_program }}</td>
+                                <td class="small">{{ a.specialization }}</td>
                                 <td class="text-center fw-bold text-primary small">{{ a.proposed_quantity }}</td>
                                 <td class="text-center">
                                     {% if a.review_status == 'Approved' %}
@@ -1377,6 +1471,54 @@
                     </div>
                 </div>
             </div>
+
+            {% set roster = department_faculty_roster.get(dept.department_name, {'program_chairs': [], 'designated_faculty': [], 'regular_faculty': []}) %}
+            {% set faculty_groups = [
+                ('Program Chair', roster.program_chairs, 'No Program Chair assigned to ' ~ dept.department_name ~ '.'),
+                ('Designated Faculty under Dept.', roster.designated_faculty, 'No Designated Faculty under ' ~ dept.department_name ~ ' this term.'),
+                ('Regular Faculty under Dept.', roster.regular_faculty, 'No Regular Faculty under ' ~ dept.department_name ~ ' this term.')
+            ] %}
+            {% for group_title, group_rows, empty_msg in faculty_groups %}
+            <div class="card shadow-sm border-0 mt-4" style="border-radius: 14px; overflow: hidden;">
+                <div class="card-header bg-white border-0 pt-4 pb-3 px-4 d-flex justify-content-between align-items-center">
+                    <h5 class="fw-bold text-dark mb-0"><i class="ti ti-users text-primary me-2"></i>{{ group_title }}</h5>
+                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-3 py-2 fw-bold">{{ group_rows | length }}</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-4">Faculty Name</th>
+                                    <th class="text-center">Academic Rank</th>
+                                    <th class="text-center pe-4" style="width: 160px;">Evidences</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if group_rows %}
+                                    {% for fac in group_rows %}
+                                    <tr>
+                                        <td class="ps-4 py-3 fw-semibold text-dark">{{ fac.first_name }} {{ fac.last_name }}</td>
+                                        <td class="text-center">{{ fac.academic_rank or 'Instructor I' }}</td>
+                                        <td class="text-center pe-4">
+                                            <button type="button" class="btn btn-outline-primary btn-sm px-3 fw-bold"
+                                                onclick="openDeptEvidenceViewer({{ fac.emp_id }}, '{{ fac.first_name|replace('\'', '\\\'') }} {{ fac.last_name|replace('\'', '\\\'') }}')">
+                                                <i class="ti ti-file-search me-1"></i>View Evidences
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="3" class="text-center py-4 text-muted">{{ empty_msg }}</td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
         </div>
         {% endfor %}
     </div>
@@ -1384,6 +1526,198 @@
     <div class="alert alert-info border-0 shadow-sm">No departments configured yet.</div>
     {% endif %}
 </div>
+
+<!-- ──────────────────────────────────────────────
+     Department Accomplishment: read-only evidence viewer
+     ────────────────────────────────────────────── -->
+<div class="modal fade" id="deptEvidenceModal" tabindex="-1" aria-hidden="true" aria-labelledby="deptEvidenceModalTitle">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+            <div class="modal-header text-white border-0 py-3" style="border-top-left-radius: 16px; border-top-right-radius: 16px; background: var(--c-accent);">
+                <h5 class="modal-title fw-bold" id="deptEvidenceModalTitle"><i class="ti ti-file-search me-2"></i>Evidences</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="d-flex align-items-center justify-content-between mb-3 p-3 bg-light rounded-3">
+                    <div>
+                        <h6 class="fw-bold mb-0 text-dark" id="deptEvidenceModalFacultyName">-</h6>
+                        <small class="text-muted" id="deptEvidenceModalFacultyRank">-</small>
+                    </div>
+                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-3 py-2 fw-bold">
+                        Read-Only View
+                    </span>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table align-middle border mb-0" style="border-radius: 10px; overflow: hidden;">
+                        <thead class="table-light">
+                            <tr>
+                                <th scope="col" class="ps-3" width="34%">Target Indicator</th>
+                                <th scope="col" class="text-center" width="12%">Target Qty</th>
+                                <th scope="col" class="text-center" width="14%">Accomplished Qty</th>
+                                <th scope="col" class="text-center" width="14%">Status</th>
+                                <th scope="col" class="ps-3" width="26%">Uploaded Evidences</th>
+                            </tr>
+                        </thead>
+                        <tbody id="deptEvidenceModalTableBody">
+                            <!-- Populated dynamically via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer border-0 p-3 bg-light" style="border-bottom-left-radius: 16px; border-bottom-right-radius: 16px;">
+                <button type="button" class="btn btn-secondary fw-semibold px-4" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="deptEvidenceFileViewerModal" tabindex="-1" aria-hidden="true" aria-labelledby="deptEvidenceFileViewerModalLabel">
+    <div class="modal-dialog modal-fullscreen modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header text-white border-0 py-3" style="background: var(--c-accent);">
+                <h5 class="modal-title fw-bold fs-6" id="deptEvidenceFileViewerModalLabel"><i class="ti ti-file-type-pdf me-2"></i>Uploaded Evidence</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3" id="deptEvidenceFileViewerBody"></div>
+            <div class="modal-footer border-0 p-3 bg-light">
+                <button type="button" class="btn btn-secondary fw-semibold px-4" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const DEPT_EVIDENCE_BY_TARGET = {};
+
+    window.openDeptEvidenceViewer = function(empId, facultyName) {
+        document.getElementById('deptEvidenceModalFacultyName').innerText = facultyName;
+        document.getElementById('deptEvidenceModalFacultyRank').innerText = 'Loading details...';
+        const tbody = document.getElementById('deptEvidenceModalTableBody');
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Loading evidence files...</td></tr>';
+
+        new bootstrap.Modal(document.getElementById('deptEvidenceModal')).show();
+
+        fetch(`/dean/designated_evidence_details/${empId}`)
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-3">Error: ${data.message}</td></tr>`;
+                    return;
+                }
+
+                if (data.faculty_name) {
+                    document.getElementById('deptEvidenceModalFacultyName').innerText = data.faculty_name;
+                }
+                document.getElementById('deptEvidenceModalFacultyRank').innerText = `${data.academic_rank || ''}${data.designation ? ' — ' + data.designation : ''}`;
+                tbody.innerHTML = '';
+
+                if (!data.targets || data.targets.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No committed targets found for this person.</td></tr>';
+                    return;
+                }
+
+                data.targets.forEach(t => {
+                    const tr = document.createElement('tr');
+                    DEPT_EVIDENCE_BY_TARGET[t.target_id] = t.evidence_list || [];
+
+                    let evHtml;
+                    if (t.evidence_list && t.evidence_list.length > 0) {
+                        evHtml = `<button type="button" class="btn btn-outline-primary btn-sm px-3 fw-semibold shadow-xs"
+                            onclick="openDeptEvidenceFileViewer(${t.target_id})">
+                            <i class="ti ti-folder-open me-1"></i>View Evidence (${t.evidence_list.length})
+                        </button>`;
+                    } else {
+                        evHtml = '<span class="badge bg-light text-muted border">No evidence uploaded</span>';
+                    }
+
+                    const qtyMetBadge = (t.actual_quantity >= t.assigned_quantity && t.assigned_quantity > 0)
+                        ? `<span class="badge bg-success px-3 py-2"><i class="ti ti-circle-check me-1"></i>${t.actual_quantity}</span>`
+                        : `<span class="badge bg-secondary px-3 py-2">${t.actual_quantity || 0}</span>`;
+
+                    const statusBadge = `<span class="badge bg-light text-dark border">${escapeHtml(t.status || 'In Progress')}</span>`;
+
+                    tr.innerHTML = `
+                        <td class="ps-3 py-3">
+                            <span class="badge bg-light text-dark border mb-1">${escapeHtml(t.category_name || 'Standard')}</span>
+                            <p class="mb-0 small fw-semibold text-dark">${escapeHtml(window.renderIndicatorPreview(t.indicator_description))}</p>
+                        </td>
+                        <td class="text-center fw-bold text-primary fs-6">${t.assigned_quantity}</td>
+                        <td class="text-center fw-bold fs-6">${qtyMetBadge}</td>
+                        <td class="text-center">${statusBadge}</td>
+                        <td class="ps-3 py-3">${evHtml}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            })
+            .catch(err => {
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-3">Error fetching details: ${err.message || err}</td></tr>`;
+            });
+    };
+
+    // Read-only, no Approve/Return controls -- final sign-off only happens in Final
+    // Verification now, this panel exists purely so the Dean can inspect anyone's uploaded
+    // files at any point in the term.
+    window.openDeptEvidenceFileViewer = function(targetId) {
+        const evidenceList = DEPT_EVIDENCE_BY_TARGET[targetId] || [];
+        const body = document.getElementById('deptEvidenceFileViewerBody');
+        if (!evidenceList || evidenceList.length === 0) {
+            body.innerHTML = '<div class="text-center py-5 text-muted">No evidence files available.</div>';
+        } else {
+            let html = '';
+            evidenceList.forEach((ev) => {
+                const fileUrl = `/evidence_uploads/${ev.evidence_id}`;
+                const fileName = escapeHtml(ev.file_path.split('/').pop().replace(/^[0-9a-f]{32}_/, ''));
+                const ext = ev.file_path.split('.').pop().toLowerCase();
+                const isImage = ext.match(/^(jpg|jpeg|png|gif|webp)$/i);
+                const isPdf = ext === 'pdf';
+
+                let previewHtml;
+                if (isImage) {
+                    previewHtml = `<div class="evidence-portrait-container">
+                            <img src="${fileUrl}" alt="${fileName}" class="evidence-portrait-img" loading="lazy">
+                        </div>`;
+                } else if (isPdf) {
+                    previewHtml = `<div class="evidence-portrait-container">
+                            <embed src="${fileUrl}" type="application/pdf" class="evidence-pdf-embed">
+                        </div>`;
+                } else {
+                    previewHtml = `<div class="evidence-portrait-container text-center py-4">
+                            <i class="ti ti-file-download fs-1 text-light mb-2 d-block"></i>
+                            <a href="${fileUrl}" target="_blank" class="btn btn-sm btn-outline-light">
+                                <i class="ti ti-download me-1"></i>View / Download File
+                            </a>
+                        </div>`;
+                }
+
+                const ownerLabel = ev.faculty_name ? `<span class="fw-semibold small text-dark">${escapeHtml(ev.faculty_name)}</span>` : `<span class="fw-semibold small text-dark">${fileName}</span>`;
+                const statusBadge = ev.verification_status === 'Approved'
+                    ? '<span class="badge bg-success">Approved</span>'
+                    : ev.verification_status === 'Returned'
+                    ? '<span class="badge bg-danger">Returned</span>'
+                    : '<span class="badge bg-warning text-dark">Pending</span>';
+
+                html += `
+                    <div class="evidence-item mb-3 p-3 border rounded-3 bg-white shadow-sm">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div class="text-truncate me-2">
+                                ${ownerLabel}
+                                <span class="ms-2">${statusBadge}</span>
+                            </div>
+                            <div class="small text-muted flex-shrink-0">
+                                <span><i class="ti ti-circle-check me-1"></i>Qty: ${ev.actual_qty_Q}</span>
+                            </div>
+                        </div>
+                        ${ev.faculty_name ? `<div class="small text-muted mb-2">${fileName}</div>` : ''}
+                        ${previewHtml}
+                    </div>
+                `;
+            });
+            body.innerHTML = html;
+        }
+        new bootstrap.Modal(document.getElementById('deptEvidenceFileViewerModal')).show();
+    };
+</script>
 
 <!-- ──────────────────────────────────────────────
      Final Verification (Dean Evidence Verification)
@@ -1493,7 +1827,7 @@
                         <tr>
                             <th scope="col" class="ps-4 py-3">Faculty Member</th>
                             <th scope="col" class="text-center">Academic Rank</th>
-                            <th scope="col" class="text-center">Program / Dept</th>
+                            <th scope="col" class="text-center">Specialization</th>
                             <th scope="col" class="text-center">Committed Targets</th>
                             <th scope="col" class="text-center">Status</th>
                             <th scope="col" class="text-center pe-4">Action</th>
@@ -1505,10 +1839,10 @@
                             <tr>
                                 <td class="ps-4 py-3">
                                     <div class="fw-bold text-dark">{{ fac.first_name }} {{ fac.last_name }}</div>
-                                    <small class="text-muted">{% if fac.designation %}{{ fac.designation }}{% if fac.specialization %} ({{ fac.specialization }}){% elif fac.assigned_program %} ({{ fac.assigned_program }}){% endif %}{% else %}{{ fac.specialization or 'Regular Faculty' }}{% endif %}</small>
+                                    <small class="text-muted">{% if fac.designation %}{{ fac.designation }}{% if fac.specialization %} ({{ fac.specialization }}){% endif %}{% else %}{{ fac.specialization or 'Regular Faculty' }}{% endif %}</small>
                                 </td>
                                 <td class="text-center">{{ fac.academic_rank or 'Instructor I' }}</td>
-                                <td class="text-center"><span class="badge bg-secondary-subtle text-secondary px-2 py-1">{{ fac.assigned_program or 'CIT' }}</span></td>
+                                <td class="text-center"><span class="badge bg-secondary-subtle text-secondary px-2 py-1">{{ fac.specialization or '—' }}</span></td>
                                 <td class="text-center fw-bold text-primary fs-6">{{ fac.total_targets }}</td>
                                 <td class="text-center">
                                     <span class="badge bg-warning text-dark px-3 py-2 shadow-xs"><i class="ti ti-history me-1"></i>Awaiting Final Verification</span>
@@ -1555,7 +1889,7 @@
                         <tr>
                             <th scope="col" class="ps-4 py-3">Faculty Member</th>
                             <th scope="col" class="text-center">Academic Rank</th>
-                            <th scope="col" class="text-center">Program / Dept</th>
+                            <th scope="col" class="text-center">Specialization</th>
                             <th scope="col" class="text-center">Committed Targets</th>
                             <th scope="col" class="text-center">Status</th>
                             <th scope="col" class="text-center pe-4">Actions</th>
@@ -1567,10 +1901,10 @@
                             <tr>
                                 <td class="ps-4 py-3">
                                     <div class="fw-bold text-dark">{{ fac.first_name }} {{ fac.last_name }}</div>
-                                    <small class="text-muted">{{ fac.designation or 'Designated Faculty' }}{% if fac.specialization %} ({{ fac.specialization }}){% elif fac.assigned_program %} ({{ fac.assigned_program }}){% endif %}</small>
+                                    <small class="text-muted">{{ fac.designation or 'Designated Faculty' }}{% if fac.specialization %} ({{ fac.specialization }}){% endif %}</small>
                                 </td>
                                 <td class="text-center">{{ fac.academic_rank or 'Instructor I' }}</td>
-                                <td class="text-center"><span class="badge bg-secondary-subtle text-secondary px-2 py-1">{{ fac.assigned_program or 'CIT' }}</span></td>
+                                <td class="text-center"><span class="badge bg-secondary-subtle text-secondary px-2 py-1">{{ fac.specialization or '—' }}</span></td>
                                 <td class="text-center fw-bold text-primary fs-6">{{ fac.total_targets }}</td>
                                 <td class="text-center">
                                     <span class="badge bg-success px-3 py-2 shadow-xs"><i class="ti ti-circle-check-filled me-1"></i>Dean Approved</span>
@@ -1616,7 +1950,7 @@
                         <tr>
                             <th scope="col" class="ps-4 py-3">Faculty Member</th>
                             <th scope="col" class="text-center">Academic Rank</th>
-                            <th scope="col" class="text-center">Program / Dept</th>
+                            <th scope="col" class="text-center">Specialization</th>
                             <th scope="col" class="text-center">Committed Targets</th>
                             <th scope="col" class="text-center">Status</th>
                             <th scope="col" class="text-center pe-4">Actions</th>
@@ -1631,7 +1965,7 @@
                                     <small class="text-muted">{{ fac.specialization or 'Regular Faculty' }}</small>
                                 </td>
                                 <td class="text-center">{{ fac.academic_rank or 'Instructor I' }}</td>
-                                <td class="text-center"><span class="badge bg-secondary-subtle text-secondary px-2 py-1">{{ fac.assigned_program or 'CIT' }}</span></td>
+                                <td class="text-center"><span class="badge bg-secondary-subtle text-secondary px-2 py-1">{{ fac.specialization or '—' }}</span></td>
                                 <td class="text-center fw-bold text-primary fs-6">{{ fac.total_targets }}</td>
                                 <td class="text-center">
                                     <span class="badge bg-success px-3 py-2 shadow-xs"><i class="ti ti-circle-check-filled me-1"></i>Dean Approved</span>

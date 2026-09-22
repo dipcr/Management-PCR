@@ -403,8 +403,6 @@ def review_ipcr(emp_id):
     AJAX endpoint — returns JSON payload of Research/Extension targets for RET review.
     Creates a tbl_ipcr_ret_review record if one doesn't exist.
     """
-    import time
-    print(f"\n[DEBUG] === Entered review_ipcr for emp_id={emp_id} ===")
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -414,11 +412,9 @@ def review_ipcr(emp_id):
         active_term = next((t for t in terms if t['is_active'] == 1), None)
 
         if not active_term:
-            print("[DEBUG] No active term found.")
             return jsonify({'error': 'No active term found.'}), 400
 
         term_id = active_term['term_id']
-        print(f"[DEBUG] Active term_id={term_id}")
 
         # Check overall IPCR status for sequential tracking guardrails
         from app.models.connection import get_overall_ipcr_status
@@ -433,18 +429,14 @@ def review_ipcr(emp_id):
         existing_status = review_row[0] if review_row else None
 
         # Block if unsubmitted and not already reviewed/returned
-        if ipcr_status == 'draft' and existing_status not in ('Approved', 'Rejected'):
+        if ipcr_status in ('draft', 'rejected_by_program_chair', 'rejected_by_ret_chair') and existing_status not in ('Approved', 'Rejected'):
             return jsonify({'error': 'Faculty has not submitted their choices for review yet.'}), 403
 
         # Fetch or create RET review record
-        t0 = time.time()
         review_id = get_or_create_ret_review(conn, cursor, emp_id, term_id, ret_chair_emp_id)
-        print(f"[DEBUG] get_or_create_ret_review took {time.time() - t0:.4f}s. review_id={review_id}")
 
         # Fetch RET review items
-        t0 = time.time()
         items = get_ret_review_items(cursor, review_id)
-        print(f"[DEBUG] get_ret_review_items took {time.time() - t0:.4f}s. Found {len(items)} items.")
 
         # Fetch overall status and remarks
         cursor.execute(
@@ -464,11 +456,9 @@ def review_ipcr(emp_id):
         faculty_name = fac_row[0] if fac_row else 'Unknown'
         academic_rank = fac_row[1] if fac_row else ''
         faculty_rank_band = rank_band(academic_rank)
-        print(f"[DEBUG] Faculty: {faculty_name}, Rank: {academic_rank} (band: {faculty_rank_band})")
 
         # Fetch available Research indicators for this rank band (Extension is rank-band
         # locked, not self-selected, so it is excluded from the selectable/unpicked pool).
-        t0 = time.time()
         cursor.execute("""
             SELECT mi.indicator_id, mi.indicator_description, tc.category_name, rri.target_quantity
             FROM tbl_ret_rules r
@@ -478,7 +468,6 @@ def review_ipcr(emp_id):
             WHERE r.academic_rank = %s AND mi.term_id = %s AND tc.slug = 'research'
         """, (faculty_rank_band, term_id))
         rules_indicators = cursor.fetchall()
-        print(f"[DEBUG] Fetch rules indicators query took {time.time() - t0:.4f}s. Found {len(rules_indicators)} indicators.")
 
         all_ret_indicators = []
         for ind_id, desc, cat, qty in rules_indicators:
@@ -526,7 +515,6 @@ def review_ipcr(emp_id):
             'reviewed_quantity': e['target_quantity'],
         } for e in extension_menu['extension_indicators']]
 
-        print(f"[DEBUG] review_ipcr returning JSON payload successfully. Review ID={review_id}")
         return jsonify({
             'review_id': review_id,
             'emp_id': emp_id,
@@ -540,8 +528,8 @@ def review_ipcr(emp_id):
         })
 
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        import logging
+        logging.getLogger(__name__).error(f"Error in review_ipcr: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
     finally:
         cursor.close()
@@ -631,7 +619,7 @@ def decide_ipcr():
             from app.models.connection import get_overall_ipcr_status
             ipcr_status = get_overall_ipcr_status(cursor, emp_id, term_id)
 
-            if ipcr_status == 'draft':
+            if ipcr_status in ('draft', 'rejected_by_program_chair', 'rejected_by_ret_chair'):
                 flash("Faculty has not submitted their choices for review yet.", "danger")
                 return redirect(url_for('ret_chair.ret_chair_dashboard'))
 
