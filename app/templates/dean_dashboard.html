@@ -295,7 +295,7 @@
                                             {% if cw_checked %}Shared with Chairs{% else %}Dean Only{% endif %}
                                         </span>
                                         <i class="ti ti-info-circle text-muted" style="font-size: 0.85rem; cursor: help;"
-                                           title="{% if cw_checked %}Program Chairs can see this quota and sub-allocate portions of it to their faculty.{% else %}This quota stays with you only -- Program Chairs never see it or any part of it.{% endif %}"></i>
+                                           title="{% if cw_checked %}Program Chairs can divide this among their own regular faculty. You can still also assign portions of it directly below.{% else %}Program Chairs can't self-allocate this to their own regular faculty. You can still assign it directly to a Designated Faculty member, chair, or your own IPCR below.{% endif %}"></i>
                                     </div>
                                     {% else %}
                                     <input type="hidden" id="cwAllow_{{ indicator.indicator_id }}"
@@ -306,16 +306,16 @@
                                             <button type="button"
                                                 class="btn cw-toggle-btn {% if not cw_checked %}btn-secondary{% else %}btn-outline-secondary{% endif %}"
                                                 data-value="0" data-target="cwAllow_{{ indicator.indicator_id }}"
-                                                title="Keeps this quota with you only -- Program Chairs never see it or any part of it."
+                                                title="Program Chairs can't self-allocate this to their own regular faculty. You can still assign it directly to a Designated Faculty member, chair, or your own IPCR below."
                                                 onclick="setCwAllocation(this)">Dean Only</button>
                                             <button type="button"
                                                 class="btn cw-toggle-btn {% if cw_checked %}btn-success{% else %}btn-outline-success{% endif %}"
                                                 data-value="1" data-target="cwAllow_{{ indicator.indicator_id }}"
-                                                title="Lets Program Chairs see this quota and sub-allocate portions of it to their faculty."
+                                                title="Program Chairs can divide this among their own regular faculty. You can still also assign portions of it directly below."
                                                 onclick="setCwAllocation(this)">Share with Chairs</button>
                                         </div>
                                         <i class="ti ti-info-circle text-muted" style="font-size: 0.85rem; cursor: help;"
-                                           title="Dean Only: stays with you, Program Chairs never see it. Share with Chairs: Program Chairs can see it and sub-allocate portions of it to their faculty."></i>
+                                           title="Only controls Program Chairs' own allocation screen -- Dean Only blocks them from self-allocating this to their regular faculty; Share with Chairs allows it. Either way, you can still assign it yourself to Designated Faculty, chairs, or your own IPCR from the table below."></i>
                                     </div>
                                     {% endif %}
                                     {% endif %}
