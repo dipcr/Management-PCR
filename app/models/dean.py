@@ -179,11 +179,11 @@ def get_designated_draft_submissions(cursor, term_id):
     """
     from app.models.connection import timed_query
     query = """
-        SELECT 
+        SELECT
             dt.emp_id,
             CONCAT(ep.first_name, ' ', ep.last_name) AS faculty_name,
             ep.academic_rank,
-            ep.assigned_program,
+            ep.specialization,
             ep.designation,
             COUNT(DISTINCT dt.draft_id) AS total_targets,
             COALESCE(MAX(dr.overall_status), 'Pending') AS review_status
@@ -197,7 +197,7 @@ def get_designated_draft_submissions(cursor, term_id):
                OR (ep.designation IS NOT NULL AND ep.designation <> ''
                     AND ep.designation NOT IN ('Regular Faculty', 'Admin')))
           AND mi.is_custom IN (0, 1)
-        GROUP BY dt.emp_id, ep.first_name, ep.last_name, ep.academic_rank, ep.assigned_program, ep.designation, dr.overall_status
+        GROUP BY dt.emp_id, ep.first_name, ep.last_name, ep.academic_rank, ep.specialization, ep.designation, dr.overall_status
         ORDER BY ep.last_name ASC
     """
     return timed_query(cursor, query, (term_id, term_id), label="get_designated_draft_submissions")
@@ -789,7 +789,7 @@ def get_college_wide_allocations_tracker(cursor, term_id):
             dt.indicator_id,
             dt.emp_id,
             CONCAT(ep.first_name, ' ', ep.last_name) AS faculty_name,
-            ep.assigned_program,
+            ep.specialization,
             dt.proposed_quantity,
             dt.review_status
         FROM tbl_draft_targets dt

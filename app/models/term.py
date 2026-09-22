@@ -106,7 +106,18 @@ def get_all_terms(cursor):
     from app.models.connection import timed_query
     query = """
         SELECT term_id, academic_year, semester,
-               period_start, period_end, is_active
+               period_start, period_end, is_active, faculty_config_reviewed
         FROM tbl_academic_terms ORDER BY term_id DESC
     """
     return timed_query(cursor, query, label="get_all_terms")
+
+
+def mark_faculty_config_reviewed(conn, cursor, term_id):
+    """Acknowledge, for this term, that the Admin has rechecked Faculty
+    Configuration (specialization/rank/designation) -- clears the term-open
+    reminder banner. Returns True if a term row was actually updated."""
+    cursor.execute(
+        "UPDATE tbl_academic_terms SET faculty_config_reviewed = 1 WHERE term_id = %s",
+        (term_id,))
+    conn.commit()
+    return cursor.rowcount > 0

@@ -82,6 +82,25 @@
     </div>
 </div>
 
+{% if active_term and not active_term.faculty_config_reviewed %}
+<div class="alert alert-warning d-flex justify-content-between align-items-center flex-wrap gap-3" role="alert">
+    <div>
+        <i class="ti ti-alert-triangle me-2"></i>
+        <strong>New term opened: {{ active_term.academic_year }} ({{ active_term.semester }}).</strong>
+        Recheck Faculty Configuration before faculty start submitting targets — confirm each person's
+        specialization, academic rank, and especially their Designation. Changing a Designation there now
+        also updates that person's login role, in effect on their next sign-in.
+    </div>
+    <div class="d-flex gap-2 flex-shrink-0">
+        <button type="button" class="btn btn-outline-dark btn-sm fw-semibold" onclick="showSection('nav-roster')">Review Now</button>
+        <form method="POST" action="{{ url_for('admin.admin_mark_faculty_reviewed') }}" class="d-inline mb-0">
+            <input type="hidden" name="term_id" value="{{ active_term.term_id }}">
+            <button type="submit" class="btn btn-dark-navy btn-sm fw-semibold">Mark as Reviewed</button>
+        </form>
+    </div>
+</div>
+{% endif %}
+
 <!-- Flash messages for CSV imports and saving -->
 {% with messages = get_flashed_messages(with_categories=true) %}
 {% if messages %}
@@ -1536,13 +1555,11 @@ function filterMasterIndicators() {
                         <textarea class="form-control" name="description" id="addIndicatorDesc" rows="4" required
                             placeholder="e.g. Submit {qty} accurate report of grades within {duration} after the final examination period"></textarea>
                         <div class="form-text small">
-                            Type the target as a complete sentence with the real numbers in it, then click a
-                            detected number below to tag it — no need to type <code>{qty}</code>/<code>{duration}</code>
-                            by hand, and the number stays visible everywhere this indicator is shown (this list,
-                            the edit form) — only the *actual* value substituted in when it's assigned changes.
-                            A target whose wording already states its own count (like the report-of-grades example)
-                            needs its number tagged so it's replaced in place when cascaded, not duplicated; a bare
-                            activity name with no number of its own can be left as-is.
+                            Write the target as a full sentence with real numbers, then click a detected
+                            number to tag it as <code>{qty}</code> or <code>{duration}</code> — no need to type
+                            the tags yourself. Tagged numbers stay visible here; only the actual value changes
+                            when assigned. Tag any number already in your sentence so it gets replaced, not
+                            duplicated.
                         </div>
                         <div id="addIndicatorTagger" class="mt-2"></div>
                         <div id="addIndicatorPreview" class="small text-success mt-1 fst-italic"></div>
@@ -1933,10 +1950,9 @@ function openAddIndicator(categoryName, targetTypes) {
                         <textarea class="form-control" name="description" id="editIndicatorDesc" rows="4"
                             required></textarea>
                         <div class="form-text small">
-                            Click a detected number below to tag it as the quantity or duration slot, so it's
-                            replaced in place whenever this target is cascaded, instead of typing
-                            <code>{qty}</code>/<code>{duration}</code> by hand — the tagged number still shows
-                            normally in this list and here; only the substituted value changes per assignment.
+                            Click a detected number to tag it as <code>{qty}</code> or <code>{duration}</code> —
+                            no need to type the tags by hand. Tagged numbers still display normally; only the
+                            actual value changes when assigned.
                         </div>
                         <div id="editIndicatorTagger" class="mt-2"></div>
                         <div id="editIndicatorPreview" class="small text-success mt-1 fst-italic"></div>

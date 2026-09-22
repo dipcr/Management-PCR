@@ -135,6 +135,68 @@ def get_all_profiles(cursor):
         label="get_all_profiles")
 
 
+SINGLETON_DESIGNATIONS = ('Program Chair', 'RET Chair', 'Dean')
+
+
+def find_designation_conflict(cursor, designation, specialization, exclude_employee_id_number=None):
+    """
+    For a singleton role (one Program Chair per specialization, one RET Chair,
+    one Dean college-wide), return the *other* active profile already holding
+    it, or None if the designation is free to assign. Non-singleton
+    designations (Regular/Designated Faculty, or blank) never conflict.
+    """
+    if designation not in SINGLETON_DESIGNATIONS:
+        return None
+
+    exclude_id = exclude_employee_id_number or ''
+    if designation == 'Program Chair':
+        if not specialization:
+            return None
+        sql = """
+            SELECT employee_id_number, first_name, last_name, specialization
+            FROM tbl_employee_profiles
+            WHERE designation = %s AND specialization = %s AND leave_status = 'Active'
+              AND employee_id_number != %s
+            LIMIT 1
+        """
+        params = (designation, specialization, exclude_id)
+    else:
+        sql = """
+            SELECT employee_id_number, first_name, last_name, specialization
+            FROM tbl_employee_profiles
+            WHERE designation = %s AND leave_status = 'Active'
+              AND employee_id_number != %s
+            LIMIT 1
+        """
+        params = (designation, exclude_id)
+
+    cursor.execute(sql, params)
+    row = cursor.fetchone()
+    if not row:
+        return None
+    return {
+        'employee_id_number': row[0],
+        'first_name': row[1],
+        'last_name': row[2],
+        'specialization': row[3],
+    }
+
+
+def sync_system_role_for_designation(conn, cursor, emp_id, designation):
+    """
+    Mirror a designation change onto the employee's login system_role, so a
+    promotion/demotion in Faculty Configuration takes effect on their next
+    login. A no-op if they haven't claimed an account yet (no tbl_system_access
+    row) -- register_user() will assign the correct role at claim time.
+    """
+    role = system_role_for_designation(designation)
+    cursor.execute(
+        "UPDATE tbl_system_access SET system_role = %s WHERE emp_id = %s",
+        (role, emp_id))
+    conn.commit()
+    return cursor.rowcount > 0
+
+
 def save_single_profile(conn, cursor, data):
     sql = """
         INSERT INTO tbl_employee_profiles 
@@ -183,9 +245,10 @@ def import_csv_roster(conn, cursor, csv_rows):
     new_added = 0
     updated = 0
     unchanged = 0
+    conflicts = []
 
     try:
-        cursor.execute("SELECT employee_id_number, first_name, last_name, college, assigned_program, specialization, academic_rank, employment_status, leave_status, designation FROM tbl_employee_profiles")
+        cursor.execute("SELECT emp_id, employee_id_number, first_name, last_name, college, assigned_program, specialization, academic_rank, employment_status, leave_status, designation FROM tbl_employee_profiles")
         columns = [col[0] for col in cursor.description]
         existing_profiles = {}
         for row in cursor.fetchall():
@@ -209,6 +272,22 @@ def import_csv_roster(conn, cursor, csv_rows):
             WHERE employee_id_number=%(employee_id_number)s
         """
 
+        def find_batch_conflict(designation, specialization, exclude_employee_id_number):
+            """Same singleton-role check as find_designation_conflict(), but against
+            the in-memory `existing_profiles` snapshot so it also catches conflicts
+            introduced earlier in this same CSV batch."""
+            if designation not in SINGLETON_DESIGNATIONS:
+                return None
+            for eid, p in existing_profiles.items():
+                if eid == exclude_employee_id_number:
+                    continue
+                if p.get('designation') != designation or p.get('leave_status') != 'Active':
+                    continue
+                if designation == 'Program Chair' and p.get('specialization') != specialization:
+                    continue
+                return p
+            return None
+
         for row in csv_rows:
             emp_id = row.get('employee_id_number', '').strip()
             if not emp_id:
@@ -227,9 +306,19 @@ def import_csv_roster(conn, cursor, csv_rows):
                 'designation': row.get('designation', '').strip()
             }
 
+            conflict = find_batch_conflict(current_row['designation'], current_row['specialization'], emp_id)
+            if conflict:
+                conflicts.append(
+                    f"{emp_id} skipped: {current_row['designation']} already held by "
+                    f"{conflict['first_name']} {conflict['last_name']} ({conflict['employee_id_number']})")
+                continue
+
             if emp_id not in existing_profiles:
                 cursor.execute(insert_sql, current_row)
                 new_added += 1
+                # A brand-new profile has no tbl_system_access row yet (unclaimed),
+                # so there is nothing to sync -- register_user() sets the role at claim time.
+                existing_profiles[emp_id] = dict(current_row, emp_id=None)
             else:
                 existing = existing_profiles[emp_id]
                 differs = False
@@ -241,11 +330,14 @@ def import_csv_roster(conn, cursor, csv_rows):
                 if differs:
                     cursor.execute(update_sql, current_row)
                     updated += 1
+                    if existing['designation'] != current_row['designation'] and existing.get('emp_id'):
+                        sync_system_role_for_designation(conn, cursor, existing['emp_id'], current_row['designation'])
+                    existing_profiles[emp_id] = dict(current_row, emp_id=existing.get('emp_id'))
                 else:
                     unchanged += 1
 
         conn.commit()
-        return True, new_added, updated, unchanged
+        return True, new_added, updated, unchanged, conflicts
     except Exception as e:
         conn.rollback()
-        return False, str(e), 0, 0
+        return False, str(e), 0, 0, []
