@@ -215,12 +215,17 @@ def get_oversight_targets(cursor, emp_id, term_id):
         return []
 
     if role == ROLE_DEAN_ALL_DEPARTMENTS:
-        # The Dean answers for the college-wide total, not one department's share: sum every
-        # cascaded_quotas row for the indicator regardless of which department/RET/College-Wide
-        # bucket it landed in. An indicator is only ever cascaded as one College-Wide row OR as
-        # N per-department/RET rows in the same term, never both, so an unconditional SUM
-        # reproduces the department-split total (e.g. 15+15+15+6+0 = 51 report of grades)
-        # exactly as well as it reproduces a single College-Wide row's own value.
+        # The Dean answers for the college-wide total of an indicator that's actually cascaded
+        # to departments/RET -- sum every non-College-Wide cascaded_quotas row for it (e.g.
+        # 15+15+15+6+0 = 51 report of grades). A College-Wide-only cascade is deliberately
+        # excluded here: nobody personally holds it as their own committed target (it isn't
+        # distributed to individual faculty the way Instruction/Support work is -- e.g. "80% of
+        # undergraduate student population enrolled in priority programs" is an institutional
+        # statistic, not something any regular faculty member submits evidence for), so summing
+        # it in would produce a "Departmental Oversight" row with real, real evidence to link to.
+        # Left in the College-Wide pool instead -- get_designated_faculty_draft_preview's
+        # cw_quotas -- so it's still manually pickable and personally evidence-able, exactly as
+        # it was before the Dean got an oversight role at all.
         query = """
             SELECT cq.indicator_id,
                    SUM(cq.total_target_value) AS total_target_value,
@@ -243,6 +248,7 @@ def get_oversight_targets(cursor, emp_id, term_id):
                   AND dt.is_admin_function = 1
             WHERE mi.term_id = %s
               AND tc.slug IN ('instruction', 'support')
+              AND cq.assigned_to_role != 'College-Wide'
               AND cq.total_target_value > 0
             GROUP BY cq.indicator_id, mi.indicator_description, mi.efficiency_type,
                      tc.category_name, tc.slug, tc.display_order,
@@ -334,13 +340,16 @@ def get_oversight_indicator_ids(cursor, emp_id, term_id):
         return set()
 
     if role == ROLE_DEAN_ALL_DEPARTMENTS:
+        # College-Wide-only cascades excluded -- see get_oversight_targets's Dean branch for why.
         query = """
             SELECT cq.indicator_id
             FROM tbl_cascaded_quotas cq
             JOIN tbl_master_indicators mi ON cq.indicator_id = mi.indicator_id
             JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
             WHERE mi.term_id = %s
-              AND tc.slug IN ('instruction', 'support') AND cq.total_target_value > 0
+              AND tc.slug IN ('instruction', 'support')
+              AND cq.assigned_to_role != 'College-Wide'
+              AND cq.total_target_value > 0
         """
         rows = timed_query(cursor, query, (term_id,), label="get_oversight_indicator_ids_dean")
     else:
@@ -367,9 +376,24 @@ def get_oversight_evidence(cursor, emp_id, term_id, indicator_id):
     indicators only -- see the aggregation rule inline below); plus the evidence files behind
     those numbers for a read-only viewer.
 
-    Scope mirrors get_program_chair_evidence_faculty / get_ret_chair_evidence_faculty exactly:
-    a Program Chair's oversight role is their own specialization string; the RET Chair's is
-    ROLE_RET, which has no specialization -- college-wide instead.
+    Scope mirrors get_specialization_faculty -- who the Program Chair actually allocated to --
+    rather than get_program_chair_evidence_faculty, which is a *review-routing* list and
+    deliberately excludes every designated designation because the Dean, not the chair, reviews
+    their evidence. That exclusion has no place in an aggregation: the chair's oversight quota
+    is the department's whole cascade, and routes/prog_chair.py computes its distribution as
+    assigned_per_faculty * all_faculty_count -- a count that includes the chair themselves, the
+    RET Chair, the Dean and every plain Designated Faculty member in the department. Filtering
+    them out of the numerator while the denominator still counts them is what left a chair's own
+    (and their department's designated faculty's) uploads unlinked and the oversight row
+    under-scored. is_admin_function = 0 is the real discriminator here and stands alone: it
+    already excludes every other chair's oversight copy and every freely-picked College-Wide
+    pool item, both of which carry is_admin_function = 1.
+
+    A Program Chair's oversight role is their own department, matched on specialization --
+    the column tbl_cascaded_quotas.assigned_to_role is keyed on (see the scope clause below
+    for why assigned_program is deliberately not consulted, unlike in
+    get_specialization_faculty). The RET Chair's role is ROLE_RET, which has no
+    specialization -- college-wide instead; neither does the Dean's.
     """
     from app.models.connection import timed_query
     from app.models.institution import ROLE_RET, ROLE_DEAN_ALL_DEPARTMENTS
@@ -392,6 +416,14 @@ def get_oversight_evidence(cursor, emp_id, term_id, indicator_id):
     # does the Dean's: their oversight spans every department at once, so there is no single
     # specialization value to match against.
     if role not in (ROLE_RET, ROLE_DEAN_ALL_DEPARTMENTS):
+        # specialization only, deliberately NOT get_specialization_faculty's
+        # "specialization OR assigned_program". The two columns hold different things:
+        # specialization is the department ('DST Program'), which is exactly what
+        # tbl_cascaded_quotas.assigned_to_role is keyed on, while assigned_program is the
+        # degree program ('BSIT') and is never a cascade target. Matching on it here would
+        # be inert at best and, for any profile whose specialization happened to equal
+        # another's assigned_program, would silently sweep the whole college into one
+        # chair's oversight total -- an inflated *rating*, not just a longer list.
         scope_clause = "AND ep.specialization = %s"
         params.append(role)
 
@@ -404,8 +436,6 @@ def get_oversight_evidence(cursor, emp_id, term_id, indicator_id):
         WHERE ct.indicator_id = %s
           AND mi.term_id = %s
           AND ct.is_admin_function = 0
-          AND (ep.designation IS NULL OR ep.designation = ''
-               OR ep.designation NOT IN ('Designated Faculty', 'Program Chair', 'RET Chair', 'Dean'))
           {scope_clause}
     """
     rows = timed_query(cursor, query, tuple(params), label="get_oversight_evidence_targets")

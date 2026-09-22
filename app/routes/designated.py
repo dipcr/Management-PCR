@@ -148,6 +148,13 @@ def designated_dashboard(conn, cursor):
             """, (emp_id, term_id))
             alloc_ids = {r[0] for r in cursor.fetchall()}
 
+            # Dean-only: a Support-slug oversight total counts as a Core Function, not a
+            # Strategic Priorities/Support one -- mirrors app/models/ipcr_form.py's
+            # build_ipcr_sections and app/models/scoring.py's compute_ipcr_score, which already
+            # score/print it that way. Resolved once per request rather than per row.
+            from app.models.criteria import get_category_id, SLUG_SUPPORT
+            dean_support_category_id = get_category_id(cursor, SLUG_SUPPORT) if designation == 'Dean' else None
+
             dpcr_targets = get_designated_committed_targets(cursor, emp_id, term_id)
             for t in dpcr_targets:
                 t['is_selected'] = True
@@ -162,6 +169,9 @@ def designated_dashboard(conn, cursor):
                         'Teaching Load' in (t.get('indicator_description') or '') or t['indicator_id'] in alloc_ids):
                     t['is_core'] = True
                     t['is_locked'] = True
+                elif (dean_support_category_id and t.get('is_admin_function')
+                        and t.get('category_id') == dean_support_category_id):
+                    t['is_core'] = True
                 # is_oversight_cascade is already set by get_designated_committed_targets
                 # (narrower than is_admin_function, which is also 1 for a freely-picked
                 # Strategic Priorities/Support item, not just a genuine departmental

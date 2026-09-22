@@ -230,10 +230,16 @@ def prog_chair_faculty_evidence_details(emp_id):
             return jsonify({'success': False, 'message': 'Faculty member not found'}), 404
         faculty_name = f"{fac_row[0]} {fac_row[1]}"
 
-        from app.models.criteria import is_designated
+        from app.models.criteria import is_designated, get_category_id, SLUG_SUPPORT
         from app.models.faculty import get_faculty_committed_targets, get_evidence_by_target
         targets = get_faculty_committed_targets(cursor, emp_id, term_id)
         designated = is_designated(fac_row[3])
+        reviewee_designation = fac_row[3] or ''
+        # Dean-only: a Support-slug oversight total counts as a Core Function, same as
+        # app/models/ipcr_form.py's build_ipcr_sections and app/routes/designated.py's own
+        # dashboard. Unreachable in the normal Program Chair -> regular faculty workflow, but
+        # kept consistent in case this endpoint is ever hit for a Dean's own package.
+        dean_support_category_id = get_category_id(cursor, SLUG_SUPPORT) if reviewee_designation == 'Dean' else None
 
         for t in targets:
             cat_name = t.get('category_name', '')
@@ -244,7 +250,11 @@ def prog_chair_faculty_evidence_details(emp_id):
             # personal teaching share or their departmental oversight quota. See "My IPCR"
             # (designated_dashboard.html) for the same rule.
             if designated:
-                t['is_core'] = not bool(t.get('is_admin_function'))
+                if (dean_support_category_id and t.get('is_admin_function')
+                        and t.get('category_id') == dean_support_category_id):
+                    t['is_core'] = True
+                else:
+                    t['is_core'] = not bool(t.get('is_admin_function'))
 
             # Program Chair now approves all evidence for regular faculty, Research &
             # Extension included.

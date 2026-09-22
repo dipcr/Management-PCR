@@ -741,10 +741,22 @@ def get_department_accomplishment_summary(cursor, specialization, term_id):
     Department-wide progress on the indicators the Dean cascaded to this Program Chair's own
     specialization -- the same cascade rows that become the chair's own Departmental Oversight
     targets on their personal IPCR (see get_oversight_targets, app/models/designated.py). Quota
-    vs. how much of it has actually cleared Program Chair verification so far, summed across
-    every regular faculty member in the department who holds that indicator as their own
-    personal committed target (is_admin_function = 0; a chair's own oversight copy of the same
-    indicator is excluded, same as it is everywhere else this scoping is used).
+    vs. how much of it has actually cleared verification so far, summed across every member of
+    the department who holds that indicator as their own personal committed target
+    (is_admin_function = 0; a chair's own oversight copy of the same indicator is excluded,
+    same as it is everywhere else this scoping is used).
+
+    "Every member" deliberately includes the department's designated faculty -- the chair
+    themselves, the RET Chair, the Dean and any plain Designated Faculty member -- because
+    get_specialization_faculty allocates to them and this dashboard's own quota figure
+    (assigned_per_faculty * all_faculty_count, routes/prog_chair.py) counts them. Excluding
+    them here, as the review-routing queries do for their own separate reason, left this card
+    reporting a fraction of a quota it had already handed out. Membership and specialization
+    scoping are kept identical to get_oversight_evidence (app/models/designated.py) on
+    purpose: this card and the chair's own Departmental Oversight row must never disagree
+    about the same number. Scoping is specialization-only -- assigned_program holds the
+    degree program ('BSIT'), never a department, so it is not a cascade target and must not
+    widen this scope, whatever get_specialization_faculty does for allocation.
 
     "Verified Accomplished" is deliberately Approved-only, not the looser "not Rejected/
     Returned" convention a target's own actual_quantity uses for scoring (see
@@ -771,8 +783,6 @@ def get_department_accomplishment_summary(cursor, specialization, term_id):
             JOIN tbl_evidence_repo er ON er.target_id = ct.target_id AND er.verification_status = 'Approved'
             WHERE ct.is_admin_function = 0
               AND ep.specialization = %s
-              AND (ep.designation IS NULL OR ep.designation = ''
-                   OR ep.designation NOT IN ('Designated Faculty', 'Program Chair', 'RET Chair', 'Dean'))
             GROUP BY ct.indicator_id
         ) agg ON agg.indicator_id = cq.indicator_id
         -- The chair's own Departmental Oversight row for this same indicator (get_oversight_
