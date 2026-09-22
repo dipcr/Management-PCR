@@ -247,14 +247,27 @@ def is_faculty_ret_eligible(cursor, emp_id, term_id):
 
 def is_faculty_resubmission(cursor, emp_id, term_id):
     """
-    True once a Program Chair review record exists for this faculty/term — i.e. this is
-    at least the faculty member's second pass through the submit pipeline (a first
-    submission already happened, or was returned for corrections). Shared by the dashboard
-    gating check, the submit route, and submit_faculty_ipcr so all three agree on what
-    counts as a resubmission.
+    True once a Program Chair OR RET Chair review record exists for this faculty/term —
+    i.e. this is at least the faculty member's second pass through the submit pipeline (a
+    first submission already happened, or was returned for corrections). Shared by the
+    dashboard gating check, the submit route, and submit_faculty_ipcr so all three agree on
+    what counts as a resubmission.
+
+    Checks both tables because RET review happens BEFORE Program Chair review: a submission
+    rejected by the RET Chair never reaches tbl_ipcr_chair_review, so checking that table
+    alone would misclassify an RET-rejected resubmission as a first-time submission and
+    incorrectly re-run check_faculty_draft_gating's prerequisite checks on it.
     """
     cursor.execute("""
         SELECT 1 FROM tbl_ipcr_chair_review
+        WHERE emp_id = %s AND term_id = %s
+        LIMIT 1
+    """, (emp_id, term_id))
+    if cursor.fetchone() is not None:
+        return True
+
+    cursor.execute("""
+        SELECT 1 FROM tbl_ipcr_ret_review
         WHERE emp_id = %s AND term_id = %s
         LIMIT 1
     """, (emp_id, term_id))

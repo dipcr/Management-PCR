@@ -574,6 +574,32 @@
         /* text-dark overrides */
         .badge.text-dark { color: var(--c-text-sub) !important; }
 
+        /* ── Nav Pills / Tabs ──
+           Bootstrap's nav-pills active/hover colors are baked into the shipped CDN
+           stylesheet as literal hex values (not var(--bs-primary) references), so
+           retinting --bs-primary above doesn't reach them -- override explicitly,
+           matching the sidebar's own .nav-item treatment (7px radius, not a full pill,
+           tinted hover instead of a hard color swap). */
+        .nav-pills .nav-link {
+            font-size: 13.5px !important;
+            font-weight: 500 !important;
+            font-family: var(--font-body);
+            color: var(--c-text-sub) !important;
+            border-radius: 7px !important;
+            padding: 8px 16px !important;
+            transition: background 0.12s ease, color 0.12s ease !important;
+        }
+        .nav-pills .nav-link:hover {
+            background: var(--c-surface-alt) !important;
+            color: var(--c-accent) !important;
+        }
+        .nav-pills .nav-link.active,
+        .nav-pills .show > .nav-link {
+            background: var(--c-accent) !important;
+            color: #fff !important;
+            font-weight: 600 !important;
+        }
+
         /* ── Buttons ── */
         .btn {
             font-size: 13px !important;

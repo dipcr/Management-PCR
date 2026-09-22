@@ -1,0 +1,36 @@
+{% extends "emails/base_email.html" %}
+
+{% block title %}Account Claim Decision{% endblock %}
+
+{% block content %}
+    {% if approved %}
+    <span class="badge-status badge-success">Claim Approved</span>
+    <p>Dear <strong>{{ faculty_name }}</strong>,</p>
+    <p>Your D-IPCR account claim has been <strong>approved</strong> by the Administrator. You may now sign in using the credentials you registered with.</p>
+    {% else %}
+    <span class="badge-status badge-primary" style="background-color: #fee2e2; color: #b91c1c; border-color: #fecaca;">Claim Denied</span>
+    <p>Dear <strong>{{ faculty_name }}</strong>,</p>
+    <p>Your D-IPCR account claim has been <strong>denied</strong> by the Administrator. This does not permanently block your access — you may submit a new registration if you believe this was a mistake (e.g. an incorrect Employee ID Number).</p>
+    {% endif %}
+
+    <div class="info-card">
+        <div class="info-row">
+            <span class="info-label">Name:</span>
+            <span class="info-value">{{ faculty_name }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Decision:</span>
+            <span class="info-value" style="color: {% if approved %}#15803d{% else %}#b91c1c{% endif %}; font-weight: 700;">{{ 'Approved' if approved else 'Denied' }}</span>
+        </div>
+    </div>
+
+    {% if not approved %}
+    <p style="font-size: 14px; line-height: 1.6; color: #4b5563;">
+        If you have questions about this decision, please contact the Administrator directly.
+    </p>
+    {% endif %}
+
+    <div style="text-align: center;">
+        <a href="{{ action_url }}" class="btn-action">{{ 'Go to Login' if approved else 'Register Again' }}</a>
+    </div>
+{% endblock %}

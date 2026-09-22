@@ -53,15 +53,15 @@ def authenticate():
         flash("Your account has been deactivated. Please contact the administrator.", "danger")
         return redirect(url_for('auth.login'))
 
+    if acc_status_row and acc_status_row[0] == 'Locked':
+        flash("Your account has been locked by the administrator. Please contact IT/Administration for assistance.", "danger")
+        return redirect(url_for('auth.login'))
+
     # Normalize role for matching
     role = role.upper() if role else ""
 
     if verification == "PENDING":
         flash("Your account claim is pending administrator approval.", "warning")
-        return redirect(url_for('auth.login'))
-
-    if verification == "REJECTED":
-        flash("Your account claim was denied. Please contact the administrator.", "danger")
         return redirect(url_for('auth.login'))
 
     if verification != "APPROVED":
