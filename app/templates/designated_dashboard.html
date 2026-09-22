@@ -1702,6 +1702,11 @@
             efficiencyType: {{ (target.efficiency_type or '') | tojson }},
             efficiencyRating: {{ target.efficiency_rating_E if target.efficiency_rating_E else 'null' }},
             printRemarks: {{ (target.print_remarks or '') | tojson }},
+            isOversightRow: {{ 'true' if target.is_oversight_cascade else 'false' }},
+            {# The contributors' MAX this row's Timeliness defaults to, shown as the value a
+               hand-entered duration is overriding (apply_oversight_overrides). #}
+            maxActualDurationValue: {{ target.max_actual_duration_value if target.max_actual_duration_value else 'null' }},
+            isDurationOverridden: {{ 'true' if target.is_duration_overridden else 'false' }},
             hasReturned: {{ 'true' if (target.evidence_list and target.evidence_list | selectattr('verification_status', 'in', ['Returned', 'Rejected']) | list | length > 0) else 'false' }}
         },{% endif %}{% endfor %}
     };
@@ -1807,33 +1812,39 @@
         // oversight row stays fully derived/read-only, same as before this feature existed --
         // letting a chair upload their own number on top would double-count past the
         // department's actual cascaded total, which the no-upload rule exists to prevent.
-        const oversightLocked = isOversight && !IS_DEAN;
-        const isLocked = HAS_FINAL_IPCR || oversightLocked || (EVIDENCE_SUBMITTED && !targetHasReturned);
+        const oversightUploadLocked = isOversight && !IS_DEAN;
+        const isLocked = HAS_FINAL_IPCR || oversightUploadLocked || (EVIDENCE_SUBMITTED && !targetHasReturned);
+        // Accomplishment Details is NOT gated on oversight any more. Accomplished Qty stays
+        // derived (a chair has no upload slot above), but Timeliness is the chair's/Dean's own
+        // statement of when the department finished -- see save_accomplishment_details and
+        // apply_oversight_overrides. Only the real locks close this editor.
+        const accomplishmentLocked = HAS_FINAL_IPCR || (EVIDENCE_SUBMITTED && !targetHasReturned);
 
         form.querySelectorAll('input, button, select, textarea').forEach(el => {
             el.disabled = isLocked;
         });
 
         const completedIn = document.getElementById('evidenceCompletedIn');
-        if (completedIn) completedIn.disabled = isLocked;
+        if (completedIn) completedIn.disabled = accomplishmentLocked;
+        // Efficiency stays fully derived on an oversight row (the rounded average across
+        // contributors), so the control is disabled there whatever the lock state --
+        // save_accomplishment_details refuses to persist it and this would be a dead input.
         const effSelect = document.getElementById('evidenceEfficiency');
-        if (effSelect) effSelect.disabled = isLocked;
+        if (effSelect) effSelect.disabled = accomplishmentLocked || isOversight;
         const remarks = document.getElementById('evidenceRemarks');
-        if (remarks) remarks.disabled = isLocked;
+        if (remarks) remarks.disabled = accomplishmentLocked;
 
-        if (footerSubmitBtn) footerSubmitBtn.disabled = isLocked;
+        if (footerSubmitBtn) footerSubmitBtn.disabled = accomplishmentLocked;
 
-        // A chair's oversight row still has no self-reported Q/duration of its own at all --
-        // hide the whole Accomplishment Details editor rather than just disabling it, so it
-        // doesn't look like a broken form. Shown for the Dean's own oversight rows, same as
-        // any personal target.
-        if (accomplishmentSection) accomplishmentSection.style.display = oversightLocked ? 'none' : '';
+        // Shown on every row now, oversight included: a chair's oversight row has no
+        // self-reported Accomplished Qty, but its Timeliness is theirs to state.
+        if (accomplishmentSection) accomplishmentSection.style.display = '';
 
         if (notice) {
             notice.style.display = (isLocked || isOversight) ? '' : 'none';
-            if (oversightLocked) {
+            if (oversightUploadLocked) {
                 notice.className = 'alert alert-info border-0 small mb-0';
-                notice.innerHTML = '<i class="ti ti-sitemap me-2"></i>This is a Departmental Oversight target — its evidence and Accomplished Qty are linked automatically from your department\'s/RET\'s faculty, not uploaded here.';
+                notice.innerHTML = '<i class="ti ti-sitemap me-2"></i>This is a Departmental Oversight target — its evidence and Accomplished Qty are linked automatically from your department\'s/RET\'s faculty, not uploaded here. You can still set its <strong>Timeliness</strong> below.';
             } else if (isLocked && HAS_FINAL_IPCR) {
                 notice.className = 'alert alert-success border-0 small mb-0';
                 notice.innerHTML = '<i class="ti ti-shield-lock me-2"></i>Your evidence submission has been fully verified and approved by the Dean. Evidence gathering is now locked.';
@@ -1873,12 +1884,34 @@
         if (effSelect) effSelect.classList.remove('is-invalid');
         const effErr = document.getElementById('efficiencyErrorMsg');
         if (effErr) effErr.style.display = 'none';
-        if ((meta.efficiencyType || '') === 'Client Satisfaction') {
+        if ((meta.efficiencyType || '') === 'Client Satisfaction' && !meta.isOversightRow) {
             effRow.style.display = '';
             effSelect.value = meta.efficiencyRating != null ? String(meta.efficiencyRating) : '';
         } else {
+            // Hidden on an oversight row whatever the efficiency_type: E there is the rounded
+            // average across contributors, not this person's to state. Leaving it visible
+            // would also let saveAccomplishmentDetails' required-check block saving Timeliness.
             effRow.style.display = 'none';
             effSelect.value = '';
+        }
+
+        // On an oversight row, "Completed in" defaults to the contributors' MAX but is the
+        // chair's/Dean's to override -- say which of the two is currently in the box.
+        const durHint = document.getElementById('evidenceOversightDurationHint');
+        if (durHint) {
+            if (meta.isOversightRow) {
+                const unit = meta.durationUnit || '';
+                const maxTxt = meta.maxActualDurationValue != null
+                    ? `${meta.maxActualDurationValue} ${unit}`.trim()
+                    : 'not reported yet';
+                durHint.innerHTML = meta.isDurationOverridden
+                    ? `You have set this by hand. Linked faculty's slowest: <strong>${escapeHtml(maxTxt)}</strong>. Clear the box to go back to that.`
+                    : `Defaulting to your linked faculty's slowest completion (<strong>${escapeHtml(maxTxt)}</strong>). Type a value to override it.`;
+                durHint.style.display = '';
+            } else {
+                durHint.style.display = 'none';
+                durHint.innerHTML = '';
+            }
         }
 
         document.getElementById('evidenceRemarks').value = meta.printRemarks || '';
@@ -2241,6 +2274,8 @@
                                 <span id="evidenceDurationUnit" class="text-muted small"></span>
                             </div>
                             <small class="text-muted" style="font-size: 0.72rem;">Target: <span id="evidenceTargetDuration">—</span></small>
+                            <small class="text-muted d-block mt-1" id="evidenceOversightDurationHint"
+                                   style="font-size: 0.72rem; display: none;"></small>
                         </div>
                     </div>
 

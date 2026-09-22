@@ -536,7 +536,11 @@ def apply_oversight_overrides(cursor, emp_id, term_id, rows):
     Post-processes a list of committed-target rows (dicts with at least 'indicator_id',
     'is_admin_function', and the fields build_actual_accomplishment/compute_target_rating
     need) so that every genuine Departmental Oversight row reflects the scoped faculty's
-    real work instead of its own (never-uploaded-to) actual_quantity/actual_duration_value.
+    real work instead of its own (never-uploaded-to) actual_quantity.
+
+    Timeliness is the exception: a chair/Dean who has explicitly set actual_duration_value on
+    the oversight row keeps that value, and the contributors' MAX is only the default when
+    they haven't (see the inline note below).
 
     This is the one place the override happens, called from both
     get_designated_committed_targets (the Evidence Gathering dashboard/readiness gate) and
@@ -561,7 +565,18 @@ def apply_oversight_overrides(cursor, emp_id, term_id, rows):
             continue
         agg = get_oversight_evidence(cursor, emp_id, term_id, r['indicator_id'])
         r['actual_quantity'] = agg['total_actual_quantity']
-        r['actual_duration_value'] = agg['max_actual_duration_value']
+        # Timeliness is the one derived field a chair/Dean may override by hand
+        # (save_accomplishment_details). Read the row's own actual_duration_value BEFORE
+        # overwriting it: when it's set, the chair has deliberately stated when the
+        # department finished, and that wins over the contributors' MAX. Unlike the summed
+        # quantity there is nothing to inflate here -- a duration replaces a duration -- so
+        # the no-self-reporting rule that protects Accomplished Qty doesn't apply to T.
+        # MAX stays available to the UI as the derived default it's overriding.
+        own_duration = r.get('actual_duration_value')
+        r['max_actual_duration_value'] = agg['max_actual_duration_value']
+        r['is_duration_overridden'] = own_duration is not None
+        r['actual_duration_value'] = (own_duration if own_duration is not None
+                                      else agg['max_actual_duration_value'])
         r['evidence_count'] = agg['evidence_count']
         # Only meaningful for a Client Satisfaction indicator (rate_efficiency ignores this
         # field for every other efficiency_type) -- see get_oversight_evidence's

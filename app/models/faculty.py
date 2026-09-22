@@ -805,6 +805,9 @@ def save_accomplishment_details(conn, cursor, emp_id, target_id, actual_duration
     indicator is client-satisfaction rated, Efficiency (E). Ownership is enforced so a
     faculty member can only update their own committed targets.
 
+    On a Departmental Oversight row this accepts Timeliness only -- see the inline note
+    below for why T is self-reportable there while Accomplished Qty and E are not.
+
     print_remarks is the free-text note that appears in the printed IPCR's Remarks column.
     """
     from app.models.scoring import COMPLETION_STATUSES
@@ -831,35 +834,47 @@ def save_accomplishment_details(conn, cursor, emp_id, target_id, actual_duration
             if not has_ret:
                 return False, "This target is submitted and locked for verification."
 
-        # A Dean's Departmental Oversight row's Accomplished Qty is a mix of the college-wide
-        # linked faculty evidence AND whatever the Dean uploads directly here (see
-        # get_oversight_evidence) -- Completed-in-duration/Efficiency for their own contribution
-        # is exactly what this endpoint is for. Not extended to Program Chair/RET Chair: their
-        # oversight rows are meant to be fully derived from real department faculty work, and
-        # letting a chair self-report on top would double-count past the department's actual
-        # cascaded total -- the original reason this was rejected for every oversight row.
+        # On a Departmental Oversight row, Timeliness is the only field its holder may state
+        # by hand. Accomplished Qty stays fully derived for a Program Chair/RET Chair (they
+        # have no upload slot at all) because quantity is SUMmed -- self-reporting on top
+        # would push the row past the department's actual cascaded total, which is what the
+        # no-self-reporting rule exists to prevent. That reasoning does not carry to T:
+        # duration is MAXed, not summed, so stating one replaces a number rather than adding
+        # to a total, and the contributors' MAX is a poor proxy anyway (a single straggler
+        # drags the whole department's T down, and it's NULL when nobody reported at all).
+        # apply_oversight_overrides honours whatever is written here and falls back to the
+        # MAX when it's NULL.
+        #
+        # efficiency_rating_E is deliberately NOT accepted here for an oversight row: it
+        # stays derived as the rounded average across contributors, so persisting a value
+        # the override discards on the next read would be a silent dead write. The oversight
+        # UPDATE below simply leaves that column alone.
+        is_oversight_row = False
         if row[2]:
             from app.models.designated import get_oversight_indicator_ids
-            if row[1] in get_oversight_indicator_ids(cursor, emp_id, row[3]):
-                cursor.execute("SELECT designation FROM tbl_employee_profiles WHERE emp_id = %s", (emp_id,))
-                desig_row = cursor.fetchone()
-                if (desig_row[0] if desig_row else '') != 'Dean':
-                    return False, ("This is a Departmental Oversight target -- its Accomplished Qty and "
-                                    "Timeliness are derived automatically from your department's/RET's "
-                                    "faculty evidence.")
+            is_oversight_row = row[1] in get_oversight_indicator_ids(cursor, emp_id, row[3])
 
         if completion_status and completion_status not in COMPLETION_STATUSES:
             return False, "Invalid completion status."
         completion_status = completion_status or 'COMPLETED'
 
         remarks = (print_remarks or '').strip()[:255] or None
-        cursor.execute("""
-            UPDATE tbl_committed_targets
-            SET actual_duration_value = %s, completion_status = %s, efficiency_rating_E = %s,
-                print_remarks = %s
-            WHERE target_id = %s
-        """, (actual_duration_value, completion_status, efficiency_rating_E,
-              remarks, target_id))
+        if is_oversight_row:
+            # efficiency_rating_E is left untouched, so an oversight row never carries a
+            # stale self-reported rating of its own on record.
+            cursor.execute("""
+                UPDATE tbl_committed_targets
+                SET actual_duration_value = %s, completion_status = %s, print_remarks = %s
+                WHERE target_id = %s
+            """, (actual_duration_value, completion_status, remarks, target_id))
+        else:
+            cursor.execute("""
+                UPDATE tbl_committed_targets
+                SET actual_duration_value = %s, completion_status = %s, efficiency_rating_E = %s,
+                    print_remarks = %s
+                WHERE target_id = %s
+            """, (actual_duration_value, completion_status, efficiency_rating_E,
+                  remarks, target_id))
         conn.commit()
         return True, "Accomplishment details saved."
     except Exception as e:
@@ -898,8 +913,27 @@ def _clear_accomplishment_details_if_unaccomplished(cursor, target_id, total):
     *remove* evidence (delete, unclaim); upload/claim only ever add quantity, so a fresh
     zero there means nothing was ever reported yet, and clearing would risk wiping out a
     completion status the faculty member deliberately set before uploading a qty-0 file.
+
+    Never touches a Departmental Oversight row. `total` there is only that row's own direct
+    uploads (the Dean's, on the one oversight row that accepts them) and says nothing about
+    the department's real accomplishment, which is aggregated from the scoped faculty's own
+    targets instead (get_oversight_evidence). Its actual_duration_value is also no longer a
+    by-product of an upload but a deliberate Timeliness statement by the chair/Dean
+    (save_accomplishment_details), so a Dean deleting their last file here must not silently
+    wipe it.
     """
     if total == 0:
+        cursor.execute("""
+            SELECT ct.emp_id, ct.indicator_id, ct.is_admin_function, mi.term_id
+            FROM tbl_committed_targets ct
+            JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
+            WHERE ct.target_id = %s
+        """, (target_id,))
+        row = cursor.fetchone()
+        if row and row[2]:
+            from app.models.designated import get_oversight_indicator_ids
+            if row[1] in get_oversight_indicator_ids(cursor, row[0], row[3]):
+                return
         cursor.execute("""
             UPDATE tbl_committed_targets
             SET actual_duration_value = NULL, completion_status = NULL, efficiency_rating_E = NULL
