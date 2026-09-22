@@ -718,8 +718,20 @@ def dean_designated_evidence_details(emp_id):
         from app.models.designated import get_oversight_evidence
         targets = get_faculty_committed_targets(cursor, emp_id, term_id)
 
+        # Dean-only: a Support-slug oversight total counts as a Core Function here too, same
+        # as app/models/ipcr_form.py's build_ipcr_sections and app/routes/designated.py's own
+        # dashboard -- otherwise this modal would show it under Strategic Priorities/Support
+        # while the printed IPCR shows it under Core Functions.
+        from app.models.criteria import get_category_id, SLUG_SUPPORT
+        reviewee_designation = fac_row[3] or ''
+        dean_support_category_id = get_category_id(cursor, SLUG_SUPPORT) if reviewee_designation == 'Dean' else None
+
         for t in targets:
-            t['is_core'] = not bool(t.get('is_admin_function'))
+            if (dean_support_category_id and t.get('is_admin_function')
+                    and t.get('category_id') == dean_support_category_id):
+                t['is_core'] = True
+            else:
+                t['is_core'] = not bool(t.get('is_admin_function'))
             if t.get('is_oversight_cascade'):
                 # A Departmental Oversight row was never itself the target of a real upload --
                 # the evidence proving its (already-aggregated) quantity lives on the scoped

@@ -2,7 +2,9 @@
 
 {% block flash_messages %}{% endblock %}
 
-{% block role_display %}Designated Faculty{% endblock %}
+{# A visiting chair or Dean keeps their own role on the chip; only plain Designated
+   Faculty, who have no other dashboard, are labelled by this page. #}
+{% block role_display %}{{ home_nav.role_display if home_nav else 'Designated Faculty' }}{% endblock %}
 
 {% block sidebar_items %}
 {# Visitors who arrived from another dashboard (Program Chair, RET Chair, Dean) keep their
@@ -295,6 +297,12 @@
                                     <span class="badge bg-primary text-white border mb-1"><i class="ti ti-pin-filled me-1"></i>Core Function</span>
                                     {% if target.is_cascaded %}
                                     <span class="badge bg-info text-dark border mb-1 ms-1"><i class="ti ti-sitemap me-1"></i>Cascaded from Chair</span>
+                                    {% endif %}
+                                    {% if target.is_oversight_cascade %}
+                                    {# Dean-only: a Support-slug oversight total (see routes/designated.py) counts as a
+                                       Core Function, but its quantity is still the college-wide cascaded total, not
+                                       personal work -- same badge Table 2 uses for every other oversight row. #}
+                                    <span class="badge bg-info text-dark border mb-1 ms-1"><i class="ti ti-sitemap me-1"></i>Departmental Oversight — Fixed Quota</span>
                                     {% endif %}
                                     {# Core Function rows have no editable description input of their own (the row is
                                        locked to the Program Chair's own allocation), so this has to be the real

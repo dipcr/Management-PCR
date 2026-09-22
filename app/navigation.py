@@ -9,12 +9,19 @@ their bearings without the panels having to be duplicated per dashboard.
 
 Each item is (section_id, label, icon). Section ids match the `.dashboard-section` ids on the
 home dashboard; base.html opens the matching section when the URL carries it as a hash.
+`role_display` is the sidebar role chip on the visitor's own dashboard, repeated here so the
+shared page identifies them by their real role rather than by the page they are standing on.
+
+Keep every entry in step with the matching `{% block sidebar_items %}`/`role_display` in
+`app/templates/<role>_dashboard.html` -- nothing links the two, so a phase renamed, added or
+removed on a dashboard has to be mirrored here by hand.
 """
 
 HOME_NAV = {
     'DEAN': {
         'endpoint': 'dean.dean_dashboard',
         'label': 'Dean Dashboard',
+        'role_display': 'College Dean',
         'groups': [
             ('Dashboard', [
                 ('nav-overview', 'Overview', 'ti-layout-dashboard'),
@@ -22,8 +29,8 @@ HOME_NAV = {
             ('Phases', [
                 ('nav-phase1', 'Quota Cascading', 'ti-sitemap'),
                 ('nav-draft-ipcr', 'IPCR Draft Approval', 'ti-file-check'),
-                ('nav-phase6', 'Batch Approvals', 'ti-checks'),
                 ('nav-target-assign', 'Target Assignment', 'ti-user-plus'),
+                ('nav-department-accomplishment', 'Department Accomplishment', 'ti-chart-bar'),
                 ('nav-evidence-verification', 'Evidence Verification', 'ti-file-search'),
                 ('nav-final-verification', 'Final Verification', 'ti-clipboard-check'),
             ]),
@@ -32,6 +39,7 @@ HOME_NAV = {
     'PROGRAM_CHAIR': {
         'endpoint': 'prog_chair.prog_chair_dashboard',
         'label': 'Program Chair Dashboard',
+        'role_display': 'Program Chair',
         'groups': [
             ('Dashboard', [
                 ('nav-overview', 'Overview', 'ti-layout-dashboard'),
@@ -48,6 +56,7 @@ HOME_NAV = {
     'RET_CHAIR': {
         'endpoint': 'ret_chair.ret_chair_dashboard',
         'label': 'RET Chair Dashboard',
+        'role_display': 'RET Chair',
         'groups': [
             ('Dashboard', [
                 ('nav-overview', 'Overview', 'ti-layout-dashboard'),
@@ -59,7 +68,7 @@ HOME_NAV = {
                 ('nav-phase4', 'Commitments', 'ti-user-check'),
             ]),
             ('Verification', [
-                ('nav-evidence-verification', 'Evidence Verification', 'ti-file-check'),
+                ('nav-evidence-verification', 'Evidence Monitor', 'ti-file-check'),
             ]),
         ],
     },
