@@ -2,7 +2,9 @@
 
 {% block flash_messages %}{% endblock %}
 
-{% block role_display %}Designated Faculty{% endblock %}
+{# A visiting chair or Dean keeps their own role on the chip; only plain Designated
+   Faculty, who have no other dashboard, are labelled by this page. #}
+{% block role_display %}{{ home_nav.role_display if home_nav else 'Designated Faculty' }}{% endblock %}
 
 {% block sidebar_items %}
 {# Visitors who arrived from another dashboard (Program Chair, RET Chair, Dean) keep their
