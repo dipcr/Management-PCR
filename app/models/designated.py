@@ -215,17 +215,14 @@ def get_oversight_targets(cursor, emp_id, term_id):
         return []
 
     if role == ROLE_DEAN_ALL_DEPARTMENTS:
-        # The Dean answers for the college-wide total of an indicator that's actually cascaded
-        # to departments/RET -- sum every non-College-Wide cascaded_quotas row for it (e.g.
-        # 15+15+15+6+0 = 51 report of grades). A College-Wide-only cascade is deliberately
-        # excluded here: nobody personally holds it as their own committed target (it isn't
-        # distributed to individual faculty the way Instruction/Support work is -- e.g. "80% of
-        # undergraduate student population enrolled in priority programs" is an institutional
-        # statistic, not something any regular faculty member submits evidence for), so summing
-        # it in would produce a "Departmental Oversight" row with real, real evidence to link to.
-        # Left in the College-Wide pool instead -- get_designated_faculty_draft_preview's
-        # cw_quotas -- so it's still manually pickable and personally evidence-able, exactly as
-        # it was before the Dean got an oversight role at all.
+        # The Dean answers for the college-wide total, not one department's share: sum every
+        # cascaded_quotas row for the indicator regardless of which department/RET/College-Wide
+        # bucket it landed in (e.g. 15+15+15+6+0 = 51 report of grades, or a single College-Wide
+        # row's own value). Some of these indicators (e.g. "80% of undergraduate student
+        # population enrolled in priority programs") are institutional statistics nobody
+        # personally holds as their own committed target -- get_oversight_evidence merges in
+        # the Dean's own directly-uploaded evidence for exactly this reason, so the row still
+        # has something real to show even when no scoped faculty member ever will.
         query = """
             SELECT cq.indicator_id,
                    SUM(cq.total_target_value) AS total_target_value,
@@ -248,7 +245,6 @@ def get_oversight_targets(cursor, emp_id, term_id):
                   AND dt.is_admin_function = 1
             WHERE mi.term_id = %s
               AND tc.slug IN ('instruction', 'support')
-              AND cq.assigned_to_role != 'College-Wide'
               AND cq.total_target_value > 0
             GROUP BY cq.indicator_id, mi.indicator_description, mi.efficiency_type,
                      tc.category_name, tc.slug, tc.display_order,
@@ -340,16 +336,13 @@ def get_oversight_indicator_ids(cursor, emp_id, term_id):
         return set()
 
     if role == ROLE_DEAN_ALL_DEPARTMENTS:
-        # College-Wide-only cascades excluded -- see get_oversight_targets's Dean branch for why.
         query = """
             SELECT cq.indicator_id
             FROM tbl_cascaded_quotas cq
             JOIN tbl_master_indicators mi ON cq.indicator_id = mi.indicator_id
             JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
             WHERE mi.term_id = %s
-              AND tc.slug IN ('instruction', 'support')
-              AND cq.assigned_to_role != 'College-Wide'
-              AND cq.total_target_value > 0
+              AND tc.slug IN ('instruction', 'support') AND cq.total_target_value > 0
         """
         rows = timed_query(cursor, query, (term_id,), label="get_oversight_indicator_ids_dean")
     else:
@@ -394,6 +387,15 @@ def get_oversight_evidence(cursor, emp_id, term_id, indicator_id):
     for why assigned_program is deliberately not consulted, unlike in
     get_specialization_faculty). The RET Chair's role is ROLE_RET, which has no
     specialization -- college-wide instead; neither does the Dean's.
+
+    Dean-only: also folds in the Dean's own oversight row, if it carries directly-uploaded
+    evidence (designated_upload_evidence / save_accomplishment_details no longer reject uploads
+    to a Dean's oversight target). Some indicators -- e.g. "80% of undergraduate student
+    population enrolled in priority programs" -- are institutional statistics no scoped faculty
+    member will ever personally hold, so without this the row would show zero evidence forever
+    even when the Dean has evidence of their own. Counted in the numeric totals below but kept
+    out of evidence_breakdown, which stays "other people's linked evidence" only -- see
+    own_target_ids. Not extended to Program Chair/RET Chair -- see the inline note below.
     """
     from app.models.connection import timed_query
     from app.models.institution import ROLE_RET, ROLE_DEAN_ALL_DEPARTMENTS
@@ -439,6 +441,35 @@ def get_oversight_evidence(cursor, emp_id, term_id, indicator_id):
           {scope_clause}
     """
     rows = timed_query(cursor, query, tuple(params), label="get_oversight_evidence_targets")
+
+    # Dean-only: the reviewee's own oversight row (is_admin_function=1, this same
+    # emp_id/indicator) can carry directly-uploaded evidence of its own -- see
+    # designated_upload_evidence / save_accomplishment_details, which no longer reject uploads
+    # to an oversight target, but only for a Dean. Some indicators (e.g. "80% of undergraduate
+    # student population enrolled in priority programs") are institutional statistics no scoped
+    # faculty member will ever personally hold, so without this a Dean's oversight row would
+    # show zero evidence forever even when they've uploaded their own. Deliberately NOT
+    # extended to Program Chair/RET Chair: their oversight rows are meant to be fully derived
+    # from real department faculty work, and letting a chair also upload their own number on
+    # top would let them double-count past the department's actual cascaded total -- exactly
+    # what the original no-upload rule on oversight rows existed to prevent. Folded into the
+    # numeric aggregate below when present, but excluded from evidence_breakdown -- that stays
+    # "other people's linked evidence" only; the Dean's own files are shown separately, as a
+    # normal actionable upload, by designated_target_evidence.
+    own_rows = []
+    own_target_ids = set()
+    if role == ROLE_DEAN_ALL_DEPARTMENTS:
+        own_query = """
+            SELECT ct.target_id, ct.actual_quantity, ct.actual_duration_value, ct.efficiency_rating_E
+            FROM tbl_committed_targets ct
+            JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
+            WHERE ct.indicator_id = %s AND mi.term_id = %s
+              AND ct.emp_id = %s AND ct.is_admin_function = 1
+        """
+        own_rows = timed_query(cursor, own_query, (indicator_id, term_id, emp_id), label="get_oversight_evidence_own")
+        own_target_ids = {r['target_id'] for r in own_rows}
+        rows = rows + own_rows
+
     if not rows:
         return empty
 
@@ -463,17 +494,26 @@ def get_oversight_evidence(cursor, emp_id, term_id, indicator_id):
     ratings = [r['efficiency_rating_E'] for r in reported_rows if r.get('efficiency_rating_E') is not None]
     avg_efficiency_rating = int(sum(ratings) / len(ratings) + 0.5) if ratings else None
 
-    faculty_by_target = {r['target_id']: f"{r['first_name']} {r['last_name']}".strip() for r in rows}
+    # Excludes own_target_ids: evidence_breakdown stays "other people's linked evidence" only
+    # -- the reviewee's own files, if any, are shown separately as a normal actionable upload
+    # (designated_target_evidence returns them under evidence_list, not breakdown).
+    faculty_by_target = {
+        r['target_id']: f"{r['first_name']} {r['last_name']}".strip()
+        for r in rows if r['target_id'] not in own_target_ids
+    }
 
     target_ids = list(faculty_by_target.keys())
-    placeholders = ','.join(['%s'] * len(target_ids))
-    ev_query = f"""
-        SELECT evidence_id, target_id, file_path, actual_qty_Q, verification_status
-        FROM tbl_evidence_repo
-        WHERE target_id IN ({placeholders})
-        ORDER BY evidence_id
-    """
-    ev_rows = timed_query(cursor, ev_query, tuple(target_ids), label="get_oversight_evidence_files")
+    if target_ids:
+        placeholders = ','.join(['%s'] * len(target_ids))
+        ev_query = f"""
+            SELECT evidence_id, target_id, file_path, actual_qty_Q, verification_status
+            FROM tbl_evidence_repo
+            WHERE target_id IN ({placeholders})
+            ORDER BY evidence_id
+        """
+        ev_rows = timed_query(cursor, ev_query, tuple(target_ids), label="get_oversight_evidence_files")
+    else:
+        ev_rows = []
     evidence_breakdown = [{
         'evidence_id': ev['evidence_id'],
         'faculty_name': faculty_by_target.get(ev['target_id'], 'Unknown'),
@@ -496,7 +536,11 @@ def apply_oversight_overrides(cursor, emp_id, term_id, rows):
     Post-processes a list of committed-target rows (dicts with at least 'indicator_id',
     'is_admin_function', and the fields build_actual_accomplishment/compute_target_rating
     need) so that every genuine Departmental Oversight row reflects the scoped faculty's
-    real work instead of its own (never-uploaded-to) actual_quantity/actual_duration_value.
+    real work instead of its own (never-uploaded-to) actual_quantity.
+
+    Timeliness is the exception: a chair/Dean who has explicitly set actual_duration_value on
+    the oversight row keeps that value, and the contributors' MAX is only the default when
+    they haven't (see the inline note below).
 
     This is the one place the override happens, called from both
     get_designated_committed_targets (the Evidence Gathering dashboard/readiness gate) and
@@ -521,7 +565,18 @@ def apply_oversight_overrides(cursor, emp_id, term_id, rows):
             continue
         agg = get_oversight_evidence(cursor, emp_id, term_id, r['indicator_id'])
         r['actual_quantity'] = agg['total_actual_quantity']
-        r['actual_duration_value'] = agg['max_actual_duration_value']
+        # Timeliness is the one derived field a chair/Dean may override by hand
+        # (save_accomplishment_details). Read the row's own actual_duration_value BEFORE
+        # overwriting it: when it's set, the chair has deliberately stated when the
+        # department finished, and that wins over the contributors' MAX. Unlike the summed
+        # quantity there is nothing to inflate here -- a duration replaces a duration -- so
+        # the no-self-reporting rule that protects Accomplished Qty doesn't apply to T.
+        # MAX stays available to the UI as the derived default it's overriding.
+        own_duration = r.get('actual_duration_value')
+        r['max_actual_duration_value'] = agg['max_actual_duration_value']
+        r['is_duration_overridden'] = own_duration is not None
+        r['actual_duration_value'] = (own_duration if own_duration is not None
+                                      else agg['max_actual_duration_value'])
         r['evidence_count'] = agg['evidence_count']
         # Only meaningful for a Client Satisfaction indicator (rate_efficiency ignores this
         # field for every other efficiency_type) -- see get_oversight_evidence's
