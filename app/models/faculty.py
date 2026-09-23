@@ -748,7 +748,7 @@ def get_faculty_committed_targets(cursor, emp_id, term_id):
                ct.actual_duration_value, ct.completion_status, ct.efficiency_rating_E,
                ct.is_admin_function, ct.print_remarks,
                mi.efficiency_type,
-               tc.category_name, tc.category_id,
+               tc.category_name, tc.category_id, tc.slug,
                COALESCE(ev.evidence_count, 0) as evidence_count
         FROM tbl_committed_targets ct
         JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
