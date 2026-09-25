@@ -113,7 +113,15 @@ Run each file in `old MDS/`. Order matters — later ones assume the earlier sch
 | 15 | `MIGRATION_group18.sql` | Drops `tbl_ret_extension_distribution` and redundant direct `term_id` FKs to `tbl_academic_terms` (term now resolved via indicator) |
 | 16 | `MIGRATION_group19.sql` | Gives `tbl_audit_logs.actor_id` a real FK to `tbl_employee_profiles` |
 | 17 | `MIGRATION_group20.sql` | Gives `tbl_ret_assignments.assigned_by` a real FK |
+| 18 | `MIGRATION_group21.sql` | Composite UNIQUE `uq_academic_terms_year_semester` on `tbl_academic_terms (academic_year, semester)` — ⚠ **listed for completeness, do not run as-is** (see note below) |
+| 19 | `MIGRATION_group22.sql` | `tbl_academic_terms.faculty_config_reviewed` — per-term flag behind the Admin dashboard's recheck-Faculty-Configuration banner |
 
+> ⚠ `MIGRATION_group21.sql` is **not applied** on the shared development database, and must not
+> be run blindly. `tbl_academic_terms` still holds duplicate `(academic_year, semester)` groups,
+> so the `UNIQUE` constraint is rejected outright. The file's header names the affected groups;
+> decide which `term_id` to keep, re-point the child rows at it, and only then run the
+> `ALTER TABLE`. Everything else in this table is safe to apply in order.
+>
 > `MIGRATION_update_emails.sql` is **not** part of this sequence — it's a one-off data fixup that
 > overwrites specific seeded test accounts' emails with particular addresses, not a schema
 > change. Skip it unless you know it applies to your own seeded accounts.
