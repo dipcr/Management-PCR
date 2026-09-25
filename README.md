@@ -67,7 +67,6 @@ Admin → Dean → Program Chair / RET Chair → Faculty → Review → Lock →
 - **SPMS scoring**- Q/E/T (Quantity/Efficiency/Timeliness) rolled into weighted categories with Final Weighted Rating + Adjectival Rating
 - **Printable IPCR**- landscape form matching the official SPMS layout
 - **Email notifications**- approval/evidence emails (optional, degrades to console logging when SMTP is unconfigured)
-- **Audit trail**- every action logged for accountability
   
 ## Installation
 
@@ -143,17 +142,18 @@ docker compose up -d
 
 #### Building & Publishing Images (Developer)
 
-Images are published to GitHub Container Registry:
+Images are published to Docker Hub.
+But any form of forks or modifying the codebase and building your own image:
 
 ```bash
 # Build
-docker build -t  username/dipcr-web:latest .
-docker build -t username/dipcr-db:latest ./db
+docker build -t <your_username>/dipcr-web:latest .
+docker build -t <your_username>/dipcr-db:latest ./db
 
-# Push # requires login for docker registry
+# Push (requires a Docker Hub login)
 docker login
-docker push username/dipcr-web:latest
-docker push username/dipcr-db:latest
+docker push <your_username>/dipcr-web:latest
+docker push <your_username>/dipcr-db:latest
 ```
 
 > Note: the `db` image bakes in the schema (`db/schema.sql`) — rebuild & push it whenever the schema changes.
@@ -165,7 +165,7 @@ Requires Python 3.10+ and a reachable MySQL 8 instance.
 **Step 1: Clone & install**
 
 ```bash
-git clone https://github.com/yaspartame/Management-PCR
+git clone https://github.com/dipcr/Management-PCR
 cd Management-PCR
 python -m venv venv
 
@@ -215,8 +215,8 @@ python bootstrap_admin.py
 | `DB_ROOT_PASSWORD` | ✅ | MySQL root password (Docker only) |
 | `SECRET_KEY` | ✅ | Flask session signing key |
 | `FLASK_DEBUG` | — | Enable debug mode (`false` in production) |
-| `ADMIN_EMAIL` | ✅* | First admin email (Docker bootstrap, first start only) |
-| `ADMIN_PASSWORD` | ✅* | First admin password (Docker bootstrap, first start only) |
+| `ADMIN_EMAIL` | ✅* | First admin email (auto-bootstrap, only while no Admin exists) |
+| `ADMIN_PASSWORD` | ✅* | First admin password (auto-bootstrap, only while no Admin exists) |
 | `SMTP_HOST` | — | SMTP server — empty disables sending (emails logged) |
 | `SMTP_PORT` | — | SMTP port (default `587`) |
 | `SMTP_USER` / `SMTP_PASSWORD` | — | SMTP credentials |
@@ -225,7 +225,11 @@ python bootstrap_admin.py
 | `MAIL_SUPPRESS_SEND` | — | `true` to log emails instead of sending |
 | `APP_BASE_URL` | — | Public URL used in email links |
 
-> *Only read on the very first container start to bootstrap the admin account.
+> *Read on **every** `run.py` / `wsgi.py` startup, not just the first one — and in local
+> development too, not only Docker. `app/setup.py:bootstrap_admin()` creates the first Admin only
+> when both vars are set, the password passes the registration policy, and no Admin exists yet;
+> otherwise it is a no-op. Setting them in a local `.env` can therefore create an Admin you never
+> explicitly asked for. See [SETUP.md](SETUP.md) §2.3.
 
 ---
 
@@ -236,11 +240,10 @@ app/
 ├── models/       # database access & business logic
 ├── routes/       # thin Flask blueprints (one per role)
 ├── services/     # email & notification services
-├── templates/    # Jinja2 templates
-└── uploads/      # evidence file uploads
+└── templates/    # Jinja2 templates
 db/
 ├── Dockerfile    # MySQL image with baked-in schema
-└── schema.sql    # full schema + stored procedures + triggers
+└── schema.sql    # full schema + stored procedures
 ```
 
 Key documentation:

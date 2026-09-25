@@ -27,7 +27,7 @@ services:
     restart: unless-stopped
     ports:
       # HOST:CONTAINER only change the LEFT side (host port) to avoid conflicts.
-      - "5005:5000"
+      - "5000:5000"
     environment:
       DB_HOST: db
       #! DO NOT change this. 3306 is MySQL's port INSIDE the db container.
