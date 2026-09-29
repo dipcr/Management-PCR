@@ -239,7 +239,7 @@ def designated_dashboard(conn, cursor):
                 LEFT JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
                 LEFT JOIN tbl_ipcr_dean_review_items dri ON dt.draft_id = dri.draft_id
                 WHERE dt.emp_id = %s AND mi.term_id = %s
-                ORDER BY tc.category_name, mi.indicator_id
+                ORDER BY tc.display_order, tc.category_name, mi.indicator_id
             """, (emp_id, term_id), label="designated_load_drafts")
 
             for d in draft_targets:
@@ -415,7 +415,7 @@ def designated_dashboard(conn, cursor):
                 LEFT JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
                 LEFT JOIN tbl_ipcr_dean_review_items dri ON dt.draft_id = dri.draft_id
                 WHERE dt.emp_id = %s AND mi.term_id = %s
-                ORDER BY tc.category_name, mi.indicator_id
+                ORDER BY tc.display_order, tc.category_name, mi.indicator_id
             """, (emp_id, term_id), label="designated_load_drafts")
             from app.models.ipcr_description import format_ipcr_target_description
             for t in dpcr_targets:

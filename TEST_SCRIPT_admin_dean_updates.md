@@ -137,6 +137,47 @@ here — you can use the one opened in Phase 4).
 
 ---
 
+## Phase 7 — Category ordering across every role (display_order, not alphabetical)
+
+Target categories must everywhere read in the order configured on **Admin → Criteria**
+(Instruction → Research → Extension → Support → Administrative → Custom), never alphabetically.
+17 queries across all five role flows were switched from `ORDER BY tc.category_name` to
+`ORDER BY tc.display_order, tc.category_name`.
+
+This is a **visual** check, not a data check — no totals, scores or ratings should move. Scoring
+buckets targets and averages them (order-independent), and the printed IPCR re-sorts in Python,
+so both are unaffected by design.
+
+- [ ] Admin → Criteria. Note the exact top-to-bottom order of the category list. **This is the
+  reference order** for every check below — the other screens must agree with it.
+- [ ] Admin → Master Indicators. **CHECK:** indicators are grouped in that same reference order.
+- [ ] Dean → Quota Cascading. **CHECK:** the group header bands read in reference order —
+  specifically that Extension is **no longer above** Strategic Priorities.
+- [ ] Dean → Target Assignment, and the Draft IPCR Studio modal for any chair. **CHECK:**
+  reference order.
+- [ ] Program Chair → Target Allocation. **CHECK:** reference order.
+- [ ] RET Chair → the Research/Extension indicator lists. **CHECK:** Research appears before
+  Extension.
+- [ ] Faculty → **My IPCR** table. **CHECK:** the category header rows read in reference order.
+  (This screen had the same visible symptom as the Dean's cascading table.)
+- [ ] Designated Faculty → their draft IPCR target-selection screen and committed targets.
+  **CHECK:** reference order.
+- [ ] **CHECK (duplicate headers):** on every screen above, confirm each category header appears
+  **exactly once**. A category appearing twice with rows split between the two would mean two
+  categories share a `display_order` value — report it rather than ignoring it.
+- [ ] **CHECK (no data moved):** open one faculty member's IPCR before and after. Final Weighted
+  Rating, Adjectival Rating and every per-category average must be **identical** — only the
+  row/section sequence may differ. Any change here is a real bug.
+- [ ] Print one IPCR. **CHECK:** sections still read I. Strategic Priorities → II. Core Functions
+  → III. Support Functions, unchanged.
+
+> **Note for whoever tests on a local/dev copy:** if your categories are still named
+> `A. Instructions`, `A. Research`, `B. Extension…`, alphabetical and `display_order` happen to
+> produce the *same* result, so this phase will look like it changed nothing. That is expected —
+> the fix is only observable where category names have no `A.`/`B.` prefixes (i.e. production).
+
+---
+
 ## Sanity check
 
 - [ ] While exercising Phases 5–6, confirm nothing else on the Dean dashboard changed —

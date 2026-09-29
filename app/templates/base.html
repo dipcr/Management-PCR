@@ -271,13 +271,50 @@
             flex-shrink: 0;
         }
 
+        /* The footer sits outside .sidebar-nav, so it needs its own copy of the nav-item
+           layout -- without it Logout and the manual link render as bare text. */
         .sidebar-footer .nav-item {
-            color: #A39D8F;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            width: 100%;
+            padding: 9px 14px;
+            margin: 2px 0;
+            border-radius: 7px;
+            border: 1px solid var(--sidebar-border);
+            background: var(--c-surface);
+            color: var(--sidebar-text);
+            text-decoration: none;
+            font-size: 13.5px;
+            font-weight: 500;
+            text-align: left;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+        }
+
+        .sidebar-footer .nav-item i {
+            font-size: 1rem;
+            flex-shrink: 0;
+            width: 18px;
+            text-align: center;
         }
 
         .sidebar-footer .nav-item:hover {
+            background: var(--sidebar-hover);
+            color: var(--c-text);
+        }
+
+        .sidebar-footer .nav-item.active {
+            background: var(--sidebar-active);
+            color: var(--sidebar-text-active);
+            font-weight: 600;
+        }
+
+        .sidebar-footer form button.nav-item:hover {
             color: #B0453D;
             background: rgba(176,69,61,0.08);
+            border-color: rgba(176,69,61,0.35);
         }
 
         .sidebar-footer form {
@@ -289,9 +326,6 @@
         .sidebar-footer form button.nav-item {
             appearance: none;
             -webkit-appearance: none;
-            background: none;
-            border: none;
-            outline: none;
             box-shadow: none;
             font-family: inherit;
             font-size: 13.5px;
@@ -421,6 +455,12 @@
             font-size: 13px;
             color: var(--c-text-sub);
             margin: 6px 0 0 0;
+        }
+        /* Headers that pair a title with status badges/buttons must wrap on narrow screens
+           instead of pushing the whole page sideways. */
+        .page-header.d-flex {
+            flex-wrap: wrap;
+            gap: 10px 16px;
         }
 
         /* ── Cards ── */
@@ -940,6 +980,35 @@
             max-height: 250px;
             overflow-y: auto;
         }
+
+        /* ── In-app help (drawer + floating button) ── */
+        .help-fab {
+            position: fixed; right: 22px; bottom: 22px; z-index: 1030;
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 10px 16px; border-radius: 999px;
+            background: var(--c-accent); color: #fff; border: none;
+            font-size: 13px; font-weight: 600; cursor: pointer;
+            box-shadow: 0 4px 14px rgba(43,40,34,0.18);
+        }
+        .help-fab:hover { background: var(--c-accent-dark); }
+        .help-fab.help-fab-new::after {
+            content: ''; position: absolute; top: -3px; right: -3px;
+            width: 12px; height: 12px; border-radius: 50%;
+            background: var(--c-warning); border: 2px solid var(--content-bg);
+        }
+        .help-drawer h5, .help-drawer h6 { font-family: var(--font-heading); color: var(--c-text); }
+        .help-drawer .help-purpose { color: var(--c-text-sub); font-size: 14px; line-height: 1.55; }
+        .help-drawer .help-label {
+            font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase;
+            color: var(--c-text-muted); margin: 20px 0 8px;
+        }
+        .help-drawer ol, .help-drawer ul { padding-left: 20px; font-size: 14px; color: var(--c-text); }
+        .help-drawer li { margin-bottom: 8px; line-height: 1.5; }
+        .help-drawer .help-tips {
+            background: var(--c-accent-tint); border-left: 3px solid var(--c-accent);
+            border-radius: 6px; padding: 10px 14px 2px;
+        }
+        @media (max-width: 575px) { .help-fab span { display: none; } .help-fab { padding: 12px; } }
     </style>
     {% block extra_styles %}{% endblock %}
 </head>
@@ -977,6 +1046,12 @@
         </nav>
 
         <div class="sidebar-footer">
+            {% if help_data %}
+            <a href="{{ url_for('help.manual') }}" class="nav-item{% if request.endpoint == 'help.manual' %} active{% endif %}" style="text-decoration:none" data-tooltip="User Manual">
+                <i class="ti ti-book-2"></i>
+                <span class="nav-text">User Manual</span>
+            </a>
+            {% endif %}
             <form action="{{ url_for('auth.logout') }}" method="GET" style="margin:0">
                 <button type="submit" class="nav-item" data-tooltip="Logout">
                     <i class="ti ti-logout"></i>
@@ -1566,6 +1641,73 @@
             render();
         };
     </script>
+    {% if help_data and request.endpoint != 'help.manual' %}
+    <button type="button" class="help-fab" id="helpFab" aria-controls="helpDrawer">
+        <i class="ti ti-help-circle" aria-hidden="true"></i><span>About this page</span>
+    </button>
+    <div class="offcanvas offcanvas-end help-drawer" tabindex="-1" id="helpDrawer" aria-labelledby="helpDrawerTitle">
+        <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="helpDrawerTitle">About this page</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body" id="helpDrawerBody"></div>
+    </div>
+    <script>
+        (function () {
+            const HELP = {{ help_data.sections | tojson }};
+            const MANUAL_URL = {{ url_for('help.manual') | tojson }};
+            const fab = document.getElementById('helpFab');
+            const drawerEl = document.getElementById('helpDrawer');
+            const body = document.getElementById('helpDrawerBody');
+            const titleEl = document.getElementById('helpDrawerTitle');
+            const SEEN_KEY = 'helpSeen';
+
+            try { if (!localStorage.getItem(SEEN_KEY)) fab.classList.add('help-fab-new'); } catch (e) {}
+
+            function el(tag, text, cls) {
+                const n = document.createElement(tag);
+                if (text != null) n.textContent = text;
+                if (cls) n.className = cls;
+                return n;
+            }
+            function list(tag, items) {
+                const l = document.createElement(tag);
+                items.forEach(t => l.appendChild(el('li', t)));
+                return l;
+            }
+            function render() {
+                const active = document.querySelector('.dashboard-section.active');
+                const info = active && HELP[active.id];
+                body.replaceChildren();
+                if (!info) {
+                    titleEl.textContent = 'About this page';
+                    body.appendChild(el('p', 'There is no page guide for this screen yet. The User Manual covers the whole process.', 'help-purpose'));
+                } else {
+                    titleEl.textContent = info.title;
+                    body.appendChild(el('p', info.purpose, 'help-purpose'));
+                    body.appendChild(el('div', 'What to do here', 'help-label'));
+                    body.appendChild(list('ol', info.steps));
+                    if (info.tips && info.tips.length) {
+                        body.appendChild(el('div', 'Good to know', 'help-label'));
+                        const box = el('div', null, 'help-tips');
+                        box.appendChild(list('ul', info.tips));
+                        body.appendChild(box);
+                    }
+                }
+                const a = el('a', 'Open the full User Manual', 'btn btn-outline-primary btn-sm mt-3');
+                a.href = MANUAL_URL;
+                body.appendChild(a);
+            }
+            drawerEl.addEventListener('show.bs.offcanvas', () => {
+                render();
+                fab.classList.remove('help-fab-new');
+                try { localStorage.setItem(SEEN_KEY, '1'); } catch (e) {}
+            });
+            fab.addEventListener('click', () => bootstrap.Offcanvas.getOrCreateInstance(drawerEl).show());
+        })();
+    </script>
+    {% endif %}
+
     {% block scripts %}{% endblock %}
 </body>
 </html>

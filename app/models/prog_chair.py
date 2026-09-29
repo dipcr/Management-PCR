@@ -58,7 +58,7 @@ def get_chair_indicators(cursor, term_id, specialization):
         WHERE mi.term_id = %s
           AND tc.review_lane = 'CHAIR' AND tc.is_core = 1
           AND (dept_cq.quota_id IS NOT NULL OR cw_cq.quota_id IS NOT NULL)
-        ORDER BY tc.category_name, mi.indicator_id
+        ORDER BY tc.display_order, tc.category_name, mi.indicator_id
     """
     return timed_query(cursor, query, (specialization, SLUG_SUPPORT, term_id), label="get_chair_indicators")
 
@@ -579,7 +579,7 @@ def get_review_items(cursor, review_id):
               tc.review_lane <> 'RET'
               OR (tc.review_lane = 'RET' AND dt.proposed_quantity > 0)
           )
-        ORDER BY tc.category_name, mi.indicator_id
+        ORDER BY tc.display_order, tc.category_name, mi.indicator_id
     """
     cursor.execute(query, (review_id,))
     columns = [col[0] for col in cursor.description]

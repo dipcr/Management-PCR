@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+
+{% block role_display %}{{ manual.label }}{% endblock %}
+
+{% block sidebar_items %}
+<div class="nav-label">Manual</div>
+<a href="{{ home_url }}" class="nav-item" style="text-decoration:none" data-tooltip="Back to dashboard">
+    <i class="ti ti-arrow-left" aria-hidden="true"></i>
+    <span class="nav-text">Back to dashboard</span>
+</a>
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+    .manual-wrap { max-width: 860px; }
+    .manual-toc { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 32px; }
+    .manual-toc a {
+        font-size: 13px; padding: 6px 14px; border-radius: 999px; text-decoration: none;
+        background: var(--c-surface); border: 1px solid var(--c-border); color: var(--c-text-sub);
+    }
+    .manual-toc a:hover { border-color: var(--c-accent); color: var(--c-accent); }
+    .manual-section { margin-bottom: 40px; scroll-margin-top: 20px; }
+    .manual-section h3 { font-family: var(--font-heading); font-size: 20px; margin-bottom: 8px; color: var(--c-text); }
+    .manual-section .lede { color: var(--c-text-sub); font-size: 14px; line-height: 1.6; }
+    .manual-label {
+        font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase;
+        color: var(--c-text-muted); margin: 18px 0 8px;
+    }
+    .manual-section ol, .manual-section ul { padding-left: 22px; font-size: 14px; }
+    .manual-section li { margin-bottom: 8px; line-height: 1.55; }
+    .journey { list-style: none; padding: 0 !important; counter-reset: step; }
+    .journey li {
+        counter-increment: step; position: relative; padding: 12px 16px 12px 56px; margin-bottom: 10px;
+        background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 10px;
+    }
+    .journey li::before {
+        content: counter(step); position: absolute; left: 16px; top: 12px; width: 28px; height: 28px;
+        border-radius: 50%; background: var(--c-accent-tint); color: var(--c-accent);
+        font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center;
+    }
+    .journey strong { display: block; color: var(--c-text); }
+    .journey span { color: var(--c-text-sub); font-size: 13px; }
+    .manual-tips {
+        background: var(--c-accent-tint); border-left: 3px solid var(--c-accent);
+        border-radius: 6px; padding: 10px 14px 2px;
+    }
+    .manual-section dt { font-weight: 600; font-size: 14px; color: var(--c-text); }
+    .manual-section dd { font-size: 14px; color: var(--c-text-sub); margin-bottom: 12px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="manual-wrap">
+    <div class="page-header">
+        <h2>User Manual</h2>
+        <p>{{ manual.label }} guide to D-IPCR</p>
+    </div>
+
+    <nav class="manual-toc" aria-label="Manual contents">
+        <a href="#m-overview">The big picture</a>
+        {% for sid, sec in manual.sections.items() %}
+        <a href="#m-{{ sid }}">{{ sec.title }}</a>
+        {% endfor %}
+        <a href="#m-glossary">Glossary</a>
+        <a href="#m-faq">FAQ</a>
+    </nav>
+
+    <section class="manual-section" id="m-overview">
+        <h3>The big picture</h3>
+        <p class="lede">{{ manual.intro }}</p>
+        <div class="manual-label">Your journey, step by step</div>
+        <ol class="journey">
+            {% for name, desc in manual.journey %}
+            <li><strong>{{ name }}</strong><span>{{ desc }}</span></li>
+            {% endfor %}
+        </ol>
+    </section>
+
+    {% for sid, sec in manual.sections.items() %}
+    <section class="manual-section" id="m-{{ sid }}">
+        <h3>{{ sec.title }}</h3>
+        <p class="lede">{{ sec.purpose }}</p>
+        <div class="manual-label">What to do here</div>
+        <ol>
+            {% for step in sec.steps %}<li>{{ step }}</li>{% endfor %}
+        </ol>
+        {% if sec.tips %}
+        <div class="manual-label">Good to know</div>
+        <div class="manual-tips"><ul>
+            {% for tip in sec.tips %}<li>{{ tip }}</li>{% endfor %}
+        </ul></div>
+        {% endif %}
+    </section>
+    {% endfor %}
+
+    <section class="manual-section" id="m-glossary">
+        <h3>Glossary</h3>
+        <dl>
+            {% for term, meaning in manual.glossary %}
+            <dt>{{ term }}</dt><dd>{{ meaning }}</dd>
+            {% endfor %}
+        </dl>
+    </section>
+
+    <section class="manual-section" id="m-faq">
+        <h3>Frequently asked questions</h3>
+        <dl>
+            {% for q, a in manual.faq %}
+            <dt>{{ q }}</dt><dd>{{ a }}</dd>
+            {% endfor %}
+        </dl>
+    </section>
+</div>
+{% endblock %}
