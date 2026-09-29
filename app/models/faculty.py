@@ -57,7 +57,7 @@ def get_faculty_assigned_targets(cursor, emp_id, term_id):
             LEFT JOIN tbl_ipcr_ret_review_items rri
                 ON rri.review_id = rr.review_id AND rri.draft_id = dt.draft_id
             WHERE dt.emp_id = %s AND mi.term_id = %s
-            ORDER BY tc.category_name, mi.indicator_id
+            ORDER BY tc.display_order, tc.category_name, mi.indicator_id
         """
     else:
         query = """
@@ -78,7 +78,7 @@ def get_faculty_assigned_targets(cursor, emp_id, term_id):
               AND ep.designation = 'Regular Faculty'
               AND mi.term_id = %s
             GROUP BY da.indicator_id, mi.indicator_description, tc.category_name, tc.slug
-            ORDER BY tc.category_name, da.indicator_id
+            ORDER BY tc.display_order, tc.category_name, da.indicator_id
         """
     targets = timed_query(cursor, query, (emp_id, term_id), label="get_faculty_assigned_targets_load")
     # Filter out designated 10 hours teaching load target for Regular Faculty
@@ -757,7 +757,7 @@ def get_faculty_committed_targets(cursor, emp_id, term_id):
             SELECT target_id, COUNT(*) as evidence_count FROM tbl_evidence_repo GROUP BY target_id
         ) ev ON ev.target_id = ct.target_id
         WHERE ct.emp_id = %s AND mi.term_id = %s AND ct.assigned_quantity > 0
-        ORDER BY tc.category_name, mi.indicator_id
+        ORDER BY tc.display_order, tc.category_name, mi.indicator_id
     """
     rows = timed_query(cursor, query, (emp_id, term_id), label="get_faculty_committed_targets")
     # Compose the IPCR "Actual Accomplishments" sentence and derive Q/E/T for each target.

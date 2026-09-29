@@ -29,7 +29,7 @@ def get_ret_indicators(cursor, term_id):
             tc.category_name,
             tc.slug,
             cq.total_target_value
-        ORDER BY tc.category_name, mi.indicator_id
+        ORDER BY tc.display_order, tc.category_name, mi.indicator_id
     """
     return timed_query(cursor, query, (term_id,), label="get_ret_indicators")
 
@@ -600,7 +600,7 @@ def get_ret_review_items(cursor, review_id):
         JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
         LEFT JOIN tbl_draft_targets dt ON dt.draft_id = ri.draft_id
         WHERE ri.review_id = %s
-        ORDER BY tc.category_name, mi.indicator_id
+        ORDER BY tc.display_order, tc.category_name, mi.indicator_id
     """
     cursor.execute(query, (review_id,))
     columns = [col[0] for col in cursor.description]

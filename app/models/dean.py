@@ -286,7 +286,7 @@ def get_dean_review_items(cursor, review_id):
         LEFT JOIN tbl_draft_targets dt ON dri.draft_id = dt.draft_id
         LEFT JOIN tbl_draft_allocation da ON da.emp_id = dr.emp_id AND da.indicator_id = dri.indicator_id
         WHERE dri.review_id = %s
-        ORDER BY tc.category_name, mi.indicator_id
+        ORDER BY tc.display_order, tc.category_name, mi.indicator_id
     """
     items = timed_query(cursor, query, (review_id,), label="get_dean_review_items")
     from app.models.scoring import format_duration
@@ -359,7 +359,7 @@ def get_available_master_indicators(cursor, term_id, emp_id=None):
             LEFT JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
             WHERE mi.term_id = %s
               AND (tc.review_lane = 'RET' OR (mi.is_custom = 1 AND (tc.category_name LIKE '%%Research%%' OR tc.category_name LIKE '%%Extension%%')))
-            ORDER BY tc.category_name, mi.indicator_id
+            ORDER BY tc.display_order, tc.category_name, mi.indicator_id
         """
     else:
         query = """
@@ -368,7 +368,7 @@ def get_available_master_indicators(cursor, term_id, emp_id=None):
             LEFT JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
             WHERE mi.term_id = %s
               AND (mi.is_custom = 1 OR (tc.review_lane = 'CHAIR' AND tc.is_core = 1))
-            ORDER BY tc.category_name, mi.indicator_id
+            ORDER BY tc.display_order, tc.category_name, mi.indicator_id
         """
     return timed_query(cursor, query, (term_id,), label="get_available_master_indicators")
 
@@ -611,7 +611,7 @@ def get_college_wide_cascaded_quotas(cursor, term_id):
         JOIN tbl_master_indicators mi ON cq.indicator_id = mi.indicator_id
         JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
         WHERE mi.term_id = %s AND cq.assigned_to_role = 'College-Wide' AND cq.total_target_value > 0
-        ORDER BY tc.category_name, mi.indicator_id
+        ORDER BY tc.display_order, tc.category_name, mi.indicator_id
     """
     return timed_query(cursor, query, (term_id,), label="get_college_wide_cascaded_quotas")
 
@@ -635,7 +635,7 @@ def get_designated_faculty_assignments(cursor, term_id, emp_id):
               SELECT indicator_id FROM tbl_cascaded_quotas
               WHERE assigned_to_role = 'College-Wide' AND total_target_value > 0
           )
-        ORDER BY tc.category_name, mi.indicator_id
+        ORDER BY tc.display_order, tc.category_name, mi.indicator_id
     """
     return timed_query(cursor, query, (term_id, emp_id), label="get_designated_faculty_assignments")
 

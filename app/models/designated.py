@@ -21,7 +21,7 @@ def get_designated_selectable_indicators(cursor, term_id, exclude_claimed=True, 
             WHERE mi.term_id = %s
               AND mi.is_custom = 0
               AND tc.review_lane = 'RET'
-            ORDER BY tc.category_name, mi.indicator_id
+            ORDER BY tc.display_order, tc.category_name, mi.indicator_id
         """
         rows = timed_query(cursor, query, (term_id,), label="get_designated_selectable_indicators_ret")
         if exclude_claimed:
@@ -42,7 +42,7 @@ def get_designated_selectable_indicators(cursor, term_id, exclude_claimed=True, 
           AND mi.is_custom = 0
           AND mi.indicator_description NOT LIKE '%%Teaching Load%%'
           AND tc.review_lane = 'CHAIR' AND tc.is_core = 1
-        ORDER BY tc.category_name, mi.indicator_id
+        ORDER BY tc.display_order, tc.category_name, mi.indicator_id
     """
     rows = timed_query(cursor, query, (term_id,), label="get_designated_selectable_indicators")
     if exclude_claimed:
@@ -952,7 +952,7 @@ def get_designated_committed_targets(cursor, emp_id, term_id):
             SELECT target_id, COUNT(*) as evidence_count FROM tbl_evidence_repo GROUP BY target_id
         ) ev ON ev.target_id = ct.target_id
         WHERE ct.emp_id = %s AND mi.term_id = %s
-        ORDER BY tc.category_name, mi.indicator_id
+        ORDER BY tc.display_order, tc.category_name, mi.indicator_id
     """
     rows = timed_query(cursor, query, (emp_id, term_id), label="get_designated_committed_targets")
     for r in rows:
