@@ -104,6 +104,10 @@ usually do.
 `flow.md` has a more detailed (though now slightly stale in places — cross-check against code)
 phase-by-phase walkthrough with route/line references and a mermaid diagram of the whole cascade.
 
+### In-app help
+
+`app/help_content.py` holds the per-role help: the "About this page" drawer (a floating button in `base.html`, keyed by the active `nav-…` section id) and the User Manual page at `/help/` (`app/routes/help.py`). A role with no entry there gets neither. Section ids must be kept in step with the dashboards by hand, like `app/navigation.py`.
+
 ### Scoring and weights
 
 Two weight tables, selected by `resolve_designation_type()`:

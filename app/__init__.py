@@ -130,6 +130,17 @@ def inject_own_ipcr_flag():
     }
 
 
+@app.context_processor
+def inject_help():
+    # help_data drives the "About this page" drawer and the sidebar manual link in base.html;
+    # None (a role with no help written yet) hides both.
+    from flask import session, has_request_context
+    from app.help_content import help_for_role
+    if not has_request_context():
+        return {'help_data': None}
+    return {'help_data': help_for_role(session.get('role'))}
+
+
 @app.route('/evidence_uploads/<int:evidence_id>')
 def serve_evidence(evidence_id):
     from flask import session, redirect, url_for, send_from_directory, abort

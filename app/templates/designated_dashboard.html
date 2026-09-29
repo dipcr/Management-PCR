@@ -53,6 +53,15 @@
     window.dashboardRole = 'designated_{{ (session.get('role') or 'self') | lower }}';
 </script>
 
+<style>
+    /* Deadline = duration number + unit dropdown. On narrower laptops/tablets the column was
+       squeezed until the unit dropdown collapsed to a sliver, so pin minimum widths. */
+    .deadline-col { min-width: 200px; }
+    .deadline-fields { min-width: 180px; }
+    .deadline-fields input[type="number"] { flex: 0 0 64px; min-width: 64px; }
+    .deadline-fields select { flex: 1 1 100px; min-width: 100px; }
+</style>
+
 <div id="designated-overview" class="dashboard-section{% if not home_nav %} active{% endif %}">
     <div class="page-header">
         <h2>Designated Faculty Dashboard</h2>
@@ -275,7 +284,7 @@
                                 {% endif %}
                                 <th class="ps-4" width="40%">Indicator / IPCR Target Description</th>
                                 <th class="text-center" width="110">Target Qty</th>
-                                <th class="text-center" width="220">Deadline</th>
+                                <th class="text-center deadline-col" width="220">Deadline</th>
                                 {% if not (dean_review and dean_review.overall_status == 'Approved') %}
                                 <th class="text-center" width="120">Status</th>
                                 {% endif %}
@@ -380,7 +389,7 @@
                                 {% endif %}
                                 <th class="ps-4" width="40%">Indicator / IPCR Target Description</th>
                                 <th class="text-center" width="110">Target Qty</th>
-                                <th class="text-center" width="220">Deadline</th>
+                                <th class="text-center deadline-col" width="220">Deadline</th>
                                 {% if not (dean_review and dean_review.overall_status == 'Approved') %}
                                 <th class="text-center" width="120">Status</th>
                                 {% endif %}
@@ -445,10 +454,9 @@
                                     {% set is_auto = (target.is_auto_description is none) or (target.is_auto_description == 1) %}
                                     <div class="mt-1">
                                         <label class="form-label text-muted mb-0 style-xs" style="font-size: 11px;">IPCR Target Description:</label>
-                                        <input type="text" class="form-control form-control-sm text-dark shadow-sm target-desc-input"
+                                        <textarea class="form-control form-control-sm text-dark shadow-sm target-desc-input" rows="2"
                                                name="target_desc_{{ target.indicator_id }}"
-                                               value="{{ (target.target_description or target.indicator_description) | ipcr_preview }}"
-                                               placeholder="Specify custom target description">
+                                               placeholder="Specify custom target description">{{ (target.target_description or target.indicator_description) | ipcr_preview }}</textarea>
                                         <div class="d-flex align-items-center gap-2 mt-1">
                                             <span class="badge bg-light text-secondary target-auto-badge" {% if not is_auto %}hidden{% endif %}><i class="ti ti-wand"></i> Auto</span>
                                             <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 target-auto-reset" {% if is_auto %}hidden{% endif %}><i class="ti ti-rotate"></i> Reset to Auto</button>
@@ -506,7 +514,7 @@
                                     {% set dur_value_name = 'target_dur_value_' ~ target.indicator_id ~ ('_adm' if target.is_oversight_cascade else '') %}
                                     {% set dur_unit_name = 'target_dur_unit_' ~ target.indicator_id ~ ('_adm' if target.is_oversight_cascade else '') %}
                                     {% endif %}
-                                    <div class="d-flex gap-1 justify-content-center">
+                                    <div class="d-flex gap-1 justify-content-center deadline-fields">
                                         <input type="number" class="form-control form-control-sm text-center shadow-sm"
                                                name="{{ dur_value_name }}"
                                                value="{{ target.target_duration_value or '' }}"
@@ -525,7 +533,7 @@
                                        own input (see get_oversight_targets), so it's correctable here specifically,
                                        right up until Lock & Commit freezes it. Saved via AJAX, not the page's own
                                        submit -- everything else on this page stays view-only. #}
-                                    <div class="d-flex gap-1 justify-content-center align-items-center oversight-deadline-editor"
+                                    <div class="d-flex gap-1 justify-content-center align-items-center oversight-deadline-editor deadline-fields"
                                          data-draft-id="{{ target.target_id }}">
                                         <input type="number" class="form-control form-control-sm text-center shadow-sm oversight-dur-value"
                                                value="{{ target.target_duration_value or '' }}"

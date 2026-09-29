@@ -53,6 +53,12 @@
 {% block content %}
 <script>window.dashboardRole = 'admin';</script>
 
+<style>
+    /* The criteria table shares its row with the Add form, so it gets tighter cell padding
+       to stay inside its column on laptop-width screens instead of scrolling sideways. */
+    #nav-criteria table.table-sm > :not(caption) > * > * { padding-left: 8px !important; padding-right: 8px !important; }
+</style>
+
 <div id="nav-overview" class="dashboard-section active">
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div>
@@ -571,11 +577,11 @@
                     <table class="table table-bordered align-middle mb-3">
                         <thead class="table-light">
                             <tr>
-                                <th style="width: 18%;">Block</th>
-                                <th style="width: 17%;">Applies to</th>
-                                <th style="width: 22%;">Filled from</th>
-                                <th style="width: 25%;">Name</th>
-                                <th style="width: 18%;">Position Label</th>
+                                <th style="width: 16%;">Block</th>
+                                <th style="width: 12%;">Applies to</th>
+                                <th style="width: 22%; min-width: 215px;">Filled from</th>
+                                <th style="width: 24%; min-width: 170px;">Name</th>
+                                <th style="width: 26%; min-width: 200px;">Position Label</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -792,9 +798,10 @@
                         <div class="mb-3">
                             <label class="form-label small fw-bold" for="addCritLane">Review Lane</label>
                             <select class="form-select" id="addCritLane" name="review_lane" required>
-                                <option value="CHAIR">Program Chair (Instruction / Support / Admin)</option>
-                                <option value="RET">RET Chair (Research / Extension)</option>
+                                <option value="CHAIR">Program Chair</option>
+                                <option value="RET">RET Chair</option>
                             </select>
+                            <div class="form-text small">Program Chair reviews Instruction, Support and Admin targets. RET Chair reviews Research and Extension.</div>
                         </div>
                         <button type="submit" class="btn btn-primary w-100 fw-bold"><i class="ti ti-plus me-1"></i>Add Criterion</button>
                     </form>
@@ -807,7 +814,7 @@
             <div class="card shadow-sm border-0 mb-4">
                 <div class="card-body p-0">
                     <div class="table-responsive">
-                        <table class="table table-hover align-middle mb-0">
+                        <table class="table table-sm table-hover align-middle mb-0">
                             <thead class="table-light">
                                 <tr>
                                     <th>Name</th>
@@ -1374,9 +1381,10 @@
                         <div class="mb-3">
                             <label class="form-label small fw-bold" for="editCritLane">Review Lane</label>
                             <select class="form-select" name="review_lane" id="editCritLane" required>
-                                <option value="CHAIR">Program Chair (Instruction / Support / Admin)</option>
-                                <option value="RET">RET Chair (Research / Extension)</option>
+                                <option value="CHAIR">Program Chair</option>
+                                <option value="RET">RET Chair</option>
                             </select>
+                            <div class="form-text small">Program Chair reviews Instruction, Support and Admin targets. RET Chair reviews Research and Extension.</div>
                         </div>
                     </div>
                     <div class="modal-footer">

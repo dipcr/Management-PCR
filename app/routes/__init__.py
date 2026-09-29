@@ -5,6 +5,7 @@ from .dean import dean_bp
 from .prog_chair import prog_chair_bp
 from .ret_chair import ret_chair_bp
 from .designated import designated_bp
+from .help import help_bp
 
 
 def register_blueprints(app):
@@ -15,3 +16,4 @@ def register_blueprints(app):
     app.register_blueprint(prog_chair_bp)
     app.register_blueprint(ret_chair_bp)
     app.register_blueprint(designated_bp)
+    app.register_blueprint(help_bp)

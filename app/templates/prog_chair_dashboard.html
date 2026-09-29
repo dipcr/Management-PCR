@@ -42,6 +42,18 @@
 <script>window.dashboardRole = 'prog_chair';</script>
 
 <style>
+    /* Deadline = duration number + unit dropdown. At a ~1366px laptop width the column was
+       squeezed until both controls were unreadable, so pin minimum widths for each. */
+    .deadline-col { min-width: 190px; }
+    .deadline-fields { min-width: 170px; }
+    .deadline-fields input[type="number"] { flex: 0 0 64px; min-width: 64px; }
+    .deadline-fields select { flex: 1 1 100px; min-width: 100px; }
+    /* Let the uppercase headers wrap so they don't force the table wider than the card. */
+    #targetAllocationForm thead th { white-space: normal; }
+    #targetAllocationForm .assigned-qty-input { max-width: 90px; margin: 0 auto; }
+</style>
+
+<style>
     /* Custom styling for disabled decision buttons to easily distinguish them */
     #btnApprove:disabled,
     #btnReject:disabled {
@@ -116,12 +128,12 @@
 <!-- PHASE 1: Target Allocation                  -->
 <!-- ═══════════════════════════════════════════ -->
 <div id="nav-phase1" class="dashboard-section">
-    <div class="page-header d-flex justify-content-between align-items-center">
+    <div class="page-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
             <h2>Phase 1: Standard Target Allocation</h2>
             <p>Assign the baseline operational targets to all faculty members under your department.</p>
         </div>
-        <div class="d-flex align-items-center gap-2">
+        <div class="d-flex align-items-center flex-wrap gap-2">
             {% if not targets_saved %}
             <button type="button" class="btn btn-outline-primary shadow-sm fw-bold" id="btnAutoDivideAll" title="Auto divide all department quotas by number of faculty (rounded up)">
                 <i class="ti ti-calculator me-1"></i>Auto Divide All Targets
@@ -170,10 +182,10 @@
                     <table class="table table-hover align-middle shadow-sm mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th width="28%" class="ps-4">Master Indicator (DPCR Target)</th>
-                                <th class="text-center" width="10%">Dept Quota</th>
-                                <th class="text-center" width="12%">Assigned Per Faculty</th>
-                                <th class="text-center" width="12%">Deadline</th>
+                                <th width="24%" class="ps-4">Master Indicator (DPCR Target)</th>
+                                <th class="text-center" width="8%">Dept Quota</th>
+                                <th class="text-center" width="10%">Assigned Per Faculty</th>
+                                <th class="text-center deadline-col" width="20%">Deadline</th>
                                 <th width="28%">IPCR Target Description (Faculty Version)</th>
                                 <th class="text-center" width="10%">Total Distributed</th>
                             </tr>
@@ -204,10 +216,10 @@
                                         {% if targets_saved %}disabled{% endif %}>
                                 </td>
                                 <td>
-                                    <div class="d-flex gap-1">
+                                    <div class="d-flex gap-1 deadline-fields">
                                         <input type="number" name="target_duration_values"
                                             class="form-control form-control-sm shadow-sm text-center target-deadline-input"
-                                            placeholder="e.g. 6" min="1" style="max-width: 70px;"
+                                            placeholder="e.g. 6" min="1"
                                             value="{{ ind.target_duration_value if ind.target_duration_value else '' }}"
                                             aria-label="Deadline duration for {{ ind.indicator_description | ipcr_preview | e }}"
                                             {% if targets_saved %}disabled{% endif %}>
@@ -272,10 +284,10 @@
                     <table class="table table-hover align-middle shadow-sm mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th width="28%" class="ps-4">Master Indicator (DPCR Target)</th>
-                                <th class="text-center" width="10%">Dept Quota</th>
-                                <th class="text-center" width="12%">Assigned Per Faculty</th>
-                                <th class="text-center" width="12%">Deadline</th>
+                                <th width="24%" class="ps-4">Master Indicator (DPCR Target)</th>
+                                <th class="text-center" width="8%">Dept Quota</th>
+                                <th class="text-center" width="10%">Assigned Per Faculty</th>
+                                <th class="text-center deadline-col" width="20%">Deadline</th>
                                 <th width="28%">IPCR Target Description (Faculty Version)</th>
                                 <th class="text-center" width="10%">Total Distributed</th>
                             </tr>
@@ -306,10 +318,10 @@
                                         {% if targets_saved %}disabled{% endif %}>
                                 </td>
                                 <td>
-                                    <div class="d-flex gap-1">
+                                    <div class="d-flex gap-1 deadline-fields">
                                         <input type="number" name="target_duration_values"
                                             class="form-control form-control-sm shadow-sm text-center target-deadline-input"
-                                            placeholder="e.g. 6" min="1" style="max-width: 70px;"
+                                            placeholder="e.g. 6" min="1"
                                             value="{{ ind.target_duration_value if ind.target_duration_value else '' }}"
                                             aria-label="Deadline duration for {{ ind.indicator_description | ipcr_preview | e }}"
                                             {% if targets_saved %}disabled{% endif %}>
