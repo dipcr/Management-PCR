@@ -886,7 +886,7 @@ HELP = {
                 'steps': [
                     "If the term has no indicators yet, click Import from Previous Term to start from last term's list.",
                     "Under a category, click Add Target. Choose the Target Type, then write the Success Indicator (target and measure).",
-                    "Choose the Efficiency Type: Quantity-Based, Adjectival or Client Satisfaction.",
+                    "Choose the Efficiency Type: Quantity-Based (E follows the quantity achieved), Adjectival (the target uses a quality adjective such as accurately or completely, and E is always 5) or Client Satisfaction (E is the client's reported rating).",
                     "To make the wording adapt to different quantities and deadlines, click the number in the description to tag it as Qty, and click the duration to tag it as Dur. Use Undo last tag to reverse it.",
                     "Edit an indicator's description or efficiency type from its row. Delete removes an indicator that nothing uses yet.",
                 ],

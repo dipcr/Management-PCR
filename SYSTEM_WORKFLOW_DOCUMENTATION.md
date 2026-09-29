@@ -449,7 +449,7 @@ The scoring engine implements strict half-up two-decimal rounding (`Decimal.quan
 
 2. Efficiency Rating (E):
    - Client Satisfaction: Reported direct score from 1 to 5
-   - Adjectival Standard: If RQn >= 1.00 --> E = 5; else ratio-based
+   - Adjectival Standard: target worded with a quality adjective --> E = 5 (regardless of RQn)
    - Output-Based:
        * RQn >= 1.00  -->  E = 5
        * RQn >  0.50  -->  E = 2

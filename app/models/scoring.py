@@ -34,7 +34,7 @@ COMPLETION_STATUSES = [COMPLETION_COMPLETED, COMPLETION_PARTIAL, COMPLETION_NOT_
 
 # Efficiency (E) is obtained differently depending on the indicator's efficiency_type:
 #   Client Satisfaction -> the faculty/verifier reports a rating from this scale
-#   Adjectival          -> the target itself names the standard; achieving it scores 5
+#   Adjectival          -> the target itself uses a quality adjective; E is always 5
 #   otherwise           -> derived from the achievement ratio (RQn) at roll-up time
 EFFICIENCY_CLIENT_SATISFACTION = 'Client Satisfaction'
 EFFICIENCY_ADJECTIVAL = 'Adjectival'
@@ -212,18 +212,20 @@ def rate_efficiency(efficiency_type, efficiency_rating_E, actual_quantity, targe
     """
     Efficiency (E) rating. Three variants per the SPMS guide:
       Client Satisfaction -> the reported rating (already 1..5)
-      Adjectival          -> achieving a target that names a quality standard scores 5
+      Adjectival          -> a target worded with a quality adjective always scores 5
       otherwise           -> derived from achievement of the target quantity
     """
     if efficiency_type == EFFICIENCY_CLIENT_SATISFACTION:
         return int(efficiency_rating_E) if efficiency_rating_E else None
 
+    # The SPMS guide's adjective scale has a single row: a target worded with an adjective
+    # ("accurately", "completely", ...) scores 5. Quantity is already rated in Q.
+    if efficiency_type == EFFICIENCY_ADJECTIVAL:
+        return 5
+
     ratio = achievement_ratio(actual_quantity, target_quantity)
     if ratio is None:
         return None
-
-    if efficiency_type == EFFICIENCY_ADJECTIVAL and ratio >= 1.00:
-        return 5
 
     # "Based on Achievement of Target Quantity"
     if ratio >= 1.00:

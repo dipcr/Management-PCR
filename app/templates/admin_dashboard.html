@@ -1579,7 +1579,10 @@ function filterMasterIndicators() {
                             <option value="Adjectival">Adjectival</option>
                             <option value="Client Satisfaction">Client Satisfaction</option>
                         </select>
-                        <div class="form-text small">Determines how the Efficiency (E) rating is obtained.</div>
+                        <div class="form-text small">Determines how the Efficiency (E) rating is obtained.
+                            <strong>Adjectival:</strong> the target uses a quality adjective (accurately, completely, comprehensive, detailed) and E is always 5.
+                            <strong>Quantity-Based:</strong> E follows the achievement of the target quantity.
+                            <strong>Client Satisfaction:</strong> E is the rating reported by the client.</div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -1972,6 +1975,7 @@ function openAddIndicator(categoryName, targetTypes) {
                             <option value="Adjectival">Adjectival</option>
                             <option value="Client Satisfaction">Client Satisfaction</option>
                         </select>
+                        <div class="form-text small">Adjectival: the target uses a quality adjective and E is always 5.</div>
                     </div>
                 </div>
                 <div class="modal-footer bg-light">
