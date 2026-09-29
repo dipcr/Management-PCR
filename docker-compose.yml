@@ -65,6 +65,23 @@ services:
       retries: 3
       start_period: 20s
 
+  wiki:
+    image: nightingzine/dipcr-wiki:latest
+    container_name: dipcr-wiki
+    restart: unless-stopped
+    ports:
+      # HOST:CONTAINER only change the LEFT side (host port) to avoid conflicts.
+      - "5010:5000"
+    networks:
+      - dipcr
+    healthcheck:
+      # Hits the wiki's /healthz probe (no DB dependency — the manual is static content).
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/healthz', timeout=5)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
 volumes:
   mysql_data:
   evidence_data:

@@ -19,3 +19,5 @@ image.png
 docker-compose-example.yml
 # db/ is its own image (built with context ./db), not needed in the web image
 db/
+# wiki/ is its own image (built with context ./wiki), not needed in the web image
+wiki/

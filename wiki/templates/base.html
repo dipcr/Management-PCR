@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title }} · {{ site_name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/wiki.css') }}">
+</head>
+
+<body>
+    <header class="topbar">
+        <a class="brand" href="{{ url_for('home') }}">D-IPCR <span>Wiki</span></a>
+        <form class="search" action="{{ url_for('search') }}" method="get" role="search">
+            <input type="search" name="q" placeholder="Search the manual…" aria-label="Search the manual"
+                value="{{ request.args.get('q', '') }}">
+            <button type="submit">Search</button>
+        </form>
+    </header>
+    <div class="layout">
+        <nav class="sidebar" aria-label="Wiki navigation">
+            <a class="home-link {% if not current %}active{% endif %}" href="{{ url_for('home') }}">Home</a>
+            {% for section in nav_sections %}
+            <div class="nav-section">
+                <div class="nav-section-title">{{ section.title }}</div>
+                <ul>
+                    {% for p in section.pages %}
+                    <li><a href="{{ url_for('page', slug=p.slug) }}"
+                            class="{% if current == p.slug %}active{% endif %}">{{ p.title }}</a></li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endfor %}
+        </nav>
+        <main class="content">
+            {% block content %}{% endblock %}
+        </main>
+        {% if toc %}
+        <aside class="toc" aria-label="On this page">
+            <div class="toc-title">On this page</div>
+            {{ toc | safe }}
+        </aside>
+        {% endif %}
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script>
+        // Render ```mermaid fenced blocks as diagrams. If the CDN is unavailable the
+        // blocks stay as plain code, so the page still reads fine offline.
+        document.addEventListener('DOMContentLoaded', function () {
+            if (!window.mermaid) return;
+            document.querySelectorAll('pre > code.language-mermaid').forEach(function (code) {
+                var div = document.createElement('div');
+                div.className = 'mermaid';
+                div.textContent = code.textContent;
+                code.parentElement.replaceWith(div);
+            });
+            window.mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+        });
+    </script>
+</body>
+
+</html>
