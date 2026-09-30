@@ -1105,6 +1105,83 @@ def get_dean_evidence_faculty(cursor, term_id):
     return pending_list, approved_list
 
 
+def get_pending_reopen_requests(cursor, term_id):
+    """
+    People who asked to add more evidence to an IPCR the Dean already approved (see
+    request_ipcr_reopen). The reason is stored on every one of the person's target rows, so
+    MAX() collapses it back to one value per person.
+    """
+    from app.models.connection import timed_query
+    return timed_query(cursor, """
+        SELECT ep.emp_id, ep.first_name, ep.last_name, ep.designation,
+               MAX(ct.reopen_request) AS reason
+        FROM tbl_employee_profiles ep
+        JOIN tbl_committed_targets ct ON ep.emp_id = ct.emp_id
+        JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
+        WHERE mi.term_id = %s AND ct.status = 'Dean Approved' AND ct.reopen_request IS NOT NULL
+        GROUP BY ep.emp_id, ep.first_name, ep.last_name, ep.designation
+        ORDER BY ep.last_name, ep.first_name
+    """, (term_id,), label="get_pending_reopen_requests")
+
+
+def approve_ipcr_reopen(conn, cursor, emp_id, term_id):
+    """
+    Grants a pending reopen request: targets go back to 'Approved' -- the same pre-submission
+    state a Returned evidence file leaves them in, so the upload gate opens and the faculty
+    member resubmits through the normal pipeline. Files already approved stay approved. The
+    score's final sign-off is undone, exactly as dean_return_to_faculty does, so nothing keeps
+    reading as Dean-approved until the Dean signs off again.
+    """
+    from app.models.faculty import _get_reopen_state
+    try:
+        total, approved, requested = _get_reopen_state(cursor, emp_id, term_id)
+        if requested == 0 or total == 0 or approved != total:
+            return False, "There is no pending request to approve for this IPCR."
+
+        cursor.execute("""
+            UPDATE tbl_committed_targets ct
+            JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
+            SET ct.status = 'Approved', ct.reopen_request = NULL
+            WHERE ct.emp_id = %s AND mi.term_id = %s AND ct.status = 'Dean Approved'
+        """, (emp_id, term_id))
+
+        cursor.execute(
+            "SELECT score_id FROM tbl_final_scores WHERE emp_id = %s AND term_id = %s",
+            (emp_id, term_id))
+        score_row = cursor.fetchone()
+        if score_row:
+            cursor.execute(
+                "UPDATE tbl_final_scores SET dean_approval_status = 'Pending' WHERE score_id = %s",
+                (score_row[0],))
+        conn.commit()
+        return True, "IPCR reopened. The faculty member can now upload additional evidence."
+    except Exception as e:
+        conn.rollback()
+        return False, f"Error reopening IPCR: {str(e)}"
+
+
+def deny_ipcr_reopen(conn, cursor, emp_id, term_id):
+    """Declines a pending reopen request. The IPCR stays Dean Approved; only the request is cleared."""
+    from app.models.faculty import _get_reopen_state
+    try:
+        total, approved, requested = _get_reopen_state(cursor, emp_id, term_id)
+        if requested == 0 or total == 0 or approved != total:
+            return False, "There is no pending request to deny for this IPCR."
+
+        cursor.execute("""
+            UPDATE tbl_committed_targets ct
+            JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
+            SET ct.reopen_request = NULL
+            WHERE ct.emp_id = %s AND mi.term_id = %s
+              AND ct.status = 'Dean Approved' AND ct.reopen_request IS NOT NULL
+        """, (emp_id, term_id))
+        conn.commit()
+        return True, "Request declined. The IPCR remains approved."
+    except Exception as e:
+        conn.rollback()
+        return False, f"Error declining request: {str(e)}"
+
+
 def get_dean_faculty_evidence_details(cursor, emp_id, term_id):
     """
     Fetches ALL committed targets and uploaded evidence files for a faculty member for the Dean.

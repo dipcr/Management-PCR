@@ -1257,3 +1257,78 @@ def send_evidence_return_notification(conn, cursor, evidence_id: int, reviewer_r
         logger.error(f"Error in send_evidence_return_notification: {e}")
         return False, str(e)
 
+
+def send_reopen_request_notification(conn, cursor, emp_id: int, term_id: int, reason: str, base_url: str = None) -> tuple[bool, str]:
+    """Tells the Dean that a faculty member asked to add evidence to an IPCR already approved."""
+    try:
+        fac = _get_faculty_profile(cursor, emp_id)
+        term = _get_term_info(cursor, term_id)
+        dean_info = _get_dean_info(cursor)
+        if not dean_info['email']:
+            return False, "Dean email not found."
+
+        action_url = f"{_get_base_url(base_url)}/dean"
+        html_body = render_template('emails/reopen_request_notice.html',
+            mode='request',
+            recipient_name=dean_info['name'],
+            faculty_name=fac['full_name'],
+            department=fac['department'],
+            period_display=term['period_display'],
+            reason=reason,
+            action_url=action_url
+        )
+        text_body = (
+            f"Dear {dean_info['name']},\n\n"
+            f"{fac['full_name']} ({fac['department']}) asked to reopen their approved IPCR for "
+            f"{term['period_display']} to upload additional evidence.\n\n"
+            f"Reason: {reason}\n\n"
+            f"Review the request at: {action_url}\n"
+        )
+        send_async_email(
+            subject=f"[D-IPCR] Action Required: Request to Add Evidence - {fac['full_name']} ({term['period_display']})",
+            recipients=[dean_info['email']],
+            html_body=html_body,
+            text_body=text_body
+        )
+        logger.info(f"[REOPEN REQUEST NOTIFICATION SENT] emp_id={emp_id}, term_id={term_id}")
+        return True, "Reopen request notification sent to Dean."
+    except Exception as e:
+        logger.error(f"Error in send_reopen_request_notification: {e}")
+        return False, str(e)
+
+
+def send_reopen_decision_notification(conn, cursor, emp_id: int, term_id: int, approved: bool, base_url: str = None) -> tuple[bool, str]:
+    """Tells the faculty member whether the Dean reopened their IPCR for more evidence."""
+    try:
+        fac = _get_faculty_profile(cursor, emp_id)
+        if not fac.get('email'):
+            return False, f"Faculty #{emp_id} email not found."
+        term = _get_term_info(cursor, term_id)
+        is_regular = (fac.get('designation') == 'Regular Faculty' or not fac.get('designation'))
+        resolved_base_url = _get_base_url(base_url)
+        action_url = f"{resolved_base_url}/faculty" if is_regular else f"{resolved_base_url}/designated"
+
+        html_body = render_template('emails/reopen_request_notice.html',
+            mode='approved' if approved else 'denied',
+            recipient_name=fac['full_name'],
+            faculty_name=fac['full_name'],
+            department=fac['department'],
+            period_display=term['period_display'],
+            reason=None,
+            action_url=action_url
+        )
+        if approved:
+            outcome = ("The Dean approved your request to add evidence. You can now upload additional evidence, "
+                       "then submit your evidences again for verification.")
+            subject = f"[D-IPCR] IPCR Reopened for Additional Evidence - {term['period_display']}"
+        else:
+            outcome = "The Dean declined your request to add evidence. Your IPCR remains approved."
+            subject = f"[D-IPCR] Request to Add Evidence Declined - {term['period_display']}"
+        text_body = f"Dear {fac['full_name']},\n\n{outcome}\n\nOpen your dashboard: {action_url}\n"
+        send_async_email(subject=subject, recipients=[fac['email']], html_body=html_body, text_body=text_body)
+        logger.info(f"[REOPEN DECISION NOTIFICATION SENT] emp_id={emp_id}, approved={approved}")
+        return True, "Reopen decision notification sent to faculty."
+    except Exception as e:
+        logger.error(f"Error in send_reopen_decision_notification: {e}")
+        return False, str(e)
+

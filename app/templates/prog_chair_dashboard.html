@@ -1925,6 +1925,7 @@ function openFacultyEvidenceVerificationModal(empId, facultyName) {
             }
             document.getElementById('evidenceModalFacultyRank').innerText = data.academic_rank || 'Faculty Member';
             tbody.innerHTML = '';
+            EVIDENCE_TARGET_ORDER = [];
 
             if (!data.targets || data.targets.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No committed targets found for this faculty member.</td></tr>';
@@ -1990,6 +1991,10 @@ function openFacultyEvidenceVerificationModal(empId, facultyName) {
                     
                     // Keep the evidence list in JS rather than in an HTML attribute.
                     EVIDENCE_BY_TARGET[t.target_id] = t.evidence_list || [];
+                    if (t.evidence_list && t.evidence_list.length > 0) {
+                        EVIDENCE_TARGET_ORDER.push(String(t.target_id));
+                        EVIDENCE_TARGET_LABEL[t.target_id] = window.renderIndicatorPreview(t.indicator_description);
+                    }
 
                     let evHtml = '';
                     if (t.evidence_list && t.evidence_list.length > 0) {
@@ -2078,11 +2083,61 @@ function openFacultyEvidenceVerificationModal(empId, facultyName) {
 
 const EVIDENCE_BY_TARGET = {};
 
+// Targets that have evidence, in on-screen table order, so "Next target" can walk them
+// without closing the viewer. Rebuilt every time the faculty modal loads.
+let EVIDENCE_TARGET_ORDER = [];
+const EVIDENCE_TARGET_LABEL = {};
+let currentViewerTargetId = null;
+
 function openEvidenceViewerFor(targetId) {
+    currentViewerTargetId = String(targetId);
     openEvidenceViewer(EVIDENCE_BY_TARGET[targetId] || []);
+    updateViewerNav();
+}
+
+function updateViewerNav() {
+    const idx = EVIDENCE_TARGET_ORDER.indexOf(currentViewerTargetId);
+    const total = EVIDENCE_TARGET_ORDER.length;
+    const prev = document.getElementById('btnPrevTarget');
+    const next = document.getElementById('btnNextTarget');
+    prev.disabled = idx <= 0;
+    next.disabled = idx < 0 || idx >= total - 1;
+    document.getElementById('evidenceViewerPosition').textContent = idx >= 0 ? `Target ${idx + 1} of ${total}` : '';
+    document.getElementById('evidenceViewerTarget').textContent = EVIDENCE_TARGET_LABEL[currentViewerTargetId] || '';
+}
+
+function stepEvidenceTarget(delta) {
+    const idx = EVIDENCE_TARGET_ORDER.indexOf(currentViewerTargetId) + delta;
+    if (idx < 0 || idx >= EVIDENCE_TARGET_ORDER.length) return;
+    currentViewerTargetId = EVIDENCE_TARGET_ORDER[idx];
+    renderEvidenceViewerBody(EVIDENCE_BY_TARGET[currentViewerTargetId] || []);
+    document.getElementById('evidenceViewerBody').scrollTop = 0;
+    updateViewerNav();
+}
+
+function confirmApproveEvidence(evidenceId) {
+    let fileName = 'this evidence file';
+    for (const tid in EVIDENCE_BY_TARGET) {
+        const item = (EVIDENCE_BY_TARGET[tid] || []).find(e => String(e.evidence_id) === String(evidenceId));
+        if (item) { fileName = item.file_path.split('/').pop().replace(/^[0-9a-f]{32}_/, ''); break; }
+    }
+    showCustomConfirm({
+        title: 'Approve Evidence?',
+        mainText: `Approve <strong>${escapeHtml(fileName)}</strong>?`,
+        subText: 'Approved evidence cannot be returned afterwards.',
+        confirmText: 'Yes, Approve',
+        confirmClass: 'btn-success',
+        iconClass: 'ti-circle-check',
+        onConfirm: () => verifyEvidence(evidenceId, 'Approved')
+    });
 }
 
 function openEvidenceViewer(evidenceList) {
+    renderEvidenceViewerBody(evidenceList);
+    new bootstrap.Modal(document.getElementById('evidenceViewerModal')).show();
+}
+
+function renderEvidenceViewerBody(evidenceList) {
     const body = document.getElementById('evidenceViewerBody');
     if (!evidenceList || evidenceList.length === 0) {
         body.innerHTML = '<div class="text-center py-5 text-muted">No evidence files available.</div>';
@@ -2144,7 +2199,7 @@ function openEvidenceViewer(evidenceList) {
                             <i class="ti ti-arrow-back-up me-1"></i>Return
                         </button>
                         <button type="button" class="btn btn-sm btn-success px-3"
-                                onclick="verifyEvidence(${ev.evidence_id}, 'Approved')">
+                                onclick="confirmApproveEvidence(${ev.evidence_id})">
                             <i class="ti ti-circle-check me-1"></i>Approve
                         </button>
                     </div>
@@ -2154,7 +2209,6 @@ function openEvidenceViewer(evidenceList) {
         });
         body.innerHTML = html;
     }
-    new bootstrap.Modal(document.getElementById('evidenceViewerModal')).show();
 }
 
 let pendingReturnEvidenceId = null;
@@ -2310,12 +2364,21 @@ window.submitFacultyEvidenceToDean = function(empId, facultyName) {
     <div class="modal-dialog modal-fullscreen modal-dialog-scrollable">
         <div class="modal-content border-0 shadow-lg">
             <div class="modal-header text-white border-0 py-3" style="background: var(--c-accent);">
-                <h5 class="modal-title fw-bold fs-6"><i class="ti ti-file-type-pdf me-2"></i>Uploaded Evidence</h5>
+                <h5 class="modal-title fw-bold fs-6 text-truncate"><i class="ti ti-file-type-pdf me-2"></i>Uploaded Evidence<span class="fw-normal ms-2 opacity-75" id="evidenceViewerTarget"></span></h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body p-3" id="evidenceViewerBody"></div>
-            <div class="modal-footer border-0 p-3 bg-light">
+            <div class="modal-footer border-0 p-3 bg-light justify-content-between">
                 <button type="button" class="btn btn-secondary fw-semibold px-4" data-bs-dismiss="modal">Close</button>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="small text-muted me-1" id="evidenceViewerPosition"></span>
+                    <button type="button" class="btn btn-outline-primary fw-semibold px-3" id="btnPrevTarget" onclick="stepEvidenceTarget(-1)">
+                        <i class="ti ti-chevron-left me-1"></i>Previous target
+                    </button>
+                    <button type="button" class="btn btn-primary fw-semibold px-3" id="btnNextTarget" onclick="stepEvidenceTarget(1)">
+                        Next target<i class="ti ti-chevron-right ms-1"></i>
+                    </button>
+                </div>
             </div>
         </div>
     </div>

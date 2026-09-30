@@ -115,6 +115,7 @@ Run each file in `old MDS/`. Order matters — later ones assume the earlier sch
 | 17 | `MIGRATION_group20.sql` | Gives `tbl_ret_assignments.assigned_by` a real FK |
 | 18 | `MIGRATION_group21.sql` | Composite UNIQUE `uq_academic_terms_year_semester` on `tbl_academic_terms (academic_year, semester)` — ⚠ **listed for completeness, do not run as-is** (see note below) |
 | 19 | `MIGRATION_group22.sql` | `tbl_academic_terms.faculty_config_reviewed` — per-term flag behind the Admin dashboard's recheck-Faculty-Configuration banner |
+| 20 | `MIGRATION_group23.sql` | `tbl_committed_targets.reopen_request` — pending "Request to Add Evidence" reason on a Dean-approved IPCR |
 
 > ⚠ `MIGRATION_group21.sql` is **not applied** on the shared development database, and must not
 > be run blindly. `tbl_academic_terms` still holds duplicate `(academic_year, semester)` groups,

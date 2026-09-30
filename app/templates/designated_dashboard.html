@@ -109,9 +109,11 @@
             Your IPCR performance targets are approved and locked.
             {% endif %}
         </div>
-        <button type="button" class="btn btn-outline-primary btn-sm shadow-sm" onclick="window.open('{{ url_for('designated.designated_print_ipcr') }}', '_blank')">
-            <i class="ti ti-printer me-1"></i> View &amp; Print Approved IPCR
-        </button>
+        <div class="d-flex align-items-center flex-wrap gap-2">
+            <button type="button" class="btn btn-outline-primary btn-sm shadow-sm" onclick="window.open('{{ url_for('designated.designated_print_ipcr') }}', '_blank')">
+                <i class="ti ti-printer me-1"></i> View &amp; Print Approved IPCR
+            </button>
+        </div>
     </div>
     {% endif %}
 </div>
@@ -754,6 +756,9 @@
             </button>
         </div>
     </div>
+    {% if has_final_ipcr and not reopen_reason %}
+    {% with reopen_url=url_for('designated.designated_request_reopen') %}{% include '_reopen_request.html' %}{% endwith %}
+    {% endif %}
 
     <div class="row g-4">
         <!-- Accomplishments Column -->
@@ -953,6 +958,16 @@
             {% if evidence_readiness %}
             <div class="mt-3 text-end">
                 {% if has_final_ipcr %}
+                {% if reopen_reason %}
+                <span class="badge bg-warning-subtle text-warning border border-warning px-4 py-3 fs-6 fw-bold shadow-sm me-2"
+                      title="{{ reopen_reason }}">
+                    <i class="ti ti-hourglass me-2"></i>Request to add evidence is waiting for the Dean
+                </span>
+                {% else %}
+                <button type="button" class="btn btn-outline-secondary btn-lg px-4 fw-bold shadow-sm me-2" data-bs-toggle="modal" data-bs-target="#reopenRequestModal">
+                    <i class="ti ti-lock-open me-2"></i>Request to Add Evidence
+                </button>
+                {% endif %}
                 <span class="badge bg-success-subtle text-success border border-success-subtle px-4 py-3 fs-6 fw-bold shadow-sm">
                     <i class="ti ti-shield-check me-2"></i>Final Verification Completed &amp; Approved by Dean
                 </span>
