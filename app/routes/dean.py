@@ -83,6 +83,8 @@ def dean_dashboard():
 
         from app.models.dean import get_dean_evidence_faculty
         pending_dean_evidence_list, approved_dean_evidence_list = get_dean_evidence_faculty(cursor, term_id)
+        from app.models.dean import get_pending_reopen_requests
+        reopen_requests = get_pending_reopen_requests(cursor, term_id)
 
         def _is_designated_or_chair_or_dean(f):
             role = (f.get('system_role') or '').strip()
@@ -172,6 +174,7 @@ def dean_dashboard():
                                draft_status_map=draft_status_map,
                                college_wide_allocations=college_wide_allocations,
                                pending_dean_evidence_list=pending_dean_evidence_list,
+                               reopen_requests=reopen_requests,
                                pending_designated_dean_evidence_list=pending_designated_dean_evidence_list,
                                approved_dean_evidence_list=approved_dean_evidence_list,
                                approved_designated_dean_evidence_list=approved_designated_dean_evidence_list,
@@ -902,3 +905,43 @@ def dean_return_to_faculty(emp_id):
     finally:
         cursor.close()
         conn.close()
+
+
+def _decide_reopen_request(emp_id, decide):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        from app.models import get_all_terms
+        terms = get_all_terms(cursor)
+        active_term = next((t for t in terms if t['is_active'] == 1), None)
+        if not active_term:
+            return jsonify({'success': False, 'message': 'No active term.'}), 400
+
+        success, msg = decide(conn, cursor, emp_id, active_term['term_id'])
+        if success:
+            try:
+                from app.services.notification_service import send_reopen_decision_notification
+                send_reopen_decision_notification(conn, cursor, emp_id, int(active_term['term_id']),
+                                                  decide is approve_ipcr_reopen, request.host_url)
+            except Exception as notif_err:
+                import logging
+                logging.getLogger(__name__).error(f"Error triggering reopen decision notification: {notif_err}")
+        return jsonify({'success': success, 'message': msg}), (200 if success else 400)
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@dean_bp.route('/reopen_request/<int:emp_id>/approve', methods=['POST'])
+@role_required('DEAN')
+def dean_approve_reopen_request(emp_id):
+    return _decide_reopen_request(emp_id, approve_ipcr_reopen)
+
+
+@dean_bp.route('/reopen_request/<int:emp_id>/deny', methods=['POST'])
+@role_required('DEAN')
+def dean_deny_reopen_request(emp_id):
+    return _decide_reopen_request(emp_id, deny_ipcr_reopen)

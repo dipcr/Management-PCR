@@ -63,6 +63,7 @@ CREATE TABLE `tbl_committed_targets` (
   `completion_status` enum('COMPLETED','PARTIAL_AT_DEADLINE','NOT_BEGUN') DEFAULT NULL,
   `efficiency_rating_E` int DEFAULT NULL,
   `print_remarks` varchar(255) DEFAULT NULL,
+  `reopen_request` varchar(255) DEFAULT NULL,
   `is_auto_description` tinyint(1) NOT NULL DEFAULT '1',
   PRIMARY KEY (`target_id`),
   KEY `fk_target_emp` (`emp_id`),

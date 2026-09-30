@@ -41,8 +41,9 @@
 <button class="nav-item" data-section="nav-final-verification" onclick="showSection('nav-final-verification')">
     <i class="ti ti-clipboard-check"></i>
     <span class="nav-text">Final Verification</span>
-    {% if pending_dean_evidence_list|length > 0 %}
-    <span class="badge bg-danger ms-auto">{{ pending_dean_evidence_list|length }}</span>
+    {% set final_verification_badge = pending_dean_evidence_list|length + (reopen_requests|default([]))|length %}
+    {% if final_verification_badge > 0 %}
+    <span class="badge bg-danger ms-auto">{{ final_verification_badge }}</span>
     {% endif %}
 </button>
 {% if has_own_ipcr %}
@@ -1807,6 +1808,53 @@
         </div>
     </div>
 
+    {% if reopen_requests %}
+    <!-- Requests to add evidence to an IPCR the Dean already approved -->
+    <div class="card shadow-sm border-0 mb-4" style="border-radius: 14px; overflow: hidden;">
+        <div class="card-header bg-white border-0 pt-4 pb-3 px-4 d-flex justify-content-between align-items-center">
+            <div>
+                <h5 class="fw-bold text-dark mb-0">
+                    <i class="ti ti-lock-open text-warning me-2" aria-hidden="true"></i>Requests to Add Evidence
+                </h5>
+                <small class="text-muted">Approved IPCRs whose owner asked to upload more evidence. Approving removes the IPCR's final approval until it is verified again.</small>
+            </div>
+            <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-3 py-2 fw-bold">
+                {{ reopen_requests | length }} Waiting
+            </span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 text-start">
+                    <thead class="table-light">
+                        <tr>
+                            <th scope="col" class="ps-4 py-3">Faculty Member</th>
+                            <th scope="col">Reason</th>
+                            <th scope="col" class="text-center pe-4">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for req in reopen_requests %}
+                        <tr>
+                            <td class="ps-4 py-3">
+                                <div class="fw-bold text-dark">{{ req.first_name }} {{ req.last_name }}</div>
+                                <small class="text-muted">{{ req.designation or 'Regular Faculty' }}</small>
+                            </td>
+                            <td class="small">{{ req.reason }}</td>
+                            <td class="text-center pe-4 text-nowrap">
+                                <button type="button" class="btn btn-outline-danger btn-sm fw-semibold px-3"
+                                        onclick="decideReopenRequest({{ req.emp_id }}, {{ (req.first_name ~ ' ' ~ req.last_name)|tojson|forceescape }}, false)">Decline</button>
+                                <button type="button" class="btn btn-success btn-sm fw-semibold px-3"
+                                        onclick="decideReopenRequest({{ req.emp_id }}, {{ (req.first_name ~ ' ' ~ req.last_name)|tojson|forceescape }}, true)">Approve</button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Table 1: Pending Final Verification -->
     <div class="card shadow-sm border-0 mb-4" style="border-radius: 14px; overflow: hidden;">
         <div class="card-header bg-white border-0 pt-4 pb-3 px-4 d-flex justify-content-between align-items-center">
@@ -2203,6 +2251,36 @@
             })
             .catch(err => showToast('danger', 'Error: ' + err));
         }
+    };
+
+    window.decideReopenRequest = function(empId, facultyName, approve) {
+        showCustomConfirm({
+            title: approve ? "Reopen IPCR?" : "Decline Request?",
+            mainText: approve
+                ? `Reopen the approved IPCR of <strong>${escapeHtml(facultyName)}</strong> so they can add evidence?`
+                : `Decline <strong>${escapeHtml(facultyName)}</strong>'s request to add evidence?`,
+            subText: approve
+                ? "Its final approval is removed until the new evidence is verified and you approve it again."
+                : "The IPCR stays approved.",
+            confirmText: approve ? "Yes, Reopen" : "Yes, Decline",
+            confirmClass: approve ? "btn-success" : "btn-danger",
+            iconClass: approve ? "ti-lock-open" : "ti-circle-x",
+            onConfirm: () => {
+                fetch(`/dean/reopen_request/${empId}/${approve ? 'approve' : 'deny'}`, {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        window.location.reload();
+                    } else {
+                        showToast('danger', data.message);
+                    }
+                })
+                .catch(err => showToast('danger', 'Error: ' + err));
+            }
+        });
     };
 
     window.returnToFaculty = function(empId, facultyName) {

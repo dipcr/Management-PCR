@@ -33,6 +33,7 @@ def faculty_dashboard():
         evidence_readiness = None
         ipcr_score = None
         has_final_ipcr = False
+        reopen_reason = None
         gating_status = None
         evidence_sections = []
 
@@ -98,6 +99,9 @@ def faculty_dashboard():
                 from app.models.faculty import get_faculty_committed_targets, get_evidence_by_target, check_faculty_evidence_readiness
                 assigned_targets = get_faculty_committed_targets(cursor, emp_id, term_id)
                 has_final_ipcr = any(t.get('status') == 'Dean Approved' for t in assigned_targets)
+                if has_final_ipcr:
+                    from app.models.faculty import get_reopen_request_reason
+                    reopen_reason = get_reopen_request_reason(cursor, emp_id, term_id)
                 # Fetch evidence for each target
                 for target in assigned_targets:
                     target['evidence_list'] = get_evidence_by_target(cursor, target['target_id'])
@@ -130,6 +134,7 @@ def faculty_dashboard():
                                evidence_readiness=evidence_readiness,
                                ipcr_score=ipcr_score,
                                has_final_ipcr=has_final_ipcr,
+                               reopen_reason=reopen_reason,
                                gating_status=gating_status,
                                evidence_sections=evidence_sections)
     finally:
@@ -166,6 +171,38 @@ def faculty_save_accomplishment():
             data.get('print_remarks'),
         )
         return jsonify({'success': success, 'message': msg})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@faculty_bp.route('/request_reopen', methods=['POST'])
+@role_required('FACULTY')
+def faculty_request_reopen():
+    emp_id = session.get('user_id')
+    data = request.get_json(silent=True) or request.form
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        terms = get_all_terms(cursor)
+        active_term = next((t for t in terms if t['is_active'] == 1), None)
+        if not active_term:
+            return jsonify({'success': False, 'message': 'No active term.'}), 400
+
+        from app.models.faculty import request_ipcr_reopen
+        reason = data.get('reason')
+        success, msg = request_ipcr_reopen(conn, cursor, emp_id, active_term['term_id'], reason)
+        if success:
+            try:
+                from app.services.notification_service import send_reopen_request_notification
+                send_reopen_request_notification(conn, cursor, emp_id, int(active_term['term_id']),
+                                                 (reason or '').strip(), request.host_url)
+            except Exception as notif_err:
+                import logging
+                logging.getLogger(__name__).error(f"Error triggering reopen request notification: {notif_err}")
+        return jsonify({'success': success, 'message': msg}), (200 if success else 400)
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
     finally:

@@ -1,0 +1,71 @@
+{# Shared "Request to Add Evidence" modal. Included by faculty_dashboard.html and
+   designated_dashboard.html, each passing reopen_url (its own blueprint's /request_reopen). #}
+<div class="modal fade" id="reopenRequestModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+            <div class="modal-header border-0 py-3" style="background: var(--c-accent); color: #fff; border-top-left-radius: 16px; border-top-right-radius: 16px;">
+                <h5 class="modal-title fw-bold"><i class="ti ti-lock-open me-2" aria-hidden="true"></i>Request to Add Evidence</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 text-start">
+                <p class="small text-muted mb-3">
+                    Your IPCR is approved and locked. If you have more evidence to add, ask the Dean to reopen it.
+                    If approved, the IPCR loses its final approval until your new evidence is verified and approved again.
+                    Evidence that is already approved stays approved.
+                </p>
+                <label for="reopenReasonInput" class="form-label fw-bold small">Reason (required)</label>
+                <textarea class="form-control" id="reopenReasonInput" rows="3" maxlength="255"
+                          placeholder="Which target, and what evidence do you want to add?"></textarea>
+                <div class="d-flex justify-content-between mt-1">
+                    <div id="reopenReasonError" class="text-danger small" style="display:none;"></div>
+                    <div class="small text-muted ms-auto"><span id="reopenReasonCount">0</span>/255</div>
+                </div>
+            </div>
+            <div class="modal-footer border-0 p-3 bg-light" style="border-bottom-left-radius: 16px; border-bottom-right-radius: 16px;">
+                <button type="button" class="btn btn-secondary fw-semibold px-4" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary fw-bold px-4" id="reopenSubmitBtn" onclick="submitReopenRequest()">Send Request</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const input = document.getElementById('reopenReasonInput');
+    const count = document.getElementById('reopenReasonCount');
+    if (input) input.addEventListener('input', () => { count.textContent = input.value.length; });
+
+    window.submitReopenRequest = function () {
+        const reason = input.value.trim();
+        const err = document.getElementById('reopenReasonError');
+        if (!reason) {
+            err.textContent = 'A reason is required.';
+            err.style.display = '';
+            return;
+        }
+        err.style.display = 'none';
+        const btn = document.getElementById('reopenSubmitBtn');
+        btn.disabled = true;
+        fetch({{ reopen_url|tojson }}, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ reason: reason })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                window.location.reload();
+                return;
+            }
+            btn.disabled = false;
+            err.textContent = data.message || 'Could not send the request.';
+            err.style.display = '';
+        })
+        .catch(e => {
+            btn.disabled = false;
+            err.textContent = 'Error: ' + e;
+            err.style.display = '';
+        });
+    };
+})();
+</script>

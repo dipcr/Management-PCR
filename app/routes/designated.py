@@ -127,6 +127,7 @@ def designated_dashboard(conn, cursor):
         evidence_readiness = None
         ipcr_score = None
         has_final_ipcr = False
+        reopen_reason = None
         ipcr_form_preview = None
         evidence_sections = []
         if is_committed:
@@ -184,6 +185,9 @@ def designated_dashboard(conn, cursor):
                 t['evidence_list'] = get_evidence_by_target(cursor, t['target_id'])
             evidence_readiness = check_designated_evidence_readiness(cursor, emp_id, term_id, dpcr_targets)
             has_final_ipcr = any(t.get('status') == 'Dean Approved' for t in dpcr_targets) if dpcr_targets else False
+            if has_final_ipcr:
+                from app.models.faculty import get_reopen_request_reason
+                reopen_reason = get_reopen_request_reason(cursor, emp_id, term_id)
             # Live IPCR summary — uses the Designated Faculty weight table.
             from app.models.scoring import compute_ipcr_score
             ipcr_score = compute_ipcr_score(cursor, emp_id, term_id)
@@ -513,6 +517,7 @@ def designated_dashboard(conn, cursor):
                            evidence_readiness=evidence_readiness,
                            ipcr_score=ipcr_score,
                            has_final_ipcr=has_final_ipcr,
+                           reopen_reason=reopen_reason,
                            ipcr_form_preview=ipcr_form_preview,
                            evidence_sections=evidence_sections)
 
@@ -645,6 +650,38 @@ def designated_save_oversight_deadline():
         success, msg = update_oversight_draft_deadline(
             conn, cursor, emp_id, draft_id, data.get('duration_value'), duration_unit)
         return jsonify({'success': success, 'message': msg})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@designated_bp.route('/request_reopen', methods=['POST'])
+@designated_ipcr_required
+def designated_request_reopen():
+    emp_id = session.get('user_id')
+    data = request.get_json(silent=True) or request.form
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        terms = get_all_terms(cursor)
+        active_term = next((t for t in terms if t['is_active'] == 1), None)
+        if not active_term:
+            return jsonify({'success': False, 'message': 'No active term.'}), 400
+
+        from app.models.faculty import request_ipcr_reopen
+        reason = data.get('reason')
+        success, msg = request_ipcr_reopen(conn, cursor, emp_id, active_term['term_id'], reason)
+        if success:
+            try:
+                from app.services.notification_service import send_reopen_request_notification
+                send_reopen_request_notification(conn, cursor, emp_id, int(active_term['term_id']),
+                                                 (reason or '').strip(), request.host_url)
+            except Exception as notif_err:
+                import logging
+                logging.getLogger(__name__).error(f"Error triggering reopen request notification: {notif_err}")
+        return jsonify({'success': success, 'message': msg}), (200 if success else 400)
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
     finally:

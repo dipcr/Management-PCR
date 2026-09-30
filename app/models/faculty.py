@@ -1151,6 +1151,71 @@ def submit_faculty_evidences(conn, cursor, emp_id, term_id):
         return False, f"Error submitting evidences: {str(e)}"
 
 
+REOPEN_REASON_MAX_LENGTH = 255  # tbl_committed_targets.reopen_request is VARCHAR(255)
+
+
+def _get_reopen_state(cursor, emp_id, term_id):
+    """
+    Counts a person's committed targets for the term: (total, dean_approved, with_request).
+    A reopen can only be requested/decided on a fully Dean-approved IPCR, so callers compare
+    dean_approved against total rather than looking at a single row.
+    """
+    cursor.execute("""
+        SELECT COUNT(*),
+               COALESCE(SUM(ct.status = 'Dean Approved'), 0),
+               COALESCE(SUM(ct.reopen_request IS NOT NULL), 0)
+        FROM tbl_committed_targets ct
+        JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
+        WHERE ct.emp_id = %s AND mi.term_id = %s
+    """, (emp_id, term_id))
+    total, approved, requested = cursor.fetchone()
+    return int(total), int(approved), int(requested)
+
+
+def get_reopen_request_reason(cursor, emp_id, term_id):
+    """The reason on a pending reopen request for this person/term, or None when there is none."""
+    cursor.execute("""
+        SELECT MAX(ct.reopen_request)
+        FROM tbl_committed_targets ct
+        JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
+        WHERE ct.emp_id = %s AND mi.term_id = %s
+    """, (emp_id, term_id))
+    row = cursor.fetchone()
+    return row[0] if row and row[0] else None
+
+
+def request_ipcr_reopen(conn, cursor, emp_id, term_id, reason):
+    """
+    Asks the Dean to reopen a finalized IPCR so more evidence can be uploaded. Only records
+    the request (reopen_request on every target); nothing is unlocked until the Dean approves
+    it via approve_ipcr_reopen.
+    """
+    reason = (reason or '').strip()
+    if not reason:
+        return False, "A reason is required to request adding more evidence."
+    if len(reason) > REOPEN_REASON_MAX_LENGTH:
+        return False, f"The reason must be {REOPEN_REASON_MAX_LENGTH} characters or fewer."
+
+    try:
+        total, approved, requested = _get_reopen_state(cursor, emp_id, term_id)
+        if total == 0 or approved != total:
+            return False, "Only an IPCR that the Dean has fully approved can be reopened."
+        if requested > 0:
+            return False, "A request to add evidence is already waiting for the Dean."
+
+        cursor.execute("""
+            UPDATE tbl_committed_targets ct
+            JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
+            SET ct.reopen_request = %s
+            WHERE ct.emp_id = %s AND mi.term_id = %s AND ct.status = 'Dean Approved'
+        """, (reason, emp_id, term_id))
+        conn.commit()
+        return True, "Your request was sent to the Dean."
+    except Exception as e:
+        conn.rollback()
+        return False, f"Error sending request: {str(e)}"
+
+
 def enrich_faculty_verification_status(cursor, faculty_dict, term_id, reviewer_label=None):
     """
     Computes the verification status for a faculty member across Program Chair (CHAIR) and RET Chair (RET).

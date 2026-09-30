@@ -1,0 +1,69 @@
+{% extends "emails/base_email.html" %}
+
+{% block title %}{% if mode == 'request' %}Action Required: Request to Add Evidence{% elif mode == 'approved' %}IPCR Reopened for Additional Evidence{% else %}Request to Add Evidence Declined{% endif %}{% endblock %}
+
+{% block content %}
+{% if mode == 'request' %}
+<span class="badge-status" style="background-color: #fef3c7; color: #b45309; border: 1px solid #fcd34d;">Reopen Requested</span>
+<h2 style="font-size: 19px; color: #1e293b; margin-top: 0;">Request to Add Evidence to an Approved IPCR</h2>
+<p style="font-size: 14px; line-height: 1.6; color: #475569;">
+    Dear <strong>{{ recipient_name }}</strong>,
+</p>
+<p style="font-size: 14px; line-height: 1.6; color: #475569;">
+    <strong>{{ faculty_name }}</strong> has asked to reopen their approved IPCR for <strong>{{ period_display }}</strong> so that additional evidence can be uploaded.
+</p>
+{% elif mode == 'approved' %}
+<span class="badge-status" style="background-color: #dcfce7; color: #15803d; border: 1px solid #86efac;">Reopened</span>
+<h2 style="font-size: 19px; color: #1e293b; margin-top: 0;">Your IPCR Was Reopened</h2>
+<p style="font-size: 14px; line-height: 1.6; color: #475569;">
+    Dear <strong>{{ recipient_name }}</strong>,
+</p>
+<p style="font-size: 14px; line-height: 1.6; color: #475569;">
+    The Dean approved your request to add evidence to your IPCR for <strong>{{ period_display }}</strong>. You can now upload additional evidence. Evidence that was already approved stays approved.
+</p>
+{% else %}
+<span class="badge-status" style="background-color: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5;">Request Declined</span>
+<h2 style="font-size: 19px; color: #1e293b; margin-top: 0;">Your Request Was Declined</h2>
+<p style="font-size: 14px; line-height: 1.6; color: #475569;">
+    Dear <strong>{{ recipient_name }}</strong>,
+</p>
+<p style="font-size: 14px; line-height: 1.6; color: #475569;">
+    The Dean declined your request to add evidence to your IPCR for <strong>{{ period_display }}</strong>. Your IPCR remains approved.
+</p>
+{% endif %}
+
+<div class="info-card" style="border-left: 4px solid #f59e0b;">
+    <div class="info-row">
+        <span class="info-label">Faculty Member:</span>
+        <span class="info-value">{{ faculty_name }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Department / Unit:</span>
+        <span class="info-value">{{ department or 'CICT' }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Academic Term:</span>
+        <span class="info-value">{{ period_display }}</span>
+    </div>
+    {% if reason %}
+    <div class="info-row" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+        <span class="info-label">Reason:</span>
+        <span class="info-value" style="text-align: left; width: 100%; box-sizing: border-box; font-size: 13.5px; line-height: 1.5; font-weight: normal; margin-top: 4px;">{{ reason }}</span>
+    </div>
+    {% endif %}
+</div>
+
+{% if mode == 'request' %}
+<p style="font-size: 14px; line-height: 1.6; color: #475569;">
+    Approving unlocks the IPCR for uploads and removes its final approval until it is reviewed and approved again. Declining leaves it approved as it is.
+</p>
+{% elif mode == 'approved' %}
+<p style="font-size: 14px; line-height: 1.6; color: #475569;">
+    After uploading, submit your evidences again so they can be verified and the IPCR approved once more.
+</p>
+{% endif %}
+
+<div style="text-align: center; margin: 30px 0 10px 0;">
+    <a href="{{ action_url }}" class="btn-action">{% if mode == 'request' %}Review Request{% else %}Open Dashboard{% endif %}</a>
+</div>
+{% endblock %}

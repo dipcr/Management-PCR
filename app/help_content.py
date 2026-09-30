@@ -132,6 +132,7 @@ HELP = {
                 ],
                 'tips': [
                     "Evidence Gathering appears in the sidebar only after your IPCR is locked. Print IPCR appears once it is locked or finalized.",
+                    "Once the Dean has approved your IPCR you can still add evidence: open Evidence Gathering, click Request to Add Evidence at the bottom and give a reason. If the Dean approves, uploads open again and your IPCR needs final approval once more. Evidence that was already approved stays approved.",
                 ],
             },
             'nav-ipcr': {
@@ -245,6 +246,7 @@ HELP = {
                 ],
                 'tips': [
                     "Evidence Gathering appears in the sidebar only after your IPCR is locked. Print IPCR appears once it is locked or finalized.",
+                    "Once the Dean has approved your IPCR you can still add evidence: open Evidence Gathering, click Request to Add Evidence at the bottom and give a reason. If the Dean approves, uploads open again and your IPCR needs final approval once more. Evidence that was already approved stays approved.",
                 ],
             },
             'designated-dpcr': {
@@ -732,9 +734,11 @@ HELP = {
                     "Click Review IPCR. The official IPCR form opens in the window with the commitments, accomplishments, Q, E, T scores, summary ratings and signatories.",
                     "Click Approve IPCR to finalize it, or Return to Faculty to send it back with a reason.",
                     "The two Approved tables list finalized IPCRs, one for Designated Faculty and chairs, and one for Regular Faculty. Click View IPCR to open any of them again.",
+                    "Requests to Add Evidence appears at the top when someone asks to add evidence to an IPCR you already approved. Approve reopens it: the final approval is removed and they can upload again. Decline leaves it approved.",
                 ],
                 'tips': [
                     "After approval the person can print their finalized IPCR.",
+                    "A reopened IPCR returns to Final Verification only after the new evidence is verified again. Files that were already approved do not need to be reviewed twice.",
                     "The red number on Final Verification in the sidebar is how many packages are waiting.",
                 ],
             },
