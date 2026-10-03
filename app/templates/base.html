@@ -981,14 +981,19 @@
             overflow-y: auto;
         }
 
-        /* ── In-app help (drawer + floating button) ── */
+        /* ── In-app help (drawer + top-right button) ── */
+        /* Own row above the page content so the button never overlaps it. */
+        .help-topbar {
+            display: flex; justify-content: flex-end;
+            margin: -8px 0 12px;
+        }
         .help-fab {
-            position: fixed; right: 22px; bottom: 22px; z-index: 1030;
+            position: relative;
             display: inline-flex; align-items: center; gap: 8px;
-            padding: 10px 16px; border-radius: 999px;
+            padding: 7px 14px; border-radius: 999px;
             background: var(--c-accent); color: #fff; border: none;
             font-size: 13px; font-weight: 600; cursor: pointer;
-            box-shadow: 0 4px 14px rgba(43,40,34,0.18);
+            box-shadow: 0 2px 8px rgba(43,40,34,0.12);
         }
         .help-fab:hover { background: var(--c-accent-dark); }
         .help-fab.help-fab-new::after {
@@ -1008,7 +1013,11 @@
             background: var(--c-accent-tint); border-left: 3px solid var(--c-accent);
             border-radius: 6px; padding: 10px 14px 2px;
         }
-        @media (max-width: 575px) { .help-fab span { display: none; } .help-fab { padding: 12px; } }
+        @media (max-width: 575px) { .help-fab span { display: none; } .help-fab { padding: 10px 12px; } }
+        /* Mobile: sit in the empty strip beside the hamburger instead of adding a row. */
+        @media (max-width: 991.98px) {
+            .help-topbar { position: fixed; top: 16px; right: 16px; margin: 0; z-index: 1030; }
+        }
     </style>
     {% block extra_styles %}{% endblock %}
 </head>
@@ -1069,6 +1078,13 @@
     <!-- Main content -->
     <main class="dipcr-main" id="mainContent">
         <h1 class="visually-hidden">{{ self.role_display() }}</h1>
+        {% if help_data and request.endpoint != 'help.manual' %}
+        <div class="help-topbar">
+            <button type="button" class="help-fab" id="helpFab" aria-controls="helpDrawer">
+                <i class="ti ti-help-circle" aria-hidden="true"></i><span>About this page</span>
+            </button>
+        </div>
+        {% endif %}
         <div class="flash-container">
             {% block flash_messages %}
             {% with messages = get_flashed_messages(with_categories=true) %}
@@ -1642,9 +1658,6 @@
         };
     </script>
     {% if help_data and request.endpoint != 'help.manual' %}
-    <button type="button" class="help-fab" id="helpFab" aria-controls="helpDrawer">
-        <i class="ti ti-help-circle" aria-hidden="true"></i><span>About this page</span>
-    </button>
     <div class="offcanvas offcanvas-end help-drawer" tabindex="-1" id="helpDrawer" aria-labelledby="helpDrawerTitle">
         <div class="offcanvas-header">
             <h5 class="offcanvas-title" id="helpDrawerTitle">About this page</h5>
