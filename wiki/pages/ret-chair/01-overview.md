@@ -15,7 +15,7 @@ faculty member** with their own IPCR.
 | Phases | **Target Assignment** | Assign RET targets to faculty |
 | Phases | **Menu Config** | Configure the rank-based Research/Extension rules |
 | Phases | **Commitments** | Review RET submissions |
-| Verification | **Evidence Monitor** | Monitor RET evidence |
+| Verification | **Evidence Monitor** | Read-only view of evidence the Program Chair approved |
 | My Performance | **My IPCR** | Your own IPCR |
 
 ## Reading the Overview
@@ -39,4 +39,5 @@ faculty member** with their own IPCR.
    mandatory quantities).
 2. **Cascaded Targets** — review what the Dean cascaded to RET.
 3. **Target Assignment** — assign/confirm faculty targets.
-4. **Commitments** and **Evidence Monitor** — review and verify.
+4. **Commitments** — review RET submissions. **Evidence Monitor** is read-only: it shows
+   evidence the Program Chair has already approved.

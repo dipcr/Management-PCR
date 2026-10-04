@@ -26,8 +26,10 @@ it and resubmit. It re-enters your queue afterwards.
 
 ## What "Approved" does
 
-An approved draft proceeds toward the Dean's **Final Verification**, then **locking** (where
-its targets are copied to *committed targets* and evidence upload opens).
+An approved draft is **locked immediately**: its targets are copied to *committed targets* and
+evidence upload opens. There is **no Dean verification of targets** — your approval ends the
+draft chain. (The Dean's own *Final Verification* is a later, evidence-stage package
+sign-off.)
 
 ## Who appears here
 

@@ -1,8 +1,12 @@
 # Dean — Overview
 
 The Dean is the **second stage of the cascade**: quotas flow from the Admin's indicators,
-through the Dean, down to the Program Chairs and Faculty. The Dean also oversees draft
-IPCRs for designated faculty and gives final approval.
+through the Dean, down to the Program Chairs and Faculty. The Dean also formulates draft
+IPCRs for designated faculty, and gives the final package approval once evidence has been
+verified.
+
+The Dean does **not** verify targets. Once a Program Chair approves a draft it is locked; the
+Dean's approval happens later, at the evidence stage.
 
 ![Dean dashboard — Overview](/static/img/dean/00-overview.png)
 
@@ -16,7 +20,7 @@ IPCRs for designated faculty and gives final approval.
 | Phases | **Target Assignment** | Assign College-Wide/oversight targets to designated faculty |
 | Phases | **Department Accomplishment** | Cascaded quota vs approved accomplishment |
 | Phases | **Evidence Verification** | Verify evidence packages sent up by chairs |
-| Phases | **Final Verification** | Final approval of submitted IPCRs |
+| Phases | **Final Verification** | Package-level sign-off (after evidence, before scoring) |
 | My Performance | **My IPCR** | Your own IPCR (a Dean is also a designated faculty member) |
 
 ## Reading the Overview
