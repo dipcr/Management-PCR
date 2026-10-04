@@ -12,10 +12,19 @@ Functions / 25% Core Functions).
 | Group | Item | What it does |
 | --- | --- | --- |
 | Dashboard | **Overview** | Your assigned targets and status |
-| Phases | **Target Allocation** | Distribute your own Instruction share (Phase 1) |
-| Phases | **Commitments** | Your commitment targets |
-| Verification | **Evidence Verification** | Your evidence |
 | My Performance | **My IPCR** | The IPCR itself |
+| My Performance | **Evidence Gathering** | Appears once your IPCR is committed |
+| My Performance | **Print IPCR** | Appears once your IPCR is committed / final |
+
+For a plain **Designated Faculty** member that is the whole sidebar: **Overview** and
+**My IPCR** — with **Evidence Gathering** and **Print IPCR** appearing only once your targets
+are committed. The phase menus you may have heard about — **Target Allocation**,
+**Commitments**, **Menu Config**, **Evidence Monitor** — belong to the **Program Chair** and
+**RET Chair** dashboards, not to this one.
+
+> If you are a Program Chair, RET Chair or the Dean, this page shows **your own dashboard's
+> sidebar** instead, as links back — so you can move between your oversight work and your
+> personal IPCR without losing your place.
 
 ## How your IPCR is built
 
@@ -25,8 +34,9 @@ through the Draft IPCR Studio, then issued to you pre-approved:
 > *Waiting for the Dean to formulate your Draft IPCR — your Core Functions and Strategic
 > Priorities & Support Functions are formulated by the Dean, then issued here.*
 
-You can still **distribute your own Instruction share to yourself** in **Target Allocation**
-while you wait.
+There is nothing for you to distribute yourself — unlike a Program Chair, you have **no Target
+Allocation phase**. Your Instruction/teaching load is part of the Core Functions the Dean
+formulates for you.
 
 ## Where to start
 

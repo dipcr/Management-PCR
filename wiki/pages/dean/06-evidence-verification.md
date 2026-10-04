@@ -1,7 +1,9 @@
 # Dean — Evidence Verification
 
-Faculty upload PDF evidence per committed target; the Program Chair (and RET Chair, where
-applicable) verify it first. The Dean verifies the **package** that a chair submits upward.
+Faculty upload PDF evidence per committed target. **Regular Faculty and plain Designated
+Faculty** evidence is reviewed by the **Program Chair** first; evidence belonging to a
+Program Chair, RET Chair or the Dean has no one else to review it, so it reaches you
+directly. You then give the **package-level** sign-off.
 
 ![Evidence Verification](/static/img/dean/06-evidence-verification.png)
 
@@ -16,16 +18,17 @@ applicable) verify it first. The Dean verifies the **package** that a chair subm
 
 ```mermaid
 flowchart LR
-    F[Faculty uploads PDF evidence] --> C[Program Chair verifies]
-    F --> R[RET Chair verifies RET evidence]
-    C --> D[Dean verifies the package]
-    R --> D
+    F[Faculty uploads PDF evidence] --> C[Program Chair verifies each file]
+    C --> D[Dean gives the package sign-off]
+    X[Program Chair / RET Chair / Dean's own evidence] --> D
     D --> S[Scoring unlocked]
 ```
 
-- A target is considered fully verified only when **all** required verifications are done.
-- A faculty member with **no RET evidence at all** skips the RET step — nothing to verify —
-  so the Program Chair can proceed.
+- The **RET Chair does not verify evidence** — not even Research evidence. They only keep a
+  read-only monitor of evidence the Program Chair has already approved.
+- A package reaches you only once **every** evidence file in it has been reviewed, so you are
+  never signing off on a half-reviewed package.
+- Approving here marks the targets *Dean Approved* and records the Final Weighted Rating.
 
 ## Tips
 

@@ -28,7 +28,9 @@ Once issued, they can view it and proceed to the later phases (evidence, scoring
 
 ## Notes
 
-- A designated faculty member can still **distribute their own Instruction share to
-  themselves** in Phase 1 Target Allocation before you formulate the draft.
+- Plain **Designated Faculty** have no Target Allocation phase — that menu belongs to the
+  Program Chair and RET Chair dashboards. A **chair** who is also a designated faculty member
+  can still distribute their own Instruction share in their own Phase 1 before you formulate
+  the draft.
 - Departmental Oversight rows have no upload slot of their own — their evidence is linked
   automatically from the scoped faculty who did the work.

@@ -49,8 +49,8 @@ the **Program Chair**.
 | Status | What it means |
 | --- | --- |
 | *Returned* | The reviewer sent it back — fix and resubmit |
-| *Approved* | It moves to the Dean's final verification |
-| *Locked / Committed* | Your targets are committed and **evidence upload opens** |
+| *Approved* | Your targets are **locked** next — there is no Dean step for targets |
+| *Locked / Committed* | Your targets are copied to *committed targets* and **evidence upload opens** |
 
 ## Evidence
 
@@ -58,12 +58,14 @@ Once locked, upload a **PDF** per committed target:
 
 1. Open the target and click **Upload Evidence**.
 2. Choose a `.pdf` file (max 10 MB).
-3. The reviewer (Program Chair, RET Chair or Dean) **approves** or **returns** it.
+3. The **Program Chair** **approves** or **returns** it — all regular faculty evidence goes
+   through them (the RET Chair no longer verifies evidence). Once every file is reviewed, the
+   **Dean** gives a final package sign-off.
 4. You can see the readiness status; returned evidence must be re-uploaded.
 
 ## Scoring and printing
 
-When all evidence is verified, D-IPCR scores each target for **Quantity, Efficiency and
-Timeliness**, rolls them into your weighted categories, and produces a **Final Weighted
-Rating** with an adjectival band. Open **My IPCR** to view the score and print the official
-form.
+Once the Dean signs off your verified package, D-IPCR scores each target for **Quantity,
+Efficiency and Timeliness**, rolls them into your weighted categories, and produces a **Final
+Weighted Rating** with an adjectival band. Open **My IPCR** to view the score and print the
+official form.

@@ -7,10 +7,9 @@ evidence → scoring → print pipeline as everyone else's.
 
 ## While waiting for the Dean
 
-Until the Dean formulates your draft, My IPCR shows *Awaiting Dean Formulation*. You can:
-
-- distribute your own **Instruction** share to yourself under **Target Allocation**, and
-- review the targets the Dean has cascaded to you.
+Until the Dean formulates your draft, My IPCR shows *Awaiting Dean Formulation*. While you
+wait you can review the targets the Dean has cascaded to you — there is **no Target
+Allocation phase** for you, so nothing here needs distributing by you.
 
 ## After the Dean issues your draft
 
@@ -20,7 +19,8 @@ The draft appears pre-approved. You then:
    **Strategic Priorities & Support Functions** (oversight/cascaded work).
 2. Proceed to **Commitments** / locking, as directed by the pipeline.
 3. **Upload evidence** per committed target (PDF).
-4. Wait for verification (Program Chair / RET Chair / Dean as applicable).
+4. Wait for verification — the **Program Chair** reviews each file, then the **Dean** gives
+   the package sign-off.
 5. View the **scored IPCR** and print it once scoring completes.
 
 ## Your two kinds of target
@@ -37,4 +37,5 @@ normal category mapping so your own teaching and your oversight work land in the
 
 - **Departmental Oversight** rows have no upload slot of their own — their evidence is linked
   automatically from the scoped faculty who did the work.
-- If you have no RET evidence at all, the RET verification step is skipped for you.
+- The **RET Chair does not verify evidence** (not even Research evidence) — they only keep a
+  read-only monitor of evidence the Program Chair has approved.

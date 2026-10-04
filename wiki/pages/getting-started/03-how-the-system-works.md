@@ -15,8 +15,7 @@ flowchart TD
     G -- Yes --> H[RET Chair review]
     G -- No --> I[Program Chair review]
     H --> I
-    I --> J[Dean review / final approval]
-    J --> K[Lock: targets copied to Committed Targets]
+    I --> K[Lock: targets copied to Committed Targets]
     K --> L[Evidence upload & verification]
     L --> M[Scoring: Q/E/T to weighted rating]
     M --> N[Printable IPCR]
@@ -30,9 +29,11 @@ flowchart TD
    **RET Chair** configures Research/Extension rules and per-faculty eligibility.
 4. **Faculty assemble and submit** their draft IPCR.
 5. **Review** — RET-eligible drafts go through the RET Chair first, then the Program Chair;
-   everything else goes straight to the Program Chair.
+   everything else goes straight to the Program Chair. The **Dean does not review targets** —
+   the Program Chair's approval ends the draft chain.
 6. **Lock** — an approved IPCR is locked and copied into committed targets.
-7. **Evidence** — PDFs are uploaded per committed target and verified.
+7. **Evidence** — PDFs are uploaded per committed target, verified file-by-file by the
+   **Program Chair**, then signed off at package level by the **Dean**.
 8. **Scoring & print** — Q/E/T ratings roll up into weighted categories and a final
    adjectival rating, then a printable IPCR.
 
@@ -59,6 +60,9 @@ The **review lane** on each criterion decides who reviews it:
 | Administrative | Program Chair |
 | Research | RET Chair |
 | Extension | RET Chair |
+
+This lane governs the **draft / target review**. Evidence verification is a separate stage:
+the Program Chair verifies all regular faculty evidence, and the Dean signs off the package.
 
 ## Weights
 
