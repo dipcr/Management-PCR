@@ -112,6 +112,9 @@ def prog_chair_dashboard():
             # cascaded to this specialization -- see get_department_accomplishment_summary.
             department_accomplishment_summary = get_department_accomplishment_summary(cursor, specialization, term_id)
 
+        from app.models.ipcr_form import get_employee_accomplished_ipcrs
+        past_accomplished_ipcrs = get_employee_accomplished_ipcrs(cursor, session.get('user_id'))
+
         return render_template(
             'prog_chair_dashboard.html',
             active_term=active_term,
@@ -129,6 +132,7 @@ def prog_chair_dashboard():
             approved_evidence_faculty_list=approved_evidence_faculty_list if 'approved_evidence_faculty_list' in locals() else [],
             approved_regular_evidence_list=approved_regular_evidence_list if 'approved_regular_evidence_list' in locals() else [],
             department_accomplishment_summary=department_accomplishment_summary if 'department_accomplishment_summary' in locals() else [],
+            past_accomplished_ipcrs=past_accomplished_ipcrs,
             has_own_ipcr=True
         )
     finally:
@@ -720,6 +724,49 @@ def decide_ipcr():
         conn.close()
 
     return redirect(url_for('prog_chair.prog_chair_dashboard'))
+
+
+@prog_chair_bp.route('/preview_ipcr/<int:emp_id>')
+@role_required('PROGRAM_CHAIR')
+def prog_chair_preview_ipcr(emp_id):
+    """Renders the official printable IPCR form for a faculty member under the department."""
+    from app.models.ipcr_form import build_ipcr_form
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        term_id = request.args.get('term_id', type=int)
+        if term_id:
+            cursor.execute("SELECT term_id FROM tbl_academic_terms WHERE term_id = %s", (term_id,))
+            term_row = cursor.fetchone()
+            if not term_row:
+                flash('Academic term not found.', 'warning')
+                return redirect(url_for('prog_chair.prog_chair_dashboard'))
+            target_term_id = term_row[0]
+        else:
+            terms = get_all_terms(cursor)
+            active_term = next((t for t in terms if t['is_active'] == 1), None)
+            if not active_term:
+                flash('No active academic term found.', 'warning')
+                return redirect(url_for('prog_chair.prog_chair_dashboard'))
+            target_term_id = active_term['term_id']
+
+        cursor.execute("""
+            SELECT COUNT(*) FROM tbl_committed_targets ct
+            JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
+            WHERE ct.emp_id = %s AND mi.term_id = %s
+              AND ct.status IN ('Submitted to Dean', 'Dean Approved')
+        """, (emp_id, target_term_id))
+        reached_dean = cursor.fetchone()[0] > 0
+
+        form = build_ipcr_form(cursor, emp_id, target_term_id, force_final=reached_dean)
+        if not form or not form['has_targets']:
+            flash('No committed IPCR targets found for this faculty member.', 'warning')
+            return redirect(url_for('prog_chair.prog_chair_dashboard'))
+
+        return render_template('ipcr_print.html', form=form, back_url=url_for('prog_chair.prog_chair_dashboard'))
+    finally:
+        cursor.close()
+        conn.close()
 
 
 

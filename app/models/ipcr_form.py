@@ -276,3 +276,181 @@ def build_ipcr_form(cursor, emp_id, term_id, force_final=False):
         'stage_title': stage_title,
         'has_targets': bool(targets),
     }
+
+
+def get_employee_accomplished_ipcrs(cursor, emp_id):
+    """
+    Returns all IPCRs for a faculty member that have been finalized and approved by the Dean,
+    ordered with the most recent term first.
+    """
+    query = """
+        SELECT 
+            t.term_id,
+            t.academic_year,
+            t.semester,
+            t.period_start,
+            t.period_end,
+            t.is_active,
+            fs.final_score,
+            fs.adjectival_rating,
+            fs.dean_approval_status,
+            COUNT(ct.target_id) AS total_targets,
+            SUM(CASE WHEN ct.status = 'Dean Approved' THEN 1 ELSE 0 END) AS approved_targets,
+            MAX(dr.reviewed_at) AS approved_at
+        FROM tbl_academic_terms t
+        JOIN tbl_master_indicators mi ON mi.term_id = t.term_id
+        JOIN tbl_committed_targets ct ON ct.indicator_id = mi.indicator_id AND ct.emp_id = %s
+        LEFT JOIN tbl_final_scores fs ON fs.emp_id = ct.emp_id AND fs.term_id = t.term_id
+        LEFT JOIN tbl_ipcr_dean_review dr ON dr.emp_id = ct.emp_id AND dr.term_id = t.term_id
+        WHERE ct.assigned_quantity > 0
+        GROUP BY t.term_id, t.academic_year, t.semester, t.period_start, t.period_end, t.is_active,
+                 fs.final_score, fs.adjectival_rating, fs.dean_approval_status
+        HAVING total_targets > 0 AND (approved_targets = total_targets OR fs.dean_approval_status = 'Approved')
+        ORDER BY t.period_end DESC, t.term_id DESC
+    """
+    cursor.execute(query, (emp_id,))
+    rows = cursor.fetchall()
+    results = []
+    for r in rows:
+        term_id = r[0]
+        ay = r[1]
+        sem = r[2]
+        p_start = r[3]
+        p_end = r[4]
+        is_active = r[5]
+        score = float(r[6]) if r[6] is not None else None
+        adjectival = r[7]
+        approval_status = r[8]
+        total_targets = r[9]
+        approved_targets = r[10]
+        approved_at = r[11]
+
+        # If score is missing from tbl_final_scores, compute it live
+        if score is None:
+            computed = compute_ipcr_score(cursor, emp_id, term_id)
+            score = computed.get('final_weighted_rating')
+            adjectival = computed.get('adjectival_rating') or 'N/A'
+
+        results.append({
+            'term_id': term_id,
+            'academic_year': ay,
+            'semester': sem,
+            'period_start': p_start,
+            'period_end': p_end,
+            'rating_period': format_rating_period(p_start, p_end) or f"{sem}, {ay}",
+            'is_active': bool(is_active),
+            'final_score': score,
+            'adjectival_rating': adjectival or 'N/A',
+            'total_targets': total_targets,
+            'approved_targets': approved_targets,
+            'approved_at': approved_at,
+            'status': 'Dean Approved',
+        })
+    return results
+
+
+def get_all_accomplished_ipcrs(cursor, specialization=None, program=None):
+    """
+    Returns all Dean-approved accomplished IPCRs across faculty members,
+    optionally filtered by specialization or assigned program.
+    """
+    params = []
+    where_extra = ""
+    if specialization:
+        where_extra += " AND (ep.specialization = %s OR ep.assigned_program = %s)"
+        params.extend([specialization, specialization])
+    elif program:
+        where_extra += " AND ep.assigned_program = %s"
+        params.append(program)
+
+    query = f"""
+        SELECT 
+            t.term_id,
+            t.academic_year,
+            t.semester,
+            t.period_start,
+            t.period_end,
+            t.is_active,
+            ep.emp_id,
+            ep.employee_id_number,
+            ep.first_name,
+            ep.last_name,
+            ep.academic_rank,
+            ep.designation,
+            ep.assigned_program,
+            ep.specialization,
+            ep.college,
+            fs.final_score,
+            fs.adjectival_rating,
+            fs.dean_approval_status,
+            COUNT(ct.target_id) AS total_targets,
+            SUM(CASE WHEN ct.status = 'Dean Approved' THEN 1 ELSE 0 END) AS approved_targets,
+            MAX(dr.reviewed_at) AS approved_at
+        FROM tbl_academic_terms t
+        JOIN tbl_master_indicators mi ON mi.term_id = t.term_id
+        JOIN tbl_committed_targets ct ON ct.indicator_id = mi.indicator_id
+        JOIN tbl_employee_profiles ep ON ep.emp_id = ct.emp_id
+        LEFT JOIN tbl_final_scores fs ON fs.emp_id = ct.emp_id AND fs.term_id = t.term_id
+        LEFT JOIN tbl_ipcr_dean_review dr ON dr.emp_id = ct.emp_id AND dr.term_id = t.term_id
+        WHERE ct.assigned_quantity > 0 {where_extra}
+        GROUP BY t.term_id, t.academic_year, t.semester, t.period_start, t.period_end, t.is_active,
+                 ep.emp_id, ep.employee_id_number, ep.first_name, ep.last_name, ep.academic_rank,
+                 ep.designation, ep.assigned_program, ep.specialization, ep.college,
+                 fs.final_score, fs.adjectival_rating, fs.dean_approval_status
+        HAVING total_targets > 0 AND (approved_targets = total_targets OR fs.dean_approval_status = 'Approved')
+        ORDER BY t.period_end DESC, t.term_id DESC, ep.last_name ASC, ep.first_name ASC
+    """
+    cursor.execute(query, tuple(params))
+    rows = cursor.fetchall()
+    results = []
+    for r in rows:
+        term_id = r[0]
+        ay = r[1]
+        sem = r[2]
+        p_start = r[3]
+        p_end = r[4]
+        is_active = r[5]
+        emp_id = r[6]
+        id_num = r[7]
+        first_name = r[8]
+        last_name = r[9]
+        academic_rank = r[10]
+        designation = r[11]
+        assigned_program = r[12]
+        spec = r[13]
+        college = r[14]
+        score = float(r[15]) if r[15] is not None else None
+        adjectival = r[16]
+        approval_status = r[17]
+        total_targets = r[18]
+        approved_targets = r[19]
+        approved_at = r[20]
+
+        if score is None:
+            computed = compute_ipcr_score(cursor, emp_id, term_id)
+            score = computed.get('final_weighted_rating')
+            adjectival = computed.get('adjectival_rating') or 'N/A'
+
+        results.append({
+            'term_id': term_id,
+            'academic_year': ay,
+            'semester': sem,
+            'period_start': p_start,
+            'period_end': p_end,
+            'rating_period': format_rating_period(p_start, p_end) or f"{sem}, {ay}",
+            'is_active': bool(is_active),
+            'emp_id': emp_id,
+            'employee_id_number': id_num,
+            'faculty_name': f"{first_name} {last_name}".strip(),
+            'academic_rank': academic_rank or 'Instructor I',
+            'designation': designation or 'Regular Faculty',
+            'department': assigned_program or spec or college,
+            'final_score': score,
+            'adjectival_rating': adjectival or 'N/A',
+            'total_targets': total_targets,
+            'approved_targets': approved_targets,
+            'approved_at': approved_at,
+            'status': 'Dean Approved',
+        })
+    return results
+

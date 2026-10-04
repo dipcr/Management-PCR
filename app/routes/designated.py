@@ -498,6 +498,9 @@ def designated_dashboard(conn, cursor):
                     requires_instruction = cursor.fetchone()[0] > 0
                     instruction_ready = not requires_instruction
 
+    from app.models.ipcr_form import get_employee_accomplished_ipcrs
+    past_accomplished_ipcrs = get_employee_accomplished_ipcrs(cursor, emp_id)
+
     return render_template('designated_dashboard.html',
                            emp_name=f"{first_name} {last_name}",
                            academic_rank=academic_rank,
@@ -519,7 +522,8 @@ def designated_dashboard(conn, cursor):
                            has_final_ipcr=has_final_ipcr,
                            reopen_reason=reopen_reason,
                            ipcr_form_preview=ipcr_form_preview,
-                           evidence_sections=evidence_sections)
+                           evidence_sections=evidence_sections,
+                           past_accomplished_ipcrs=past_accomplished_ipcrs)
 
 
 @designated_bp.route('/lock_ipcr', methods=['POST'])
@@ -1102,6 +1106,8 @@ def designated_print_ipcr():
     Printable IPCR for any designated faculty member — including Program Chairs, the RET
     Chair and the Dean, who reach it from their own dashboards.
     """
+    term_id = request.args.get('term_id', type=int)
     from app.routes.faculty import _render_ipcr_print
     return _render_ipcr_print(session.get('user_id'),
-                              url_for('designated.designated_dashboard'))
+                              url_for('designated.designated_dashboard'),
+                              term_id=term_id)

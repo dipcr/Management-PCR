@@ -181,6 +181,7 @@ def dean_dashboard():
                                approved_regular_dean_evidence_list=approved_regular_dean_evidence_list,
                                department_completion=department_completion,
                                completion_totals=completion_totals,
+                               past_accomplished_ipcrs=get_employee_accomplished_ipcrs(cursor, dean_id),
                                has_own_ipcr=True)
     finally:
         cursor.close()
@@ -625,12 +626,22 @@ def dean_preview_ipcr(emp_id):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        from app.models import get_all_terms
-        terms = get_all_terms(cursor)
-        active_term = next((t for t in terms if t['is_active'] == 1), None)
-        if not active_term:
-            flash('No active academic term found.', 'warning')
-            return redirect(url_for('dean.dean_dashboard'))
+        term_id = request.args.get('term_id', type=int)
+        if term_id:
+            cursor.execute("SELECT term_id FROM tbl_academic_terms WHERE term_id = %s", (term_id,))
+            term_row = cursor.fetchone()
+            if not term_row:
+                flash('Academic term not found.', 'warning')
+                return redirect(url_for('dean.dean_dashboard'))
+            target_term_id = term_row[0]
+        else:
+            from app.models import get_all_terms
+            terms = get_all_terms(cursor)
+            active_term = next((t for t in terms if t['is_active'] == 1), None)
+            if not active_term:
+                flash('No active academic term found.', 'warning')
+                return redirect(url_for('dean.dean_dashboard'))
+            target_term_id = active_term['term_id']
 
         # Once a package has reached the Dean at all (submitted for final verification, or
         # already approved), the Dean's own review should always show the computed Q/E/T
@@ -642,10 +653,10 @@ def dean_preview_ipcr(emp_id):
             JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
             WHERE ct.emp_id = %s AND mi.term_id = %s
               AND ct.status IN ('Submitted to Dean', 'Dean Approved')
-        """, (emp_id, active_term['term_id']))
+        """, (emp_id, target_term_id))
         reached_dean = cursor.fetchone()[0] > 0
 
-        form = build_ipcr_form(cursor, emp_id, active_term['term_id'], force_final=reached_dean)
+        form = build_ipcr_form(cursor, emp_id, target_term_id, force_final=reached_dean)
         if not form or not form['has_targets']:
             flash('No committed IPCR targets found for this faculty member.', 'warning')
             return redirect(url_for('dean.dean_dashboard'))

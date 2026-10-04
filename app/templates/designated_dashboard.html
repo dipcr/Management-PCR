@@ -99,14 +99,14 @@
     </div>
 
     {% if is_committed %}
-    <div class="alert border-0 shadow-sm d-flex justify-content-between align-items-center flex-wrap gap-2"
+    <div class="alert border-0 shadow-sm d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4"
         style="background: var(--c-surface-alt); border-left: 4px solid var(--c-text) !important; border-radius: 10px;">
         <div>
             <i class="ti ti-lock me-2"></i>
             {% if has_final_ipcr %}
-            Your IPCR has been finalized and approved by the Dean.
+            Your IPCR has been finalized and approved by the Dean for the active term.
             {% else %}
-            Your IPCR performance targets are approved and locked.
+            Your IPCR performance targets are approved and locked for the active term.
             {% endif %}
         </div>
         <div class="d-flex align-items-center flex-wrap gap-2">
@@ -116,6 +116,96 @@
         </div>
     </div>
     {% endif %}
+
+    <!-- Accomplished IPCRs (Dean Approved) Archive Table -->
+    <div class="card shadow-sm border-0 mb-4" style="border-radius: 12px; overflow: hidden;">
+        <div class="card-header bg-white border-0 pt-4 px-4 pb-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <h5 class="fw-bold text-dark mb-1 d-flex align-items-center">
+                    <i class="ti ti-archive me-2 text-primary" style="font-size: 1.35rem;"></i>
+                    Accomplished IPCRs (Dean Approved)
+                </h5>
+                <p class="text-muted small mb-0">Official record of your finalized and Dean-approved performance commitments and reviews across terms. You may view, print, or save as PDF at any time.</p>
+            </div>
+            {% if past_accomplished_ipcrs %}
+            <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 fw-semibold">
+                <i class="ti ti-circle-check me-1"></i> {{ past_accomplished_ipcrs|length }} Accomplished
+            </span>
+            {% endif %}
+        </div>
+        <div class="card-body px-4 pb-4">
+            {% if past_accomplished_ipcrs %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="py-3 px-3">Academic Term</th>
+                            <th class="py-3 px-3">Rating Period</th>
+                            <th class="py-3 px-3 text-center">Targets</th>
+                            <th class="py-3 px-3 text-center">Final Score</th>
+                            <th class="py-3 px-3 text-center">Adjectival Rating</th>
+                            <th class="py-3 px-3 text-center">Status</th>
+                            <th class="py-3 px-3 text-end">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ipcr in past_accomplished_ipcrs %}
+                        <tr>
+                            <td class="px-3 py-3">
+                                <span class="fw-bold text-dark">{{ ipcr.academic_year }}</span>
+                                <div class="text-muted small">{{ ipcr.semester }}</div>
+                            </td>
+                            <td class="px-3 py-3">
+                                <span class="badge bg-light text-dark border">{{ ipcr.rating_period }}</span>
+                            </td>
+                            <td class="px-3 py-3 text-center">
+                                <span class="badge bg-secondary-subtle text-secondary px-2 py-1">{{ ipcr.approved_targets }} / {{ ipcr.total_targets }} items</span>
+                            </td>
+                            <td class="px-3 py-3 text-center">
+                                <span class="fw-bold text-primary fs-6">{{ '%.2f'|format(ipcr.final_score) if ipcr.final_score is not none else '—' }}</span>
+                            </td>
+                            <td class="px-3 py-3 text-center">
+                                {% if ipcr.adjectival_rating == 'Outstanding' %}
+                                <span class="badge bg-success px-3 py-2 shadow-xs">Outstanding</span>
+                                {% elif ipcr.adjectival_rating == 'Very Satisfactory' %}
+                                <span class="badge bg-primary px-3 py-2 shadow-xs">Very Satisfactory</span>
+                                {% elif ipcr.adjectival_rating == 'Satisfactory' %}
+                                <span class="badge bg-info text-dark px-3 py-2 shadow-xs">Satisfactory</span>
+                                {% elif ipcr.adjectival_rating == 'Unsatisfactory' %}
+                                <span class="badge bg-warning text-dark px-3 py-2 shadow-xs">Unsatisfactory</span>
+                                {% elif ipcr.adjectival_rating == 'Poor' %}
+                                <span class="badge bg-danger px-3 py-2 shadow-xs">Poor</span>
+                                {% else %}
+                                <span class="badge bg-secondary px-3 py-2">{{ ipcr.adjectival_rating }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-3 py-3 text-center">
+                                <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
+                                    <i class="ti ti-circle-check-filled me-1"></i>Dean Approved
+                                </span>
+                            </td>
+                            <td class="px-3 py-3 text-end">
+                                <button type="button" class="btn btn-outline-primary btn-sm shadow-xs fw-semibold"
+                                    onclick="window.open('{{ url_for('designated.designated_print_ipcr') }}?term_id={{ ipcr.term_id }}', '_blank')">
+                                    <i class="ti ti-printer me-1"></i> View / Print / PDF
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <div class="mb-3 text-muted" style="opacity: 0.5;">
+                    <i class="ti ti-file-certificate" style="font-size: 3rem;"></i>
+                </div>
+                <h6 class="fw-bold text-dark">No Dean-Approved IPCRs Yet</h6>
+                <p class="text-muted small mb-0">Once your IPCR is finalized and approved by the Dean, it will be archived here permanently for viewing, printing, and exporting as PDF.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
 </div>
 
 <div id="designated-dpcr" class="dashboard-section">

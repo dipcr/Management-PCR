@@ -117,6 +117,9 @@ def faculty_dashboard():
                 evidence_sections = build_evidence_checklist_sections(
                     cursor, assigned_targets, DESIGNATION_REGULAR, term_id, academic_rank)
 
+        from app.models.ipcr_form import get_employee_accomplished_ipcrs
+        past_accomplished_ipcrs = get_employee_accomplished_ipcrs(cursor, emp_id)
+
         return render_template('faculty_dashboard.html',
                                active_term=active_term,
                                assigned_targets=assigned_targets,
@@ -136,7 +139,8 @@ def faculty_dashboard():
                                has_final_ipcr=has_final_ipcr,
                                reopen_reason=reopen_reason,
                                gating_status=gating_status,
-                               evidence_sections=evidence_sections)
+                               evidence_sections=evidence_sections,
+                               past_accomplished_ipcrs=past_accomplished_ipcrs)
     finally:
         cursor.close()
         conn.close()
@@ -524,24 +528,34 @@ def faculty_target_evidence(target_id, indicator_id):
 @faculty_bp.route('/print_ipcr')
 @role_required('FACULTY')
 def faculty_print_ipcr():
-    """Printable IPCR for the logged-in faculty member's active term."""
-    return _render_ipcr_print(session.get('user_id'), url_for('faculty.faculty_dashboard'))
+    """Printable IPCR for the logged-in faculty member's active or specified term."""
+    term_id = request.args.get('term_id', type=int)
+    return _render_ipcr_print(session.get('user_id'), url_for('faculty.faculty_dashboard'), term_id=term_id)
 
 
-def _render_ipcr_print(emp_id, back_url):
+def _render_ipcr_print(emp_id, back_url, term_id=None):
     from app.models.ipcr_form import build_ipcr_form
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        terms = get_all_terms(cursor)
-        active_term = next((t for t in terms if t['is_active'] == 1), None)
-        if not active_term:
-            flash('No active academic term.', 'warning')
-            return redirect(back_url)
+        if term_id:
+            cursor.execute("SELECT term_id FROM tbl_academic_terms WHERE term_id = %s", (term_id,))
+            term_row = cursor.fetchone()
+            if not term_row:
+                flash('Academic term not found.', 'warning')
+                return redirect(back_url)
+            target_term_id = term_row[0]
+        else:
+            terms = get_all_terms(cursor)
+            active_term = next((t for t in terms if t['is_active'] == 1), None)
+            if not active_term:
+                flash('No active academic term.', 'warning')
+                return redirect(back_url)
+            target_term_id = active_term['term_id']
 
-        form = build_ipcr_form(cursor, emp_id, active_term['term_id'])
+        form = build_ipcr_form(cursor, emp_id, target_term_id)
         if not form or not form['has_targets']:
-            flash('No committed IPCR to print yet — lock your IPCR first.', 'warning')
+            flash('No committed IPCR to print for this term.', 'warning')
             return redirect(back_url)
 
         return render_template('ipcr_print.html', form=form, back_url=back_url)
