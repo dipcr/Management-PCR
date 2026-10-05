@@ -460,7 +460,8 @@ def save_criteria_weights(conn, cursor, term_id, designation_type, mode, rows):
     mode, or one band per RANK_BANDS entry in Specific mode.
 
     Validation: any band whose entered percentages sum to a nonzero total must sum to
-    exactly 100 (a MySQL cross-row CHECK isn't practical, so this lives here). A band left
+    exactly 100, with every category above 0% (a MySQL cross-row CHECK isn't practical, so
+    this lives here). A band left
     entirely at zero is treated as "not yet configured" and simply isn't stored, so a
     Specific matrix can still be filled in incrementally.
 
@@ -479,8 +480,10 @@ def save_criteria_weights(conn, cursor, term_id, designation_type, mode, rows):
         errors = []
         for band, entries in by_band.items():
             total = sum(pct for _, pct in entries)
-            if total > 0 and abs(total - 100) > 0.01:
-                label = 'General' if band == GENERAL_BAND else band
+            label = 'General' if band == GENERAL_BAND else band
+            if total > 0 and any(pct <= 0 for _, pct in entries):
+                errors.append(f"{label} has a category with no percentage (every category must be above 0%)")
+            elif total > 0 and abs(total - 100) > 0.01:
                 errors.append(f"{label} totals {total:g}% (must be 100%)")
         if errors:
             return False, "Not saved — " + "; ".join(errors) + "."

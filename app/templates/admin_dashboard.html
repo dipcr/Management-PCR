@@ -1039,9 +1039,9 @@
         <div class="card-header bg-white border-0 pt-4 pb-2">
             <h5 role="heading" aria-level="3" class="fw-bold text-dark mb-0">Weight Allocation by Rank</h5>
             <small class="text-muted">Percentage each criterion group contributes to the final score, per
-                academic rank band, for the active term. Each configured row must total 100%. Regular and
-                Designated faculty are configured independently — the same criterion can carry a different
-                weight (or not apply at all) for each.</small>
+                academic rank band, for the active term. Each configured row must total 100%, and every
+                category in it must have a percentage above 0%. Regular and Designated faculty are configured
+                independently — the same criterion can carry a different weight for each.</small>
         </div>
         <div class="card-body">
             {% if not active_term %}
@@ -1235,19 +1235,53 @@
 
                 let hasInvalid = false;
                 let invalidDetails = [];
+                let emptyDetails = [];
+                const catNames = Array.from(table.querySelectorAll('thead th')).slice(1, -1)
+                    .map(th => th.textContent.trim());
 
                 const rows = table.querySelectorAll('tbody tr');
                 rows.forEach(tr => {
                     let total = 0;
                     let rankName = tr.querySelector('td:first-child, th:first-child')?.textContent?.trim() || 'Row';
-                    tr.querySelectorAll('.weight-input').forEach(inp => {
+                    const inputs = Array.from(tr.querySelectorAll('.weight-input'));
+                    inputs.forEach(inp => {
                         total += parseFloat(inp.value) || 0;
                     });
-                    if (Math.abs(total - 100) > 0.01 && (mode === 'GENERAL' || total > 0)) {
+                    const configured = (mode === 'GENERAL' || total > 0);
+                    // Every category in a configured row needs its own percentage —
+                    // 50/50/0 sums to 100 but leaves a category unweighted.
+                    if (configured) {
+                        const missing = [];
+                        inputs.forEach((inp, i) => {
+                            if (!((parseFloat(inp.value) || 0) > 0)) {
+                                missing.push(catNames[i] || 'Category ' + (i + 1));
+                                inp.classList.add('is-invalid');
+                            } else {
+                                inp.classList.remove('is-invalid');
+                            }
+                        });
+                        if (missing.length) emptyDetails.push({ rank: rankName, missing: missing });
+                    }
+                    if (Math.abs(total - 100) > 0.01 && configured) {
                         hasInvalid = true;
                         invalidDetails.push(`${rankName}: ${total.toFixed(1)}%`);
                     }
                 });
+
+                if (emptyDetails.length) {
+                    const list = document.getElementById('weightEmptyList');
+                    list.replaceChildren();
+                    emptyDetails.forEach(d => {
+                        const li = document.createElement('li');
+                        const strong = document.createElement('strong');
+                        strong.textContent = d.rank + ': ';
+                        li.appendChild(strong);
+                        li.appendChild(document.createTextNode(d.missing.join(', ')));
+                        list.appendChild(li);
+                    });
+                    new bootstrap.Modal(document.getElementById('weightEmptyModal')).show();
+                    return false;
+                }
 
                 if (hasInvalid) {
                     document.getElementById('weightWarningMessage').innerHTML = 
@@ -1275,6 +1309,7 @@
                         }
                     }
                     table.addEventListener('input', recompute);
+                    table.addEventListener('input', e => e.target.classList.remove('is-invalid'));
                     recompute();
                 }
                 document.querySelectorAll('[id^="weightMatrixTable_"], [id^="weightGeneralTable_"]').forEach(initTable);
@@ -1341,6 +1376,25 @@
             {% endif %}
 
     <!-- Weight Allocation Warning Modal -->
+    <div class="modal fade" id="weightEmptyModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+                <div class="modal-header bg-danger text-white border-0 py-3" style="border-top-left-radius: 16px; border-top-right-radius: 16px;">
+                    <h5 class="modal-title fw-bold"><i class="ti ti-alert-triangle me-2"></i>Missing Weight Percentage</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 text-center">
+                    <i class="ti ti-circle-x text-danger display-3 d-block mb-3"></i>
+                    <h6 class="fw-bold text-dark mb-2" style="font-size: 1.1rem;">Every category needs a percentage</h6>
+                    <p class="text-secondary small mb-2">Each category must be given a weight greater than 0%, even if the other categories already add up to 100%. Fill in:</p>
+                    <ul class="text-start small text-danger mb-0" id="weightEmptyList"></ul>
+                </div>
+                <div class="modal-footer border-0 p-3 justify-content-center bg-light" style="border-bottom-left-radius: 16px; border-bottom-right-radius: 16px;">
+                    <button type="button" class="btn btn-secondary fw-semibold px-4" data-bs-dismiss="modal">Close & Fix</button>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="modal fade" id="weightWarningModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
