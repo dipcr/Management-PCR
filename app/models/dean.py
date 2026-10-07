@@ -197,6 +197,7 @@ def get_designated_draft_submissions(cursor, term_id):
                OR (ep.designation IS NOT NULL AND ep.designation <> ''
                     AND ep.designation NOT IN ('Regular Faculty', 'Admin')))
           AND mi.is_custom IN (0, 1)
+          AND dt.review_status <> 'Draft'
         GROUP BY dt.emp_id, ep.first_name, ep.last_name, ep.academic_rank, ep.specialization, ep.designation, dr.overall_status
         ORDER BY ep.last_name ASC
     """

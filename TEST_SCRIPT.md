@@ -488,13 +488,17 @@ Log in as DESIGNATED_FACULTY.
 - [ ] Selection uses **duration number + unit dropdown**.
 - [ ] The **Teaching Load** target shows the *Designated* hours from A3 (e.g. 10) under **Core Functions**.
 - [ ] Instruction allocated by their Program Chair in Phase C appears under **Core Functions** (locked).
-- [ ] Targets picked from the pool land under **Strategic Priorities/Support Functions**.
-- [ ] Pick a pool target and leave its description blank → it live-fills with the standard
+- [ ] There is **no self-selection pool**: no selectable checkboxes. Targets the Dean assigned (College-Wide, Phase D) appear under **Strategic Priorities/Support Functions** with a checked, disabled box.
+- [ ] A crafted POST naming an unassigned `selected_indicators[]` id is **refused** ("not assigned to you").
+- [ ] On a Dean-assigned target with a blank description → it live-fills with the standard
       auto wording (Auto badge) as you set quantity/duration; typing over it hides the badge
       and shows **Reset to Auto**, which restores the auto text on click.
 - [ ] **Add custom target** modal has description, quantity and **Target Duration** value + unit dropdown.
 - [ ] A custom target saves and appears under **Strategic Priorities/Support Functions**
       — it does **not** get an Auto badge (custom items are always free text, never mirrored).
+- [ ] **Save Draft** with a custom target and an incomplete quantity/deadline → saved, flash says it has not been sent to the Dean; log out and back in → the custom target and edits are still there and the page is still editable.
+- [ ] A saved draft does **not** appear in the Dean's **IPCR Draft Approval** list.
+- [ ] After the Dean returns it, **Save Draft** keeps it returned (banner still shows) and **Re-submit** still reaches the Dean.
 - [ ] **Submit** → the Dean sees it in **IPCR Draft Approval**.
 - [ ] Dean edits a quantity, adds a remark, and **returns** it → designated faculty sees remarks.
 - [ ] **Resubmit** → back to the Dean.
@@ -508,7 +512,7 @@ Log in as DESIGNATED_FACULTY.
 - [ ] Count the targets in **1. Core Functions** and **2. Strategic Priorities & Support
       Functions** on the My IPCR page.
 - [ ] The Summary of Ratings shows **those same two counts**.
-- [ ] Only the **teaching load** and **Program-Chair-allocated instruction** are Core. Pool selections, custom items and oversight cascades are Strategic Priorities/Support
+- [ ] Only the **teaching load** and **Program-Chair-allocated instruction** are Core. Dean-assigned College-Wide targets, custom items and oversight cascades are Strategic Priorities/Support
       — *even when their target type is Instruction*.
 - [ ] Neither weighted category shows **0 targets** while the other holds them all.
 
@@ -550,7 +554,7 @@ Run after B and C so there are cascades and allocations to pick up.
       department, at **full quota** (cascade `5` to WST → the WST chair reads **5**).
 - [ ] Rows are badged **"Departmental Oversight — Fixed Quota"**; the **quantity is locked**
       (not editable — it's the department's/RET's whole cascade, not a share), but the
-      **checkbox is pre-checked** (not disabled) like any other row, and the **deadline
+      **checkbox is pre-checked and disabled** like every assigned row, and the **deadline
       (duration value + unit) is editable** — there's no other source for it, and Timeliness
       scoring needs it.
 - [ ] Leaving an oversight row's deadline blank and submitting is **refused**, same as any
@@ -561,15 +565,10 @@ Run after B and C so there are cascades and allocations to pick up.
       cascaded to any department/RET (summed across all of them — cascade `15/15/15/6/0` across
       WST/DST/NST/BSDS/RET → the Dean reads **51**), badged and locked the same way a chair's
       single-department oversight row is.
-- [ ] All of them can still add from the selectable pool.
+- [ ] All of them can still **Add Target** (custom), but there is no selectable pool.
 
-### J4. Claimed targets are not selectable
-- [ ] A target cascaded to a department or to RET does **not** appear in the pool anyone
-      else can select from.
-- [ ] Another Designated Faculty sees only unclaimed instruction/support targets.
-- [ ] The RET Chair's own free-pick pool likewise excludes anything already cascaded to
-      RET / Extension — it has no personal-allocation table the way Instruction does for a
-      Program Chair, so there's no legitimate reason for it to be pickable there too.
+### J4. No self-selection pool
+- [ ] No designated faculty, chair or Dean can tick an unassigned indicator; only Dean-assigned, Program-Chair-allocated, oversight and custom targets appear.
 
 ### J5. The same indicator, both ways
 - [ ] A chair may hold one indicator **twice** — the oversight copy (full quota, Strategic

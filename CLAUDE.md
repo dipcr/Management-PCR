@@ -119,7 +119,7 @@ Which target-category a target type rolls into differs *by designation type* —
 Strategic Priorities for Regular Faculty but Core Functions for Designated Faculty — so that
 mapping lives in `tbl_ipcr_category_types`, not on the category itself. The `is_admin_function`
 flag on `tbl_draft_targets`/`tbl_committed_targets` separately distinguishes a designated faculty
-member's own teaching work (Core Functions) from their oversight/cascaded/pool-selected work
+member's own teaching work (Core Functions) from their oversight/cascaded/Dean-assigned work
 (Strategic Priorities/Support), independent of the target's own type — a target forced into the
 admin category by this flag overrides the normal category mapping.
 
