@@ -254,6 +254,19 @@ def resolve_designation_type(designation):
     return DESIGNATION_DESIGNATED
 
 
+def display_designation(designation, designation_title=None):
+    """
+    The job title to show people. Only plain Designated Faculty carry a free-text
+    designation_title (their real post, e.g. 'Research Coordinator'); everyone else, and any
+    Designated Faculty with it left blank, shows the stored designation. Display only --
+    never use this for weights, routing or role checks.
+    """
+    title = (designation_title or '').strip()
+    if (designation or '').strip() == DESIGNATION_DESIGNATED and title:
+        return title
+    return designation
+
+
 def has_own_ipcr(designation):
     """True when this job title is rated with an IPCR of its own."""
     return resolve_designation_type(designation) is not None

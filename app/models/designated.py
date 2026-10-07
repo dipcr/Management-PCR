@@ -1,72 +1,24 @@
-def get_designated_selectable_indicators(cursor, term_id, exclude_claimed=True, emp_id=None):
+def get_designated_assigned_indicators(cursor, term_id, emp_id):
     """
-    The pool a designated faculty / chair member can add targets from.
-    - If RET Chair: only Research and Extension (review_lane = 'RET').
-    - If Program Chair / Designated Faculty: Instruction and Support (review_lane = 'CHAIR' AND is_core = 1).
+    The non-custom indicators assigned to this person: the Program Chair's Instruction
+    allocation and the Dean's College-Wide assignments, both held in tbl_draft_allocation.
+
+    There is no self-selection pool -- a designated faculty / chair member only carries what
+    was assigned to them (plus Teaching Load, oversight cascades and their own custom items).
     """
     from app.models.connection import timed_query
-    
-    is_ret = False
-    if emp_id:
-        cursor.execute("SELECT designation FROM tbl_employee_profiles WHERE emp_id = %s", (emp_id,))
-        row = cursor.fetchone()
-        if row and (row[0] or '').strip() == 'RET Chair':
-            is_ret = True
-
-    if is_ret:
-        query = """
-            SELECT mi.indicator_id, mi.indicator_description, tc.category_name, tc.slug
-            FROM tbl_master_indicators mi
-            JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
-            WHERE mi.term_id = %s
-              AND mi.is_custom = 0
-              AND tc.review_lane = 'RET'
-            ORDER BY tc.display_order, tc.category_name, mi.indicator_id
-        """
-        rows = timed_query(cursor, query, (term_id,), label="get_designated_selectable_indicators_ret")
-        if exclude_claimed:
-            # An indicator the Dean cascades to "RET / Extension" is already carried whole
-            # as the RET Chair's oversight target (get_oversight_targets) — unlike Instruction,
-            # there is no personal-allocation table for RET, so there's no legitimate reason
-            # for it to also appear as a free pick here. Leaving it in let the same indicator
-            # be selected twice under two different categories (see submit_designated_ipcr).
-            claimed = get_claimed_indicator_ids(cursor, term_id)
-            rows = [r for r in rows if r['indicator_id'] not in claimed]
-        return rows
-
     query = """
-        SELECT mi.indicator_id, mi.indicator_description, tc.category_name, tc.slug
-        FROM tbl_master_indicators mi
+        SELECT DISTINCT mi.indicator_id, mi.indicator_description, tc.category_name, tc.slug,
+               tc.display_order
+        FROM tbl_draft_allocation da
+        JOIN tbl_master_indicators mi ON da.indicator_id = mi.indicator_id
         JOIN tbl_target_categories tc ON mi.category_id = tc.category_id
-        WHERE mi.term_id = %s
+        WHERE da.emp_id = %s AND mi.term_id = %s
           AND mi.is_custom = 0
-          AND mi.indicator_description NOT LIKE '%%Teaching Load%%'
-          AND tc.review_lane = 'CHAIR' AND tc.is_core = 1
+          AND COALESCE(da.assigned_quantity, 0) > 0
         ORDER BY tc.display_order, tc.category_name, mi.indicator_id
     """
-    rows = timed_query(cursor, query, (term_id,), label="get_designated_selectable_indicators")
-    if exclude_claimed:
-        claimed = get_claimed_indicator_ids(cursor, term_id)
-
-        # An indicator the Program Chair explicitly allocated to *this* person stays in the
-        # list even though the department also holds it. The claimed rule exists to stop
-        # someone picking up work that already has an owner — but for their own allocated
-        # share they are the owner. Dropping it left the allocation with no row to attach
-        # to, so a chair's Core Functions showed only the teaching load.
-        allocated = set()
-        if emp_id:
-            cursor.execute(
-                "SELECT da.indicator_id "
-                "FROM tbl_draft_allocation da "
-                "JOIN tbl_master_indicators mi ON da.indicator_id = mi.indicator_id "
-                "WHERE da.emp_id = %s AND mi.term_id = %s "
-                "  AND COALESCE(da.assigned_quantity, 0) > 0",
-                (emp_id, term_id))
-            allocated = {r[0] for r in cursor.fetchall()}
-
-        rows = [r for r in rows
-                if r['indicator_id'] not in claimed or r['indicator_id'] in allocated]
-    return rows
+    return timed_query(cursor, query, (emp_id, term_id), label="get_designated_assigned_indicators")
 
 
 def get_oversight_cascade_role(cursor, emp_id):
@@ -94,39 +46,6 @@ def get_oversight_cascade_role(cursor, emp_id):
     if designation == 'Program Chair' and specialization:
         return specialization
     return None
-
-
-def get_claimed_indicator_ids(cursor, term_id):
-    """
-    Indicators already spoken for by a chair's oversight accountability.
-
-    Anything the Dean cascaded to a department or to RET is automatically carried by that
-    chair, so it must not also be offered in the pool other designated faculty pick from.
-    College-Wide quotas are not claimed — the Dean assigns those explicitly.
-    """
-    from app.models.institution import ROLE_RET, get_departments
-
-    # Department names are read separately rather than joined. The original reason was a
-    # collation mismatch between tbl_departments and tbl_cascaded_quotas, but that was fixed by
-    # MIGRATION_group7.sql -- both columns are utf8mb4_0900_ai_ci now, so a join would work.
-    # What remains is that assigned_to_role is polymorphic: it holds department names alongside
-    # 'College-Wide', 'RET / Extension' and academic ranks, so it cannot carry a foreign key to
-    # tbl_departments without first being split into a discriminator plus a department reference.
-    owners = [d['department_name'] for d in get_departments(cursor, active_only=False)]
-    owners.append(ROLE_RET)
-    if not owners:
-        return set()
-
-    placeholders = ','.join(['%s'] * len(owners))
-    cursor.execute(f"""
-        SELECT DISTINCT cq.indicator_id
-        FROM tbl_cascaded_quotas cq
-        JOIN tbl_master_indicators mi ON cq.indicator_id = mi.indicator_id
-        WHERE mi.term_id = %s
-          AND cq.total_target_value > 0
-          AND cq.assigned_to_role IN ({placeholders})
-    """, tuple([term_id] + owners))
-    return {r[0] for r in cursor.fetchall()}
 
 
 def get_core_instruction_allocation(cursor, emp_id, term_id):
@@ -669,7 +588,8 @@ def update_oversight_draft_deadline(conn, cursor, emp_id, draft_id, duration_val
         return False, str(e)
 
 
-def submit_designated_ipcr(conn, cursor, emp_id, term_id, selected_targets, custom_targets, oversight_durations=None):
+def submit_designated_ipcr(conn, cursor, emp_id, term_id, selected_targets, custom_targets, oversight_durations=None,
+                           as_draft=False):
     """
     Transactionally processes standard baseline selections and inserts custom ad-hoc targets
     upstream before compiling all submissions securely inside tbl_draft_targets.
@@ -680,19 +600,49 @@ def submit_designated_ipcr(conn, cursor, emp_id, term_id, selected_targets, cust
     oversight_durations: {indicator_id: {'target_duration_value', 'target_duration_unit', 'target_deadline'}} —
         the chair's deadline input for their departmental oversight targets (see get_oversight_targets).
         Quantity/description for those targets is never taken from the form, only the deadline.
+    as_draft: save the work in progress without submitting it. Rows are stored as 'Draft' (which the
+        dashboard, the Dean's pending list and get_overall_ipcr_status all treat as not yet submitted)
+        and any existing Dean review is left untouched, so a returned IPCR stays returned.
     """
     oversight_durations = oversight_durations or {}
+    row_status = 'Draft' if as_draft else 'Pending Review'
     try:
-        # 0. Clear any prior Dean review so Dean can re-review fresh
-        cursor.execute(
-            "SELECT review_id FROM tbl_ipcr_dean_review WHERE emp_id = %s AND term_id = %s",
-            (emp_id, term_id)
-        )
-        old_review = cursor.fetchone()
-        if old_review:
-            old_review_id = old_review[0]
-            cursor.execute("DELETE FROM tbl_ipcr_dean_review_items WHERE review_id = %s", (old_review_id,))
-            cursor.execute("DELETE FROM tbl_ipcr_dean_review WHERE review_id = %s", (old_review_id,))
+        # A submission may only carry what was assigned to this person: Program Chair/Dean
+        # allocations, the mandatory Teaching Load, or their oversight cascade. There is no
+        # self-selection pool, and the form is never trusted for this -- a crafted POST naming
+        # any other indicator is rejected outright rather than silently filed.
+        allowed_ids = {r['indicator_id'] for r in get_designated_assigned_indicators(cursor, term_id, emp_id)}
+        allowed_ids |= {r['indicator_id'] for r in get_oversight_targets(cursor, emp_id, term_id)}
+        requested_ids = {t['indicator_id'] for t in selected_targets}
+        unassigned = requested_ids - allowed_ids
+        if unassigned:
+            ph = ','.join(['%s'] * len(unassigned))
+            cursor.execute(
+                f"SELECT indicator_id FROM tbl_master_indicators "
+                f"WHERE indicator_id IN ({ph}) AND indicator_description LIKE '%%Teaching Load%%'",
+                tuple(unassigned))
+            unassigned -= {r[0] for r in cursor.fetchall()}
+        if unassigned:
+            return False, "Your submission includes targets that were not assigned to you."
+
+        if not as_draft:
+            # 0. Clear any prior Dean review so Dean can re-review fresh
+            cursor.execute(
+                "SELECT review_id FROM tbl_ipcr_dean_review WHERE emp_id = %s AND term_id = %s",
+                (emp_id, term_id)
+            )
+            old_review = cursor.fetchone()
+            if old_review:
+                old_review_id = old_review[0]
+                cursor.execute("DELETE FROM tbl_ipcr_dean_review_items WHERE review_id = %s", (old_review_id,))
+                cursor.execute("DELETE FROM tbl_ipcr_dean_review WHERE review_id = %s", (old_review_id,))
+        else:
+            # Keep a returned review's header (status + overall remarks) so the IPCR stays
+            # returned, but its per-target items point at draft rows that are rebuilt below.
+            cursor.execute(
+                "DELETE dri FROM tbl_ipcr_dean_review_items dri "
+                "JOIN tbl_ipcr_dean_review dr ON dri.review_id = dr.review_id "
+                "WHERE dr.emp_id = %s AND dr.term_id = %s", (emp_id, term_id))
 
         # Capture the chair's/RET chair's departmental oversight quota rows (see
         # get_oversight_targets) BEFORE clearing tbl_draft_targets below — this function
@@ -755,8 +705,8 @@ def submit_designated_ipcr(conn, cursor, emp_id, term_id, selected_targets, cust
             cursor.execute("""
                 INSERT INTO tbl_draft_targets (emp_id, indicator_id, proposed_quantity, review_status, target_description, target_deadline,
                                                target_duration_value, target_duration_unit, is_admin_function, is_auto_description)
-                VALUES (%s, %s, %s, 'Pending Review', %s, %s, %s, %s, %s, %s)
-            """, (emp_id, target['indicator_id'], target['proposed_quantity'], desc, dead, dur_value, dur_unit,
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (emp_id, target['indicator_id'], target['proposed_quantity'], row_status, desc, dead, dur_value, dur_unit,
                   is_admin, is_auto_description))
 
         from app.models.institution import resolve_teaching_load, teaching_load_description
@@ -783,8 +733,8 @@ def submit_designated_ipcr(conn, cursor, emp_id, term_id, selected_targets, cust
             cursor.execute("""
                 INSERT INTO tbl_draft_targets (emp_id, indicator_id, proposed_quantity, review_status, target_description, target_deadline,
                                                target_duration_value, target_duration_unit, is_admin_function, is_auto_description)
-                VALUES (%s, %s, %s, 'Pending Review', %s, %s, %s, %s, 1, 1)
-            """, (emp_id, r['indicator_id'], r['total_target_value'], ov_desc, ov_deadline, ov_dur_value, ov_dur_unit))
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 1, 1)
+            """, (emp_id, r['indicator_id'], r['total_target_value'], row_status, ov_desc, ov_deadline, ov_dur_value, ov_dur_unit))
 
         # Ensure the mandatory Teaching Load target is saved, using the Admin's configured
         # hours and duration for Designated faculty (previously hardcoded at 10 hours).
@@ -815,8 +765,8 @@ def submit_designated_ipcr(conn, cursor, emp_id, term_id, selected_targets, cust
                 INSERT INTO tbl_draft_targets (emp_id, indicator_id, proposed_quantity, review_status,
                                                target_description, target_deadline,
                                                target_duration_value, target_duration_unit)
-                VALUES (%s, %s, %s, 'Pending Review', %s, %s, %s, %s)
-            """, (emp_id, tl_ind_id, tl_hours, tl_desc, tl_deadline, tl_dur_value, tl_dur_unit))
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """, (emp_id, tl_ind_id, tl_hours, row_status, tl_desc, tl_deadline, tl_dur_value, tl_dur_unit))
 
         # 3. Process Custom Ad-Hoc Target Items
         for custom in custom_targets:
@@ -908,10 +858,12 @@ def submit_designated_ipcr(conn, cursor, emp_id, term_id, selected_targets, cust
             cursor.execute("""
                 INSERT INTO tbl_draft_targets (emp_id, indicator_id, proposed_quantity, review_status, target_description, target_deadline,
                                                target_duration_value, target_duration_unit, is_admin_function, is_auto_description)
-                VALUES (%s, %s, %s, 'Pending Review', %s, %s, %s, %s, 1, %s)
-            """, (emp_id, new_indicator_id, qty, text_clean, dead, cust_dur_value, cust_dur_unit, 1 if tagged else 0))
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 1, %s)
+            """, (emp_id, new_indicator_id, qty, row_status, text_clean, dead, cust_dur_value, cust_dur_unit, 1 if tagged else 0))
 
         conn.commit()
+        if as_draft:
+            return True, "Draft saved. It has not been sent to the Dean yet."
         return True, "Designated IPCR successfully compiled and submitted to Draft Targets for verification review."
     except Exception as e:
         conn.rollback()

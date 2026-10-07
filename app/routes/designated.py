@@ -2,8 +2,9 @@ import functools
 from flask import Blueprint, render_template, session, request, jsonify, redirect, url_for, flash
 from app.models import *
 from app.decorators import role_required, designated_ipcr_required
+from app.models.criteria import display_designation
 from app.models.designated import (
-    get_designated_selectable_indicators, submit_designated_ipcr,
+    get_designated_assigned_indicators, submit_designated_ipcr,
     lock_and_commit_designated_ipcr
 )
 
@@ -41,7 +42,8 @@ def designated_dashboard(conn, cursor):
     emp_id = session.get('user_id')
 
     emp_result = timed_query(cursor, """
-        SELECT academic_rank, specialization, designation, first_name, last_name, assigned_program 
+        SELECT academic_rank, specialization, designation, first_name, last_name, assigned_program,
+               designation_title
         FROM tbl_employee_profiles 
         WHERE emp_id = %s
     """, (emp_id,), label="designated_profile")
@@ -88,6 +90,7 @@ def designated_dashboard(conn, cursor):
             SELECT COUNT(*) as cnt FROM tbl_draft_targets dt
             JOIN tbl_master_indicators mi ON dt.indicator_id = mi.indicator_id
             WHERE dt.emp_id = %s AND mi.term_id = %s
+              AND dt.review_status <> 'Draft'
         """, (emp_id, term_id), label="designated_submit_check")
         has_submitted = sub_result[0]['cnt'] > 0 if sub_result else False
 
@@ -210,13 +213,10 @@ def designated_dashboard(conn, cursor):
                 job_title=designation)
 
         elif can_edit:
-            # Load standard selectable indicators and exclude 21 hours regular teaching load targets
-            raw_standard_targets = get_designated_selectable_indicators(cursor, term_id, emp_id=emp_id)
-            standard_targets = [
-                t for t in raw_standard_targets 
-                if '21 hours' not in t['indicator_description'] and '21 hrs' not in t['indicator_description']
-            ]
-            
+            # Only what was assigned to this person (Program Chair allocation, Dean College-Wide)
+            # -- there is no self-selection pool. Teaching Load is added as the mandatory row below.
+            standard_targets = get_designated_assigned_indicators(cursor, term_id, emp_id)
+
             # Fetch cascaded allocations (Program Chair instruction + Dean College-Wide)
             cursor.execute("""
                 SELECT da.indicator_id, da.assigned_quantity, da.custom_description, da.target_deadline,
@@ -295,27 +295,6 @@ def designated_dashboard(conn, cursor):
                     t['is_core'] = is_chair_instruction
                     t['is_locked'] = is_chair_instruction
                     t['is_auto_description'] = draft_map[ind_id].get('is_auto_description') if ind_id in draft_map else None
-                elif ind_id in draft_map:
-                    t['total_target_value'] = draft_map[ind_id]['total_target_value']
-                    t['target_description'] = draft_map[ind_id]['target_description'] or t['indicator_description']
-                    t['target_deadline'] = draft_map[ind_id]['target_deadline'] or ''
-                    t['status'] = draft_map[ind_id]['status']
-                    t['dean_remarks'] = draft_map[ind_id]['dean_remarks']
-                    t['original_quantity'] = draft_map[ind_id]['original_quantity']
-                    t['reviewed_quantity'] = draft_map[ind_id]['reviewed_quantity']
-                    t['is_selected'] = True
-                    t['is_core'] = False
-                    t['is_locked'] = False
-                    t['is_auto_description'] = draft_map[ind_id].get('is_auto_description')
-                else:
-                    t['total_target_value'] = 0
-                    t['target_description'] = t['indicator_description']
-                    t['target_deadline'] = ''
-                    t['status'] = 'Draft'
-                    t['is_selected'] = False
-                    t['is_core'] = False
-                    t['is_locked'] = False
-                    t['is_auto_description'] = None
 
                 # Structured duration (drives Timeliness): prefer the faculty's own draft,
                 # else the Program Chair's cascaded allocation.
@@ -505,6 +484,8 @@ def designated_dashboard(conn, cursor):
                            emp_name=f"{first_name} {last_name}",
                            academic_rank=academic_rank,
                            designation=designation,
+                           designation_display=display_designation(
+                               designation, emp_result[0]['designation_title'] if emp_result else None),
                            is_dean_formulated=is_dean_formulated,
                            instruction_ready=instruction_ready,
                            awaiting_dean_formulation=awaiting_dean_formulation,
@@ -748,6 +729,10 @@ def submit_designated_ipcr_route():
     # never trusted from the form regardless — see submit_designated_ipcr.
     admin_ids = {int(x) for x in request.form.getlist('admin_indicator_ids[]') if x}
 
+    # "Save Draft" stores the work in progress without sending it to the Dean (see
+    # submit_designated_ipcr's as_draft), so incomplete quantities/deadlines are allowed.
+    is_draft = request.form.get('action') == 'save_draft'
+
     # Parse baseline target checkboxes. dict.fromkeys dedupes while keeping order: an id
     # shared between a personal Core row (Table 1's hidden field) and an oversight row
     # (Table 2's checkbox) must produce exactly one entry here, built from the single
@@ -817,7 +802,7 @@ def submit_designated_ipcr_route():
     # they'd always fail this check; a dual id's Core Function fields are already guaranteed
     # valid by construction (Table 1 only shows an id here when its allocation is > 0). The
     # oversight deadline itself is validated separately below, from oversight_durations.
-    for t in selected_targets:
+    for t in ([] if is_draft else selected_targets):
         if t['indicator_id'] in admin_ids:
             continue
         if t.get('proposed_quantity', 0) <= 0:
@@ -835,7 +820,7 @@ def submit_designated_ipcr_route():
             flash("All custom targets must have a valid deadline (target duration) specified.", "danger")
             return redirect(url_for('designated.designated_dashboard'))
 
-    for ov in oversight_durations.values():
+    for ov in ([] if is_draft else oversight_durations.values()):
         if not ov.get('target_duration_value') or int(ov['target_duration_value']) <= 0:
             flash("All Departmental Oversight targets must have a valid deadline (target duration) specified.", "danger")
             return redirect(url_for('designated.designated_dashboard'))
@@ -845,8 +830,10 @@ def submit_designated_ipcr_route():
 
     try:
         success, msg = submit_designated_ipcr(conn, cursor, emp_id, int(term_id), selected_targets, custom_targets,
-                                               oversight_durations=oversight_durations)
-        if success:
+                                               oversight_durations=oversight_durations, as_draft=is_draft)
+        if success and is_draft:
+            flash(msg, "success")
+        elif success:
             try:
                 from app.services.notification_service import send_designated_target_submission_notification
                 send_designated_target_submission_notification(conn, cursor, emp_id, int(term_id), is_resubmission=False)

@@ -78,7 +78,7 @@
                     <p class="mb-1 text-muted small"><strong>Rank:</strong> <span class="text-dark">{{ academic_rank or
                             'Not Assigned' }}</span></p>
                     <p class="mb-0 text-muted small"><strong>Designation:</strong> <span class="text-dark">{{
-                            designation or 'None' }}</span></p>
+                            designation_display or 'None' }}</span></p>
                 </div>
             </div>
         </div>
@@ -330,8 +330,8 @@
                 {% if dean_review.overall_remarks %}
                 <p class="mb-1 text-dark"><strong>Remarks:</strong> {{ dean_review.overall_remarks }}</p>
                 {% endif %}
-                <small class="text-muted">Your targets below are editable again — change quantities and deadlines, select or
-                    unselect targets, add or remove a custom target, then click
+                <small class="text-muted">Your targets below are editable again — change quantities and deadlines,
+                    add or remove a custom target, then click
                     <strong>"Re-submit IPCR for Approval"</strong> to send the corrected draft back to the Dean.</small>
             </div>
         </div>
@@ -469,7 +469,7 @@
         <div class="card border-0 shadow-sm mb-4 card-rounded-clip">
             <div class="card-header border-0 py-3 bg-light">
                 <h5 class="mb-0 fw-bold text-dark"><i class="ti ti-tools text-primary me-2"></i>2. Strategic Priorities &amp; Support Functions</h5>
-                <p class="small mb-0 text-muted">Uncascaded instructional options, support functions, and custom DPCR target items</p>
+                <p class="small mb-0 text-muted">Targets assigned to you by the Dean, your oversight targets, and custom DPCR target items</p>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -509,9 +509,14 @@
                                     <input type="hidden" name="custom_descriptions[]" value="{{ target.indicator_description }}">
                                     <input type="hidden" name="custom_categories[]" value="{{ target.custom_category_name or 'Support Functions' }}">
                                     {% else %}
-                                    <input type="checkbox" name="selected_indicators[]"
-                                        class="form-check-input strategic-checkbox" value="{{ target.indicator_id }}"
-                                        style="width: 1.3em; height: 1.3em;" {% if target.is_selected %}checked{% endif %}>
+                                    {# Every non-custom row here was assigned (Dean College-Wide, Program Chair
+                                       allocation or oversight cascade) — there is no self-selection pool, so the
+                                       box is always checked and locked. It is disabled (not submitted), hence the
+                                       hidden field; the strategic-checkbox class keeps the submit validation JS
+                                       treating it as a selected row. #}
+                                    <input type="checkbox" class="form-check-input strategic-checkbox" value="{{ target.indicator_id }}"
+                                        style="width: 1.3em; height: 1.3em;" checked disabled>
+                                    <input type="hidden" name="selected_indicators[]" value="{{ target.indicator_id }}">
                                     {% if target.is_oversight_cascade %}
                                     <input type="hidden" name="admin_indicator_ids[]" value="{{ target.indicator_id }}">
                                     {% endif %}
@@ -671,7 +676,7 @@
                                 <td colspan="{% if can_edit %}5{% elif dean_review and dean_review.overall_status == 'Approved' %}3{% else %}4{% endif %}"
                                     class="text-center py-4 text-muted small">
                                     {% if can_edit %}
-                                    No custom or support targets added yet. Click "Add Target" below to create a custom target.
+                                    No targets assigned yet. The Dean assigns College-Wide targets; you can click "Add Target" below to create a custom target.
                                     {% else %}
                                     No committed targets in this category.
                                     {% endif %}
@@ -685,10 +690,15 @@
         </div>
 
         {% if can_edit %}
-        <div class="mt-4 text-end">
+        <div class="mt-4 text-end d-flex flex-wrap justify-content-end gap-2">
+            {# Stores your work without sending it to the Dean. Skips the quantity/deadline checks
+               (see the submit handler) so a half-finished list can be saved. #}
+            <button type="submit" name="action" value="save_draft" class="btn btn-outline-primary btn-lg px-4 fw-bold" id="saveDraftBtn">
+                <i class="ti ti-device-floppy me-2"></i> Save Draft
+            </button>
             <button type="submit" class="btn btn-primary btn-lg px-5 shadow fw-bold" id="submitBtn">
                 <i class="ti ti-send me-2"></i>
-                {% if has_submitted %}Re-submit IPCR for Approval{% else %}Submit IPCR for Approval{% endif %}
+                {% if has_submitted or is_returned %}Re-submit IPCR for Approval{% else %}Submit IPCR for Approval{% endif %}
             </button>
         </div>
         {% else %}
@@ -1530,6 +1540,8 @@
         const form = document.getElementById('dpcrForm');
         if (form) {
             form.addEventListener('submit', function (e) {
+                // Save Draft stores work in progress; only a real submit needs complete targets.
+                if (e.submitter && e.submitter.value === 'save_draft') return;
                 const checkedBoxes = form.querySelectorAll('.strategic-checkbox:checked');
                 const customDescriptions = form.querySelectorAll('input[name="custom_descriptions[]"]');
 
@@ -1679,6 +1691,52 @@
 
             modal.show();
         };
+
+        // Unsaved-changes warning. Custom targets and field edits only exist in the page until
+        // Save Draft or Submit posts them, so leaving with changes would silently lose them.
+        (function () {
+            const dpcrForm = document.getElementById('dpcrForm');
+            if (!dpcrForm) return;   // view-only: nothing to lose
+            let dirty = false;
+            const markDirty = function () { dirty = true; };
+            dpcrForm.addEventListener('input', markDirty);
+            dpcrForm.addEventListener('change', markDirty);
+            // Adding/removing a custom target changes the rows, not an input the form sees.
+            const supportBody = document.getElementById('tbody-support');
+            if (supportBody) new MutationObserver(markDirty).observe(supportBody, { childList: true });
+            // A save or submit that goes through (not blocked by validation) clears the flag.
+            dpcrForm.addEventListener('submit', function (e) {
+                if (!e.defaultPrevented) dirty = false;
+            });
+
+            // Closing the tab, reloading or following a sidebar link.
+            window.addEventListener('beforeunload', function (e) {
+                if (!dirty) return;
+                e.preventDefault();
+                e.returnValue = '';
+            });
+
+            // Logout gets the app's own modal rather than the browser's generic prompt.
+            const logoutForm = document.querySelector('form[action$="/logout"]');
+            if (logoutForm) {
+                logoutForm.addEventListener('submit', function (e) {
+                    if (!dirty) return;
+                    e.preventDefault();
+                    window.showCustomConfirm({
+                        title: 'Unsaved Draft Targets',
+                        mainText: 'You have changes that have not been saved. If you log out now, they will be lost.',
+                        subText: 'Click Cancel, then Save Draft to keep your work.',
+                        confirmText: 'Log out anyway',
+                        confirmClass: 'btn-danger',
+                        iconClass: 'ti-logout',
+                        onConfirm: function () {
+                            dirty = false;
+                            logoutForm.submit();
+                        }
+                    });
+                });
+            }
+        })();
 
         // Lock Button Event Hook
         const lockBtn = document.getElementById('lockBtn');

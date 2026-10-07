@@ -14,7 +14,7 @@ import re
 
 from app.models.criteria import (get_ipcr_categories, get_type_to_category, get_category_id,
                                  get_applicable_weights, resolve_designation_type,
-                                 DESIGNATION_REGULAR, SLUG_ADMINISTRATIVE, SLUG_SUPPORT,
+                                 display_designation, DESIGNATION_REGULAR, SLUG_ADMINISTRATIVE, SLUG_SUPPORT,
                                  SLUG_INSTRUCTION)
 from app.models.institution import get_institution_settings, resolve_signatories
 from app.models.scoring import compute_ipcr_score
@@ -209,13 +209,15 @@ def build_ipcr_form(cursor, emp_id, term_id, force_final=False):
     "Final Evaluation" genuinely means the Dean has already approved.
     """
     cursor.execute("""
-        SELECT first_name, last_name, academic_rank, designation, specialization, college
+        SELECT first_name, last_name, academic_rank, designation, specialization, college,
+               designation_title
         FROM tbl_employee_profiles WHERE emp_id = %s
     """, (emp_id,))
     profile = cursor.fetchone()
     if not profile:
         return None
-    first_name, last_name, academic_rank, designation, specialization, college_code = profile
+    (first_name, last_name, academic_rank, designation, specialization, college_code,
+     designation_title) = profile
 
     cursor.execute("""
         SELECT academic_year, semester, period_start, period_end
@@ -257,6 +259,7 @@ def build_ipcr_form(cursor, emp_id, term_id, force_final=False):
         'full_name': full_name,
         'academic_rank': academic_rank,
         'designation': designation,
+        'designation_title': display_designation(designation, designation_title),
         'designation_type': designation_type,
         'is_designated': designation_type != DESIGNATION_REGULAR,
         'specialization': specialization,
@@ -264,8 +267,9 @@ def build_ipcr_form(cursor, emp_id, term_id, force_final=False):
         'academic_year': academic_year,
         'semester': semester,
         'rating_period': period,
-        'commitment': build_commitment_sentence(full_name, designation, specialization,
-                                                college, period),
+        'commitment': build_commitment_sentence(
+            full_name, display_designation(designation, designation_title), specialization,
+            college, period),
         # 'MFO/PAP' on the regular form, 'Output' on the designated one.
         'output_column_label': 'Output' if designation_type != DESIGNATION_REGULAR else 'MFO/PAP',
         'sections': sections,

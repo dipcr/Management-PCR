@@ -220,14 +220,14 @@ HELP = {
         'intro': (
             "As a Designated Faculty member you carry administrative duties on top of teaching, so "
             "your IPCR is built differently from a Regular Faculty member's. Your teaching load and "
-            "the instruction your Program Chair assigns are your Core Functions. You pick the rest "
-            "of your targets yourself, and the Dean is your reviewer. This manual walks you "
+            "the instruction your Program Chair assigns are your Core Functions. The Dean assigns "
+            "your College-Wide targets, you may add custom ones, and the Dean is your reviewer. This manual walks you "
             "through each step."
         ),
         'journey': [
             ('Review your Core Functions', "Your mandatory teaching load and any instruction your Program Chair distributed to you are already listed and locked."),
-            ('Choose your other targets', "From the pool of available targets you tick the ones you will take on, and set the quantity and deadline for each."),
-            ('Add custom targets if needed', "If your duties include something not in the pool, add it as a custom target."),
+            ('Review your assigned targets', "Targets the Dean assigned to you appear under Strategic Priorities & Support Functions. You set the deadline and can adjust the details the Dean left open."),
+            ('Add custom targets if needed', "If your duties include something that was not assigned to you, add it as a custom target."),
             ('Submit to the Dean', "You send the draft IPCR to the Dean. The Dean may adjust quantities and add notes."),
             ('Fix anything that is returned', "If the Dean returns your draft, read the remarks, adjust, and resubmit."),
             ('Lock your IPCR', "Once the Dean approves, you lock it and your targets become your official commitment."),
@@ -253,14 +253,15 @@ HELP = {
                 'title': 'My IPCR',
                 'purpose': (
                     "Where you prepare your IPCR for the term. Your teaching and assigned "
-                    "instruction come pre-filled, you choose or add the rest, then send everything "
+                    "instruction come pre-filled, you add any custom targets, then send everything "
                     "to the Dean for approval."
                 ),
                 'steps': [
                     "Core Functions lists your mandatory teaching load and any instruction your Program Chair distributed to you. These are locked and you cannot change them.",
-                    "Strategic Priorities & Support Functions is where your other targets go. Tick Select on each pool target you will take on.",
-                    "For each selected target, set the Target Qty and the Deadline (a number and a unit such as months). The description fills in automatically and shows an Auto badge. You may type over it, and Reset to Auto brings the standard wording back.",
-                    "Need something that is not in the pool? Click Add Target, choose the type, then enter a description, quantity and Target Duration. Custom targets are always free text.",
+                    "Strategic Priorities & Support Functions is where your other targets go. It lists the targets the Dean assigned to you (and your oversight targets, if you are a chair). They are fixed in the list; you cannot add or remove them.",
+                    "For each target, set the Target Qty and the Deadline (a number and a unit such as months). The description fills in automatically and shows an Auto badge. You may type over it, and Reset to Auto brings the standard wording back.",
+                    "Need something that was not assigned to you? Click Add Target, choose the type, then enter a description, quantity and Target Duration. Custom targets are always free text.",
+                    "Click Save Draft at any time to keep your work (including custom targets) without sending it. Nothing is saved until you click Save Draft or Submit, so do this before you log out.",
                     "Click Submit IPCR for Approval. The Dean reviews it under IPCR Draft Approval.",
                     "If the Dean returns it, the banner shows the Dean's remarks and a Dean's note may appear on individual targets. Your targets become editable again. Make the changes and click Re-submit IPCR for Approval.",
                     "When the Dean approves, click Lock My IPCR to commit your targets and move on to evidence gathering.",

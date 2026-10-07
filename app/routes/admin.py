@@ -219,6 +219,9 @@ def save_faculty():
         'leave_status': request.form.get('leave_status'),
         'designation': request.form.get('designation') or None
     }
+    # Display-only real post, meaningful for plain Designated Faculty alone.
+    title = (request.form.get('designation_title') or '').strip()
+    data['designation_title'] = title if data['designation'] == 'Designated Faculty' and title else None
 
     conn = None
     cursor = None
