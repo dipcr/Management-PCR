@@ -200,9 +200,9 @@ def sync_system_role_for_designation(conn, cursor, emp_id, designation):
 def save_single_profile(conn, cursor, data):
     sql = """
         INSERT INTO tbl_employee_profiles 
-        (employee_id_number, first_name, last_name, college, assigned_program, specialization, academic_rank, employment_status, leave_status, designation)
-        VALUES (%(employee_id_number)s, %(first_name)s, %(last_name)s, %(college)s, %(assigned_program)s, %(specialization)s, %(academic_rank)s, %(employment_status)s, %(leave_status)s, %(designation)s)
-        ON DUPLICATE KEY UPDATE 
+        (employee_id_number, first_name, last_name, college, assigned_program, specialization, academic_rank, employment_status, leave_status, designation, designation_title)
+        VALUES (%(employee_id_number)s, %(first_name)s, %(last_name)s, %(college)s, %(assigned_program)s, %(specialization)s, %(academic_rank)s, %(employment_status)s, %(leave_status)s, %(designation)s, %(designation_title)s)
+        ON DUPLICATE KEY UPDATE
         first_name = VALUES(first_name),
         last_name = VALUES(last_name),
         college = VALUES(college),
@@ -211,7 +211,8 @@ def save_single_profile(conn, cursor, data):
         academic_rank = VALUES(academic_rank),
         employment_status = VALUES(employment_status),
         leave_status = VALUES(leave_status),
-        designation = VALUES(designation)
+        designation = VALUES(designation),
+        designation_title = VALUES(designation_title)
     """
     try:
         cursor.execute(sql, data)
@@ -248,7 +249,7 @@ def import_csv_roster(conn, cursor, csv_rows):
     conflicts = []
 
     try:
-        cursor.execute("SELECT emp_id, employee_id_number, first_name, last_name, college, assigned_program, specialization, academic_rank, employment_status, leave_status, designation FROM tbl_employee_profiles")
+        cursor.execute("SELECT emp_id, employee_id_number, first_name, last_name, college, assigned_program, specialization, academic_rank, employment_status, leave_status, designation, designation_title FROM tbl_employee_profiles")
         columns = [col[0] for col in cursor.description]
         existing_profiles = {}
         for row in cursor.fetchall():
@@ -260,15 +261,16 @@ def import_csv_roster(conn, cursor, csv_rows):
 
         insert_sql = """
             INSERT INTO tbl_employee_profiles 
-            (employee_id_number, first_name, last_name, college, assigned_program, specialization, academic_rank, employment_status, leave_status, designation)
-            VALUES (%(employee_id_number)s, %(first_name)s, %(last_name)s, %(college)s, %(assigned_program)s, %(specialization)s, %(academic_rank)s, %(employment_status)s, %(leave_status)s, %(designation)s)
+            (employee_id_number, first_name, last_name, college, assigned_program, specialization, academic_rank, employment_status, leave_status, designation, designation_title)
+            VALUES (%(employee_id_number)s, %(first_name)s, %(last_name)s, %(college)s, %(assigned_program)s, %(specialization)s, %(academic_rank)s, %(employment_status)s, %(leave_status)s, %(designation)s, %(designation_title)s)
         """
 
         update_sql = """
             UPDATE tbl_employee_profiles 
             SET first_name=%(first_name)s, last_name=%(last_name)s, college=%(college)s, 
                 assigned_program=%(assigned_program)s, specialization=%(specialization)s, academic_rank=%(academic_rank)s, 
-                employment_status=%(employment_status)s, leave_status=%(leave_status)s, designation=%(designation)s
+                employment_status=%(employment_status)s, leave_status=%(leave_status)s, designation=%(designation)s,
+                designation_title=%(designation_title)s
             WHERE employee_id_number=%(employee_id_number)s
         """
 
@@ -305,6 +307,14 @@ def import_csv_roster(conn, cursor, csv_rows):
                 'leave_status': row.get('leave_status', '').strip(),
                 'designation': row.get('designation', '').strip()
             }
+            # Optional column; only plain Designated Faculty keep a title.
+            # A CSV without the column must not wipe titles an Admin already entered.
+            if 'designation_title' in row:
+                csv_title = (row.get('designation_title') or '').strip()
+            else:
+                csv_title = (existing_profiles.get(emp_id, {}).get('designation_title') or '')
+            current_row['designation_title'] = (
+                csv_title if current_row['designation'] == 'Designated Faculty' and csv_title else '')
 
             conflict = find_batch_conflict(current_row['designation'], current_row['specialization'], emp_id)
             if conflict:
@@ -322,7 +332,7 @@ def import_csv_roster(conn, cursor, csv_rows):
             else:
                 existing = existing_profiles[emp_id]
                 differs = False
-                for key in ['first_name', 'last_name', 'college', 'assigned_program', 'specialization', 'academic_rank', 'employment_status', 'leave_status', 'designation']:
+                for key in ['first_name', 'last_name', 'college', 'assigned_program', 'specialization', 'academic_rank', 'employment_status', 'leave_status', 'designation', 'designation_title']:
                     if str(current_row[key]) != str(existing[key]):
                         differs = True
                         break

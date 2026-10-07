@@ -2,6 +2,7 @@ import functools
 from flask import Blueprint, render_template, session, request, jsonify, redirect, url_for, flash
 from app.models import *
 from app.decorators import role_required, designated_ipcr_required
+from app.models.criteria import display_designation
 from app.models.designated import (
     get_designated_assigned_indicators, submit_designated_ipcr,
     lock_and_commit_designated_ipcr
@@ -41,7 +42,8 @@ def designated_dashboard(conn, cursor):
     emp_id = session.get('user_id')
 
     emp_result = timed_query(cursor, """
-        SELECT academic_rank, specialization, designation, first_name, last_name, assigned_program 
+        SELECT academic_rank, specialization, designation, first_name, last_name, assigned_program,
+               designation_title
         FROM tbl_employee_profiles 
         WHERE emp_id = %s
     """, (emp_id,), label="designated_profile")
@@ -482,6 +484,8 @@ def designated_dashboard(conn, cursor):
                            emp_name=f"{first_name} {last_name}",
                            academic_rank=academic_rank,
                            designation=designation,
+                           designation_display=display_designation(
+                               designation, emp_result[0]['designation_title'] if emp_result else None),
                            is_dean_formulated=is_dean_formulated,
                            instruction_ready=instruction_ready,
                            awaiting_dean_formulation=awaiting_dean_formulation,

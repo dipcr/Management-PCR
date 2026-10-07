@@ -2143,6 +2143,12 @@ function openAddIndicator(categoryName, targetTypes) {
                             </select>
                         </div>
                     </div>
+                    <div class="mb-3" id="designation_title_group" style="display:none;">
+                        <label class="form-label small fw-bold" for="designation_title_input">Designation Title</label>
+                        <input type="text" class="form-control" name="designation_title" id="designation_title_input"
+                               maxlength="150" placeholder="e.g. Research Coordinator">
+                        <div class="form-text small">The faculty member's actual post. Shown on their dashboard and printed IPCR instead of "Designated Faculty". Leave blank to keep "Designated Faculty".</div>
+                    </div>
                 </div>
                 <div class="modal-footer border-0">
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
@@ -2167,7 +2173,8 @@ function openAddIndicator(categoryName, targetTypes) {
                         <strong>Format Required:</strong> The CSV must contain headers matching: <em>employee_id_number,
                             first_name, last_name, college, assigned_program, specialization, academic_rank,
                             employment_status,
-                            leave_status, designation</em>.
+                            leave_status, designation</em>. Optional extra column:
+                        <em>designation_title</em> (Designated Faculty only).
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-bold small" for="csvFileInput">Select File</label>
@@ -2274,6 +2281,8 @@ function openAddIndicator(categoryName, targetTypes) {
         document.getElementById('status_input').value = data.employment_status || 'Regular';
         document.getElementById('leave_status_input').value = data.leave_status || 'Active';
         document.getElementById('designation_input').value = data.designation || '';
+        document.getElementById('designation_title_input').value = data.designation_title || '';
+        syncDesignationTitle();
 
         var modal = new bootstrap.Modal(document.getElementById('facultyModal'));
         modal.show();
@@ -2292,7 +2301,16 @@ function openAddIndicator(categoryName, targetTypes) {
         document.getElementById('status_input').value = 'Regular';
         document.getElementById('leave_status_input').value = 'Active';
         document.getElementById('designation_input').value = '';
+        document.getElementById('designation_title_input').value = '';
+        syncDesignationTitle();
     }
+
+    // The title field only applies to plain Designated Faculty.
+    function syncDesignationTitle() {
+        var isDesignated = document.getElementById('designation_input').value === 'Designated Faculty';
+        document.getElementById('designation_title_group').style.display = isDesignated ? '' : 'none';
+    }
+    document.getElementById('designation_input').addEventListener('change', syncDesignationTitle);
 </script>
 
 <script>
