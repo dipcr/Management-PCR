@@ -421,7 +421,9 @@ def get_oversight_evidence(cursor, emp_id, term_id, indicator_id):
         for r in rows if r['target_id'] not in own_target_ids
     }
 
-    target_ids = list(faculty_by_target.keys())
+    # Count every supporting file for scoring, including the Dean's direct uploads.
+    # Only the linked-files display excludes the Dean's own target IDs.
+    target_ids = list(faculty_by_target.keys()) + list(own_target_ids)
     if target_ids:
         placeholders = ','.join(['%s'] * len(target_ids))
         ev_query = f"""
@@ -439,13 +441,13 @@ def get_oversight_evidence(cursor, emp_id, term_id, indicator_id):
         'file_path': ev['file_path'],
         'actual_qty_Q': ev['actual_qty_Q'],
         'verification_status': ev['verification_status'],
-    } for ev in ev_rows]
+    } for ev in ev_rows if ev['target_id'] not in own_target_ids]
 
     return {
         'total_actual_quantity': total_actual_quantity,
         'max_actual_duration_value': max_actual_duration_value,
         'avg_efficiency_rating': avg_efficiency_rating,
-        'evidence_count': len(evidence_breakdown),
+        'evidence_count': len(ev_rows),
         'evidence_breakdown': evidence_breakdown,
     }
 
