@@ -27,6 +27,7 @@ def faculty_dashboard():
         has_submitted = False
         is_locked = False
         chair_review = None
+        ret_review = None
         is_ret_eligible = False
         ret_assigned_ids = []
         extension_targets = []
@@ -36,6 +37,7 @@ def faculty_dashboard():
         reopen_reason = None
         gating_status = None
         evidence_sections = []
+        ipcr_status = 'draft'
 
         if active_term:
             term_id = active_term['term_id']
