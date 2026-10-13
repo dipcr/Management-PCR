@@ -1,3 +1,4 @@
+from app.models.ipcr_history import get_ipcr_history
 from flask import Blueprint, render_template, request, redirect, session, url_for, flash, Response
 from app.models import *
 from app.decorators import role_required
@@ -52,8 +53,9 @@ def admin_dashboard():
         security_users = get_all_users_for_security(cursor)
         kpis = get_admin_kpis(cursor)
         pending_claims = get_pending_account_claims(cursor)
-        past_accomplished_ipcrs = get_all_accomplished_ipcrs(cursor)
-        return render_template('admin_dashboard.html', profiles=profiles, terms=terms, active_term=active_term,
+        return render_template('admin_dashboard.html',
+                               ipcr_history=get_ipcr_history(cursor, session['user_id']),
+                               profiles=profiles, terms=terms, active_term=active_term,
                                indicators=indicators, criteria=criteria,
                                category_scopes=category_scopes,
                                ipcr_categories=ipcr_categories, category_types=category_types,
@@ -68,8 +70,7 @@ def admin_dashboard():
                                rank_bands=RANK_BANDS, general_band=GENERAL_BAND,
                                designation_types=DESIGNATION_TYPES, audit_logs=audit_logs,
                                security_users=security_users, kpis=kpis,
-                               pending_claims=pending_claims,
-                               past_accomplished_ipcrs=past_accomplished_ipcrs)
+                               pending_claims=pending_claims)
     finally:
         cursor.close()
         conn.close()

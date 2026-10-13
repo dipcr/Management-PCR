@@ -6,6 +6,7 @@ from .prog_chair import prog_chair_bp
 from .ret_chair import ret_chair_bp
 from .designated import designated_bp
 from .help import help_bp
+from .ipcr_history import ipcr_history_bp
 
 
 def register_blueprints(app):
@@ -17,3 +18,4 @@ def register_blueprints(app):
     app.register_blueprint(ret_chair_bp)
     app.register_blueprint(designated_bp)
     app.register_blueprint(help_bp)
+    app.register_blueprint(ipcr_history_bp)

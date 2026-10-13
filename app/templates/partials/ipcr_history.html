@@ -1,0 +1,43 @@
+<section class="card border-0 shadow-sm mb-4" aria-labelledby="ipcr-history-title">
+    <div class="card-body">
+        <h3 id="ipcr-history-title" class="h5 fw-bold mb-1">My IPCR History</h3>
+        <p class="text-muted small mb-3">Your committed IPCRs from previous academic terms, newest first.</p>
+        {% if ipcr_history %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <caption class="visually-hidden">Your past IPCR records</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Academic Year / Semester</th>
+                        <th scope="col">Rating Period</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Final Rating</th>
+                        <th scope="col">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in ipcr_history %}
+                    <tr>
+                        <th scope="row">{{ record.academic_year }}<span class="d-block text-muted small fw-normal">{{ record.semester }}</span></th>
+                        <td>{{ record.rating_period or 'Not specified' }}</td>
+                        <td><span class="badge {{ 'bg-success' if record.is_final else 'bg-secondary' }}">{{ record.status }}</span></td>
+                        <td>
+                            {% if record.final_score is not none %}
+                            {{ '%.2f'|format(record.final_score) }}
+                            <span class="d-block text-muted small">{{ record.adjectival_rating }}</span>
+                            {% else %}<span class="text-muted">Not available</span>{% endif %}
+                        </td>
+                        <td><a class="btn btn-outline-primary btn-sm text-nowrap"
+                            href="{{ url_for('ipcr_history.view_ipcr', term_id=record.term_id) }}"
+                            target="_blank" rel="noopener"
+                            aria-label="View and print IPCR for {{ record.academic_year }}, {{ record.semester }}">View / Print</a></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">No past IPCR records yet. Your committed IPCRs will appear here when their academic term is no longer active.</p>
+        {% endif %}
+    </div>
+</section>
