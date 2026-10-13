@@ -1,7 +1,7 @@
 <section class="card border-0 shadow-sm mb-4" aria-labelledby="ipcr-history-title">
     <div class="card-body">
         <h3 id="ipcr-history-title" class="h5 fw-bold mb-1">My IPCR History</h3>
-        <p class="text-muted small mb-3">Your committed IPCRs from previous academic terms, newest first.</p>
+        <p class="text-muted small mb-3">Your previous-term commitments and Dean-approved IPCRs, including finalized records from the active term, newest first.</p>
         {% if ipcr_history %}
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
@@ -37,7 +37,7 @@
             </table>
         </div>
         {% else %}
-        <p class="text-muted mb-0">No past IPCR records yet. Your committed IPCRs will appear here when their academic term is no longer active.</p>
+        <p class="text-muted mb-0">No past IPCR records yet. Your IPCR will appear here after final Dean approval or when its academic term is no longer active.</p>
         {% endif %}
     </div>
 </section>
