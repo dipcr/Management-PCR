@@ -5,7 +5,7 @@ from app.models.ipcr_form import format_rating_period
 
 
 def get_ipcr_history(cursor, emp_id):
-    """One row per inactive term with committed targets belonging to this employee.
+    """Past commitments and finalized IPCRs, including the active term.
 
     Drafts are not committed IPCRs. Partially approved packages remain visible but
     must not display a stale final score after a reopen. Use the latest saved score
@@ -29,6 +29,7 @@ def get_ipcr_history(cursor, emp_id):
             WHERE saved.emp_id = %s AND saved.term_id = t.term_id
         )
         WHERE COALESCE(t.is_active, 0) = 0
+           OR package.approved_count = package.target_count
         ORDER BY COALESCE(t.period_end, t.period_start) DESC,
                  t.academic_year DESC, t.term_id DESC
     """, (emp_id, emp_id), label='personal_ipcr_history')

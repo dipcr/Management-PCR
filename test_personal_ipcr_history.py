@@ -35,7 +35,7 @@ class HistoryQueryTests(unittest.TestCase):
             INSERT INTO tbl_committed_targets VALUES
                 (77,11,'Dean Approved'),(77,12,'Dean Approved'),
                 (77,21,'Dean Approved'),(77,22,'Submitted to Dean'),
-                (77,31,'Dean Approved'),(88,41,'Dean Approved');
+                (77,31,'Submitted to Dean'),(88,41,'Dean Approved');
             INSERT INTO tbl_final_scores VALUES
                 (1,77,1,3.0,'Old rating'),(2,77,1,4.5,'Outstanding'),
                 (3,77,2,5.0,'Stale rating'),(4,88,1,1.0,'Another user');
@@ -73,6 +73,40 @@ class HistoryQueryTests(unittest.TestCase):
         row = self.history(88)[0]
         self.assertIsNone(row['rating_period'])
         self.assertIsNone(row['final_score'])
+
+    def test_finalized_active_term_is_visible_and_printable(self):
+        self.db.execute("UPDATE tbl_committed_targets SET status='Dean Approved' WHERE emp_id=77 AND indicator_id=31")
+        self.db.execute("INSERT INTO tbl_final_scores VALUES (5,77,3,4.75,'Outstanding')")
+        rows = self.history()
+        self.assertEqual([r['term_id'] for r in rows], [3, 2, 1])
+        self.assertTrue(rows[0]['is_final'])
+        self.assertEqual(rows[0]['final_score'], 4.75)
+        self.assertEqual(rows[0]['status'], 'Dean Approved')
+        with app.test_request_context('/'):
+            html = app.jinja_env.get_template('partials/ipcr_history.html').render(ipcr_history=rows)
+        self.assertIn('/ipcr-history/3', html)
+        self.assertIn('4.75', html)
+        # The print endpoint uses the same history query for access checks.
+        with patch('app.routes.ipcr_history.get_db_connection') as connect, \
+             patch('app.routes.ipcr_history._account_is_locked', return_value=False), \
+             patch('app.models.ipcr_history.timed_query', side_effect=self.query), \
+             patch('app.routes.ipcr_history.build_ipcr_form', return_value={'has_targets': True}), \
+             patch('app.routes.ipcr_history.render_template', return_value='IPCR'):
+            connect.return_value.cursor.return_value = self.db.cursor()
+            client = app.test_client()
+            with client.session_transaction() as session:
+                session.update(user_id=77, role='FACULTY')
+            self.assertEqual(client.get('/ipcr-history/3').status_code, 200)
+        self.assertEqual([r['term_id'] for r in self.history(88)], [4])
+
+    def test_partial_approval_and_reopened_active_term_stay_out_of_history(self):
+        self.db.execute("UPDATE tbl_committed_targets SET status='Dean Approved' WHERE emp_id=77 AND indicator_id=31")
+        self.db.execute("INSERT INTO tbl_master_indicators VALUES (32,3)")
+        self.db.execute("INSERT INTO tbl_committed_targets VALUES (77,32,'Submitted to Dean')")
+        self.db.execute("INSERT INTO tbl_final_scores VALUES (5,77,3,4.75,'Outstanding')")
+        self.assertEqual([r['term_id'] for r in self.history()], [2, 1])
+        self.db.execute("UPDATE tbl_committed_targets SET status='Approved' WHERE emp_id=77 AND indicator_id IN (31,32)")
+        self.assertEqual([r['term_id'] for r in self.history()], [2, 1])
 
 
 class HistoryAccessTests(unittest.TestCase):
