@@ -230,10 +230,10 @@ def cascade_quotas():
 
             values = [(role, _qty(role, i)) for role in cascade_roles]
 
-            # College-Wide targets default to Silent (Dean Only) unless the Dean
-            # explicitly ticks "Cascade to Chairs" for this indicator; department
-            # and RET rows aren't gated by this flag, so it's a no-op default for them.
-            cw_cascade_to_chairs = bool(request.form.get(f'cw_allow_allocation_{ind_id}'))
+            # Hidden inputs submit "0" for Dean Only and "1" for sharing.
+            # Require an explicit opt-in: bool("0") would incorrectly enable sharing.
+            # Department and RET rows aren't gated by this flag.
+            cw_cascade_to_chairs = request.form.get(f'cw_allow_allocation_{ind_id}') == '1'
 
             for role, value in values:
                 if value > 0:
