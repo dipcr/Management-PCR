@@ -1,3 +1,4 @@
+from app.models.ipcr_history import get_ipcr_history
 import functools
 from flask import Blueprint, render_template, session, request, jsonify, redirect, url_for, flash
 from app.models import *
@@ -73,6 +74,13 @@ def designated_dashboard(conn, cursor):
     # see the gap this closes in lock_and_commit_designated_ipcr / get_core_instruction_allocation.
     instruction_ready = True
     awaiting_dean_formulation = False
+    is_committed = False
+    evidence_readiness = None
+    ipcr_score = None
+    has_final_ipcr = False
+    reopen_reason = None
+    ipcr_form_preview = None
+    evidence_sections = []
 
     if active_term:
         term_id = active_term['term_id']
@@ -127,12 +135,6 @@ def designated_dashboard(conn, cursor):
         # draft_ipcr (issued but the final approve step errored) from stranding them.
         awaiting_dean_formulation = is_dean_formulated and (not has_submitted or is_returned)
 
-        evidence_readiness = None
-        ipcr_score = None
-        has_final_ipcr = False
-        reopen_reason = None
-        ipcr_form_preview = None
-        evidence_sections = []
         if is_committed:
             can_edit = False
             has_submitted = True
@@ -477,10 +479,9 @@ def designated_dashboard(conn, cursor):
                     requires_instruction = cursor.fetchone()[0] > 0
                     instruction_ready = not requires_instruction
 
-    from app.models.ipcr_form import get_employee_accomplished_ipcrs
-    past_accomplished_ipcrs = get_employee_accomplished_ipcrs(cursor, emp_id)
 
     return render_template('designated_dashboard.html',
+                           ipcr_history=get_ipcr_history(cursor, session['user_id']),
                            emp_name=f"{first_name} {last_name}",
                            academic_rank=academic_rank,
                            designation=designation,
@@ -503,8 +504,7 @@ def designated_dashboard(conn, cursor):
                            has_final_ipcr=has_final_ipcr,
                            reopen_reason=reopen_reason,
                            ipcr_form_preview=ipcr_form_preview,
-                           evidence_sections=evidence_sections,
-                           past_accomplished_ipcrs=past_accomplished_ipcrs)
+                           evidence_sections=evidence_sections)
 
 
 @designated_bp.route('/lock_ipcr', methods=['POST'])

@@ -1,3 +1,4 @@
+from app.models.ipcr_history import get_ipcr_history
 from flask import Blueprint, render_template, request, redirect, session, url_for, flash, jsonify
 from app.models import *
 from app.decorators import role_required
@@ -119,10 +120,9 @@ def faculty_dashboard():
                 evidence_sections = build_evidence_checklist_sections(
                     cursor, assigned_targets, DESIGNATION_REGULAR, term_id, academic_rank)
 
-        from app.models.ipcr_form import get_employee_accomplished_ipcrs
-        past_accomplished_ipcrs = get_employee_accomplished_ipcrs(cursor, emp_id)
 
         return render_template('faculty_dashboard.html',
+                               ipcr_history=get_ipcr_history(cursor, session['user_id']),
                                active_term=active_term,
                                assigned_targets=assigned_targets,
                                ret_menu=ret_menu,
@@ -141,8 +141,7 @@ def faculty_dashboard():
                                has_final_ipcr=has_final_ipcr,
                                reopen_reason=reopen_reason,
                                gating_status=gating_status,
-                               evidence_sections=evidence_sections,
-                               past_accomplished_ipcrs=past_accomplished_ipcrs)
+                               evidence_sections=evidence_sections)
     finally:
         cursor.close()
         conn.close()

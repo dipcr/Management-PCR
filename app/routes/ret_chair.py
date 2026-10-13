@@ -1,3 +1,4 @@
+from app.models.ipcr_history import get_ipcr_history
 from flask import Blueprint, render_template, request, redirect, session, url_for, flash, jsonify
 from app.models import *
 from app.models.criteria import rank_band
@@ -48,10 +49,9 @@ def ret_chair_dashboard():
             # approved all their evidence. RET Chair no longer verifies anyone's evidence.
             evidence_faculty_list = get_ret_chair_evidence_faculty(cursor, term_id)
 
-        from app.models.ipcr_form import get_employee_accomplished_ipcrs
-        past_accomplished_ipcrs = get_employee_accomplished_ipcrs(cursor, session.get('user_id'))
 
         return render_template('ret_chair_dashboard.html',
+                               ipcr_history=get_ipcr_history(cursor, session['user_id']),
                                active_term=active_term,
                                ret_indicators=ret_indicators,
                                ret_rules=ret_rules,
@@ -64,7 +64,6 @@ def ret_chair_dashboard():
                                total_regular_faculty=total_regular_faculty,
                                pending_ret_count=pending_ret_count,
                                evidence_faculty_list=evidence_faculty_list if 'evidence_faculty_list' in locals() else [],
-                               past_accomplished_ipcrs=past_accomplished_ipcrs,
                                has_own_ipcr=True)
     finally:
         cursor.close()

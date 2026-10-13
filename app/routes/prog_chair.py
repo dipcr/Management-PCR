@@ -1,3 +1,4 @@
+from app.models.ipcr_history import get_ipcr_history
 from flask import Blueprint, render_template, request, redirect, session, url_for, flash, jsonify
 from app.models import *
 from app.decorators import role_required
@@ -114,11 +115,10 @@ def prog_chair_dashboard():
             # cascaded to this specialization -- see get_department_accomplishment_summary.
             department_accomplishment_summary = get_department_accomplishment_summary(cursor, specialization, term_id)
 
-        from app.models.ipcr_form import get_employee_accomplished_ipcrs
-        past_accomplished_ipcrs = get_employee_accomplished_ipcrs(cursor, session.get('user_id'))
 
         return render_template(
             'prog_chair_dashboard.html',
+            ipcr_history=get_ipcr_history(cursor, session['user_id']),
             active_term=active_term,
             specialization=specialization,
             indicators=indicators,
@@ -134,7 +134,6 @@ def prog_chair_dashboard():
             approved_evidence_faculty_list=approved_evidence_faculty_list if 'approved_evidence_faculty_list' in locals() else [],
             approved_regular_evidence_list=approved_regular_evidence_list if 'approved_regular_evidence_list' in locals() else [],
             department_accomplishment_summary=department_accomplishment_summary if 'department_accomplishment_summary' in locals() else [],
-            past_accomplished_ipcrs=past_accomplished_ipcrs,
             has_own_ipcr=True
         )
     finally:

@@ -1,3 +1,4 @@
+from app.models.ipcr_history import get_ipcr_history
 from flask import Blueprint, render_template, request, redirect, session, url_for, flash, jsonify
 from app.models import *
 from app.decorators import role_required
@@ -19,6 +20,7 @@ def dean_dashboard():
         if not active_term:
             flash('No active academic term found.', 'warning')
             return render_template('dean_dashboard.html',
+                                   ipcr_history=get_ipcr_history(cursor, session['user_id']),
                                    active_term=None,
                                    departments=[],
                                    special_roles=SPECIAL_CASCADE_ROLES,
@@ -33,7 +35,6 @@ def dean_dashboard():
                                    designated_faculty_list=[],
                                    department_completion=[],
                                    department_faculty_roster={},
-                                   past_accomplished_ipcrs=get_employee_accomplished_ipcrs(cursor, dean_id),
                                    has_own_ipcr=True,
                                    completion_totals={'total_faculty': 0, 'in_progress_count': 0, 'awaiting_approval_count': 0, 'completed_count': 0})
 
@@ -158,6 +159,7 @@ def dean_dashboard():
         draft_status_map = {d['emp_id']: d.get('review_status') for d in draft_submissions}
 
         return render_template('dean_dashboard.html',
+                               ipcr_history=get_ipcr_history(cursor, session['user_id']),
                                active_term=active_term,
                                departments=departments,
                                department_accomplishment=department_accomplishment,
@@ -183,7 +185,6 @@ def dean_dashboard():
                                approved_regular_dean_evidence_list=approved_regular_dean_evidence_list,
                                department_completion=department_completion,
                                completion_totals=completion_totals,
-                               past_accomplished_ipcrs=get_employee_accomplished_ipcrs(cursor, dean_id),
                                has_own_ipcr=True)
     finally:
         cursor.close()
