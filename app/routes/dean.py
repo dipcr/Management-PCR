@@ -33,6 +33,8 @@ def dean_dashboard():
                                    designated_faculty_list=[],
                                    department_completion=[],
                                    department_faculty_roster={},
+                                   past_accomplished_ipcrs=get_employee_accomplished_ipcrs(cursor, dean_id),
+                                   has_own_ipcr=True,
                                    completion_totals={'total_faculty': 0, 'in_progress_count': 0, 'awaiting_approval_count': 0, 'completed_count': 0})
 
         term_id = active_term['term_id']

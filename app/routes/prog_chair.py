@@ -36,6 +36,8 @@ def prog_chair_dashboard():
 
         indicators = []
         faculty_count = 0
+        all_faculty_count = 0
+        regular_faculty_count = 0
         pending_drafts = []
         pending_drafts_count = 0
         locked_drafts = []
