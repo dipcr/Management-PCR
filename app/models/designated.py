@@ -297,9 +297,10 @@ def get_oversight_evidence(cursor, emp_id, term_id, indicator_id):
     RET Chair, the Dean and every plain Designated Faculty member in the department. Filtering
     them out of the numerator while the denominator still counts them is what left a chair's own
     (and their department's designated faculty's) uploads unlinked and the oversight row
-    under-scored. is_admin_function = 0 is the real discriminator here and stands alone: it
-    already excludes every other chair's oversight copy and every freely-picked College-Wide
-    pool item, both of which carry is_admin_function = 1.
+    under-scored. is_admin_function = 0 selects these personal departmental allocations.
+    For the Dean, explicitly allocated College-Wide personal targets are included separately:
+    they carry is_admin_function = 1 too, so that flag alone cannot distinguish them from
+    another chair's aggregate oversight copy.
 
     A Program Chair's oversight role is their own department, matched on specialization --
     the column tbl_cascaded_quotas.assigned_to_role is keyed on (see the scope clause below
@@ -360,6 +361,39 @@ def get_oversight_evidence(cursor, emp_id, term_id, indicator_id):
           {scope_clause}
     """
     rows = timed_query(cursor, query, tuple(params), label="get_oversight_evidence_targets")
+
+    if role == ROLE_DEAN_ALL_DEPARTMENTS:
+        # College-Wide personal assignments are also marked is_admin_function=1.
+        # Require an explicit allocation, and exclude genuine chair oversight copies
+        # before adding them to the Dean's college-wide aggregate.
+        assigned_query = """
+            SELECT ct.target_id, ct.actual_quantity, ct.actual_duration_value, ct.efficiency_rating_E,
+                   ep.first_name, ep.last_name, ct.emp_id
+            FROM tbl_committed_targets ct
+            JOIN tbl_employee_profiles ep ON ct.emp_id = ep.emp_id
+            JOIN tbl_master_indicators mi ON ct.indicator_id = mi.indicator_id
+            WHERE ct.indicator_id = %s AND mi.term_id = %s
+              AND ct.is_admin_function = 1 AND ct.emp_id != %s
+              AND EXISTS (
+                  SELECT 1 FROM tbl_draft_allocation da
+                  WHERE da.emp_id = ct.emp_id AND da.indicator_id = ct.indicator_id
+                    AND da.assigned_quantity > 0
+              )
+              AND EXISTS (
+                  SELECT 1 FROM tbl_cascaded_quotas cq
+                  WHERE cq.indicator_id = ct.indicator_id
+                    AND cq.assigned_to_role = 'College-Wide' AND cq.total_target_value > 0
+              )
+        """
+        assigned_rows = timed_query(cursor, assigned_query, (indicator_id, term_id, emp_id),
+                                    label="get_oversight_evidence_assigned")
+        oversight_by_employee = {}
+        for candidate in assigned_rows:
+            owner_id = candidate['emp_id']
+            if owner_id not in oversight_by_employee:
+                oversight_by_employee[owner_id] = get_oversight_indicator_ids(cursor, owner_id, term_id)
+            if indicator_id not in oversight_by_employee[owner_id]:
+                rows.append(candidate)
 
     # Dean-only: the reviewee's own oversight row (is_admin_function=1, this same
     # emp_id/indicator) can carry directly-uploaded evidence of its own -- see
